@@ -1,0 +1,16 @@
+memory:
+  paths:
+    - ./memory
+
+skills:
+  summarize:
+    description: Summarize content
+    prompt: |
+      Summarize the following content into concise bullet points.
+
+  analyze:
+    description: Analyze content deeply
+    prompt: |
+      Analyze the following content and extract key insights.
+
+mcps: {}

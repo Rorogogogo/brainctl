@@ -1,0 +1,71 @@
+#!/usr/bin/env node
+
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+import { Command } from 'commander';
+
+import { registerDoctorCommand } from './commands/doctor.js';
+import { registerInitCommand } from './commands/init.js';
+import { registerRunCommand } from './commands/run.js';
+import { registerStatusCommand } from './commands/status.js';
+import { printError } from './output.js';
+import { createDoctorService, type DoctorService } from './services/doctor-service.js';
+import { createInitService, type InitService } from './services/init-service.js';
+import { createRunService, type RunService } from './services/run-service.js';
+import { createStatusService, type StatusService } from './services/status-service.js';
+import { createExecutorResolver } from './executor/resolver.js';
+
+export interface CliServices {
+  initService: InitService;
+  runService: RunService;
+  statusService: StatusService;
+  doctorService: DoctorService;
+}
+
+export function createProgram(overrides: Partial<CliServices> = {}): Command {
+  const services = createDefaultServices(overrides);
+  const program = new Command();
+
+  program
+    .name('brainctl')
+    .description('Manage repeatable AI environments for local agent workflows')
+    .version('0.1.0');
+
+  registerInitCommand(program, services.initService);
+  registerStatusCommand(program, services.statusService);
+  registerRunCommand(program, services.runService);
+  registerDoctorCommand(program, services.doctorService);
+
+  return program;
+}
+
+export async function main(argv: string[] = process.argv): Promise<void> {
+  const program = createProgram();
+
+  try {
+    await program.parseAsync(argv);
+  } catch (error) {
+    printError(error);
+    process.exitCode = 1;
+  }
+}
+
+function createDefaultServices(overrides: Partial<CliServices>): CliServices {
+  const resolver = createExecutorResolver();
+
+  return {
+    initService: createInitService(),
+    runService: createRunService({ resolver }),
+    statusService: createStatusService({ resolver }),
+    doctorService: createDoctorService({ resolver }),
+    ...overrides
+  };
+}
+
+const entryPointPath = process.argv[1] ? path.resolve(process.argv[1]) : '';
+const currentFilePath = fileURLToPath(import.meta.url);
+
+if (entryPointPath === currentFilePath) {
+  void main();
+}
