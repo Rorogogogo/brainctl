@@ -1,4 +1,4 @@
-import { mkdir, writeFile } from 'node:fs/promises';
+import { lstat, mkdir, realpath, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
 import { MemoryPathError } from '../errors.js';
@@ -22,8 +22,10 @@ export function createMemoryWriteService(): MemoryWriteService {
     async execute(request: MemoryWriteRequest): Promise<MemoryWriteResult> {
       const cwd = request.cwd ?? process.cwd();
       const targetPath = path.resolve(cwd, request.filePath);
+      const workspaceRoot = await realpath(cwd);
+      const resolvedTargetPath = await resolvePathForWrite(targetPath);
 
-      if (!isWithinDirectory(cwd, targetPath)) {
+      if (!isWithinDirectory(workspaceRoot, resolvedTargetPath)) {
         throw new MemoryPathError('Memory files must stay within the workspace root.');
       }
 
@@ -35,6 +37,40 @@ export function createMemoryWriteService(): MemoryWriteService {
   };
 }
 
+async function resolvePathForWrite(targetPath: string): Promise<string> {
+  const existingPath = await findNearestExistingPath(targetPath);
+  const resolvedExistingPath = await realpath(existingPath);
+
+  if (existingPath === targetPath) {
+    return resolvedExistingPath;
+  }
+
+  return path.resolve(resolvedExistingPath, path.relative(existingPath, targetPath));
+}
+
+async function findNearestExistingPath(targetPath: string): Promise<string> {
+  let currentPath = targetPath;
+
+  while (true) {
+    try {
+      await lstat(currentPath);
+      return currentPath;
+    } catch (error) {
+      if (!isMissingPathError(error)) {
+        throw error;
+      }
+    }
+
+    const parentPath = path.dirname(currentPath);
+
+    if (parentPath === currentPath) {
+      throw new MemoryPathError(`Could not resolve filesystem path for ${targetPath}.`);
+    }
+
+    currentPath = parentPath;
+  }
+}
+
 function isWithinDirectory(parentDirectory: string, targetPath: string): boolean {
   const relativePath = path.relative(parentDirectory, targetPath);
 
@@ -43,4 +79,8 @@ function isWithinDirectory(parentDirectory: string, targetPath: string): boolean
   }
 
   return !relativePath.startsWith(`..${path.sep}`) && relativePath !== '..' && !path.isAbsolute(relativePath);
+}
+
+function isMissingPathError(error: unknown): error is NodeJS.ErrnoException {
+  return error instanceof Error && 'code' in error && error.code === 'ENOENT';
 }

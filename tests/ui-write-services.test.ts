@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
@@ -112,6 +112,28 @@ describe('ui write services', () => {
     ).rejects.toBeInstanceOf(MemoryPathError);
   });
 
+  it('rejects memory writes through a symlink that points outside the workspace root', async () => {
+    const cwd = await mkdtemp(path.join(os.tmpdir(), 'brainctl-ui-memory-'));
+    tempDirs.push(cwd);
+
+    const outsideDir = await mkdtemp(path.join(os.tmpdir(), 'brainctl-ui-outside-'));
+    tempDirs.push(outsideDir);
+
+    await symlink(outsideDir, path.join(cwd, 'linked-memory'), 'dir');
+
+    const service = createMemoryWriteService();
+
+    await expect(
+      service.execute({
+        cwd,
+        filePath: path.join(cwd, 'linked-memory', 'notes.md'),
+        content: 'outside'
+      })
+    ).rejects.toBeInstanceOf(MemoryPathError);
+
+    await expect(readFile(path.join(outsideDir, 'notes.md'), 'utf8')).rejects.toThrow();
+  });
+
   it('rejects config writes that escape the workspace root', async () => {
     const cwd = await mkdtemp(path.join(os.tmpdir(), 'brainctl-ui-config-'));
     tempDirs.push(cwd);
@@ -149,5 +171,49 @@ describe('ui write services', () => {
         }
       })
     ).rejects.toBeInstanceOf(ConfigError);
+  });
+
+  it('rejects config writes that use a symlinked memory path outside the workspace root', async () => {
+    const cwd = await mkdtemp(path.join(os.tmpdir(), 'brainctl-ui-config-'));
+    tempDirs.push(cwd);
+
+    const outsideDir = await mkdtemp(path.join(os.tmpdir(), 'brainctl-ui-outside-'));
+    tempDirs.push(outsideDir);
+
+    await writeFile(
+      path.join(cwd, 'ai-stack.yaml'),
+      [
+        'memory:',
+        '  paths:',
+        '    - ./memory',
+        'skills:',
+        '  summarize:',
+        '    description: Summarize content',
+        '    prompt: |',
+        '      Summarize the following content into concise bullet points.',
+        'mcps: {}'
+      ].join('\n'),
+      'utf8'
+    );
+
+    await symlink(outsideDir, path.join(cwd, 'linked-memory'), 'dir');
+
+    const config = await loadConfig({ cwd });
+    const service = createConfigWriteService();
+
+    await expect(
+      service.execute({
+        cwd,
+        config: {
+          ...config,
+          memory: {
+            paths: [path.join(cwd, 'linked-memory')]
+          }
+        }
+      })
+    ).rejects.toBeInstanceOf(ConfigError);
+
+    const source = await readFile(path.join(cwd, 'ai-stack.yaml'), 'utf8');
+    expect(source).not.toContain('linked-memory');
   });
 });
