@@ -6,6 +6,7 @@ import type { ExecutorResult, ExecutorRunOptions } from './types.js';
 
 interface RunAgentProcessOptions {
   command: string;
+  args?: string[];
   agent: AgentName;
   context: string;
   runOptions?: ExecutorRunOptions;
@@ -15,7 +16,7 @@ export async function runAgentProcess(
   options: RunAgentProcessOptions
 ): Promise<ExecutorResult> {
   return await new Promise<ExecutorResult>((resolve, reject) => {
-    const child = spawn(options.command, [], {
+    const child = spawn(options.command, options.args ?? [], {
       stdio: ['pipe', 'pipe', 'pipe']
     });
 
