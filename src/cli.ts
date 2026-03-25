@@ -10,6 +10,7 @@ import { registerDoctorCommand } from './commands/doctor.js';
 import { registerInitCommand } from './commands/init.js';
 import { registerRunCommand } from './commands/run.js';
 import { registerStatusCommand } from './commands/status.js';
+import { registerUiCommand } from './commands/ui.js';
 import { printError } from './output.js';
 import { createDoctorService, type DoctorService } from './services/doctor-service.js';
 import { createInitService, type InitService } from './services/init-service.js';
@@ -37,6 +38,7 @@ export function createProgram(overrides: Partial<CliServices> = {}): Command {
   registerStatusCommand(program, services.statusService);
   registerRunCommand(program, services.runService);
   registerDoctorCommand(program, services.doctorService);
+  registerUiCommand(program);
 
   return program;
 }
