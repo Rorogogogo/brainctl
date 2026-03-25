@@ -36,7 +36,19 @@ If you're using multiple AI tools, you've probably already hit the same problems
 
 ## 📦 Installation
 
-### Option 1: Local CLI install
+### Option 1: Install from npm
+
+```bash
+npm install -g brainctl
+```
+
+Then:
+
+```bash
+brainctl --help
+```
+
+### Option 2: Local CLI install from source
 
 ```bash
 npm install
@@ -50,13 +62,15 @@ Then:
 brainctl --help
 ```
 
-### Option 2: Run without linking
+### Option 3: Run without linking
 
 ```bash
 npm install
 npm run build
 node dist/cli.js --help
 ```
+
+`brainctl` does not bundle agent CLIs. You still need at least one supported agent installed separately and available on `PATH`, such as `claude` or `codex`.
 
 ---
 

@@ -3,6 +3,14 @@
   "version": "0.1.0",
   "description": "CLI environment manager for consistent AI workflows",
   "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Rorogogogo/brainctl.git"
+  },
+  "homepage": "https://github.com/Rorogogogo/brainctl#readme",
+  "bugs": {
+    "url": "https://github.com/Rorogogogo/brainctl/issues"
+  },
   "bin": {
     "brainctl": "./dist/cli.js"
   },
@@ -15,6 +23,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "dev": "tsx src/cli.ts",
+    "prepublishOnly": "npm test && npm run build",
     "test": "vitest run"
   },
   "keywords": [
