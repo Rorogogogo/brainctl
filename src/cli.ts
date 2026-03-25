@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+import { realpathSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -51,6 +52,17 @@ export async function main(argv: string[] = process.argv): Promise<void> {
   }
 }
 
+export function shouldRunMain(
+  entryPointPath: string | undefined,
+  moduleUrl: string
+): boolean {
+  if (!entryPointPath) {
+    return false;
+  }
+
+  return resolveRealPath(entryPointPath) === resolveRealPath(fileURLToPath(moduleUrl));
+}
+
 function createDefaultServices(overrides: Partial<CliServices>): CliServices {
   const resolver = createExecutorResolver();
 
@@ -63,9 +75,16 @@ function createDefaultServices(overrides: Partial<CliServices>): CliServices {
   };
 }
 
-const entryPointPath = process.argv[1] ? path.resolve(process.argv[1]) : '';
-const currentFilePath = fileURLToPath(import.meta.url);
-
-if (entryPointPath === currentFilePath) {
+if (shouldRunMain(process.argv[1], import.meta.url)) {
   void main();
+}
+
+function resolveRealPath(targetPath: string): string {
+  const resolvedPath = path.resolve(targetPath);
+
+  try {
+    return realpathSync(resolvedPath);
+  } catch {
+    return resolvedPath;
+  }
 }
