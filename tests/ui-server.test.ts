@@ -124,4 +124,69 @@ describe('ui server', () => {
       await server.close();
     }
   });
+
+  it('returns a JSON 404 for unknown api routes', async () => {
+    const projectDir = await mkdtemp(path.join(os.tmpdir(), 'brainctl-ui-'));
+    tempDirs.push(projectDir);
+
+    await mkdir(path.join(projectDir, 'memory'), { recursive: true });
+    await writeFile(
+      path.join(projectDir, 'ai-stack.yaml'),
+      [
+        'memory:',
+        '  paths:',
+        '    - ./memory',
+        'skills:',
+        '  summarize:',
+        '    description: Summarize content',
+        '    prompt: |',
+        '      Summarize the following content into concise bullet points.',
+        'mcps: {}'
+      ].join('\n'),
+      'utf8'
+    );
+
+    const server = await startUiServer({ cwd: projectDir, port: 0 });
+
+    try {
+      const response = await fetch(new URL('/api/does-not-exist', server.url));
+      expect(response.status).toBe(404);
+      expect(response.headers.get('content-type')).toContain('application/json');
+      await expect(response.json()).resolves.toEqual({ error: 'Not found' });
+    } finally {
+      await server.close();
+    }
+  });
+
+  it('rejects asset path traversal attempts', async () => {
+    const projectDir = await mkdtemp(path.join(os.tmpdir(), 'brainctl-ui-'));
+    tempDirs.push(projectDir);
+
+    await mkdir(path.join(projectDir, 'memory'), { recursive: true });
+    await writeFile(
+      path.join(projectDir, 'ai-stack.yaml'),
+      [
+        'memory:',
+        '  paths:',
+        '    - ./memory',
+        'skills:',
+        '  summarize:',
+        '    description: Summarize content',
+        '    prompt: |',
+        '      Summarize the following content into concise bullet points.',
+        'mcps: {}'
+      ].join('\n'),
+      'utf8'
+    );
+
+    const server = await startUiServer({ cwd: projectDir, port: 0 });
+
+    try {
+      const response = await fetch(new URL('/assets/../../package.json', server.url));
+      expect(response.status).toBe(404);
+      expect(response.headers.get('content-type')).toContain('text/plain');
+    } finally {
+      await server.close();
+    }
+  });
 });

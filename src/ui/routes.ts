@@ -92,6 +92,10 @@ export function createUiRouteHandler(
         return sendJson(response, 200, overview.agents);
       }
       default:
+        if (url.pathname === '/api' || url.pathname.startsWith('/api/')) {
+          return sendJson(response, 404, { error: 'Not found' });
+        }
+
         return serveUiResponse(url.pathname, response);
     }
   };
