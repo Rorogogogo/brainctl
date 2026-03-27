@@ -5,7 +5,10 @@ import path from 'node:path';
 
 import { afterEach, describe, expect, it } from 'vitest';
 
+import { createRunService } from '../src/services/run-service.js';
 import { createUiRouteHandler } from '../src/ui/routes.js';
+import type { ExecutorResolver } from '../src/executor/resolver.js';
+import type { Executor } from '../src/executor/types.js';
 
 const tempDirs: string[] = [];
 
@@ -22,31 +25,39 @@ describe('ui run stream endpoint', () => {
 
   it('streams output chunks and the final run result as SSE events', async () => {
     const projectDir = await createProject();
+    const executor: Executor = {
+      agent: 'claude',
+      async run(_context, options) {
+        options?.onOutputChunk?.('first chunk');
+        options?.onOutputChunk?.('second chunk');
+
+        return {
+          output: 'first chunksecond chunk',
+          exitCode: 0,
+          agent: 'claude'
+        };
+      }
+    };
+
+    const resolver: ExecutorResolver = {
+      async resolveExecutor(agentName) {
+        expect(agentName).toBe('claude');
+        return executor;
+      },
+      async getAgentAvailability() {
+        return {
+          claude: { agent: 'claude', available: true, command: 'claude' },
+          codex: { agent: 'codex', available: false, command: 'codex' }
+        };
+      }
+    };
+
+    const runService = createRunService({ resolver });
     const server = createServer(
       createUiRouteHandler({
         cwd: projectDir,
-        runService: {
-          async execute(_request: unknown, hooks?: { onOutputChunk?: (chunk: string) => void }) {
-            hooks?.onOutputChunk?.('first chunk');
-            hooks?.onOutputChunk?.('second chunk');
-
-            return {
-              steps: [
-                {
-                  stepIndex: 0,
-                  requestedAgent: 'claude',
-                  agent: 'claude',
-                  fallbackUsed: false,
-                  exitCode: 0,
-                  output: 'second chunk'
-                }
-              ],
-              finalOutput: 'second chunk',
-              finalExitCode: 0
-            };
-          }
-        } as any
-      } as any)
+        runService
+      })
     );
 
     await new Promise<void>((resolve) => {
@@ -61,7 +72,7 @@ describe('ui run stream endpoint', () => {
 
       const response = await fetch(
         new URL(
-          '/api/run/stream?skill=summarize&inputFile=./input.md&primaryAgent=claude',
+          '/api/run/stream?skill=ui-stream-project&inputFile=./input.md&primaryAgent=claude',
           `http://127.0.0.1:${address.port}`
         ),
         {
@@ -83,7 +94,7 @@ describe('ui run stream endpoint', () => {
       expect(resultEvent).toBeDefined();
       expect(JSON.parse(resultEvent!.data)).toMatchObject({
         finalExitCode: 0,
-        finalOutput: 'second chunk'
+        finalOutput: 'first chunksecond chunk'
       });
     } finally {
       await new Promise<void>((resolve) => {
@@ -137,10 +148,10 @@ async function createProject(): Promise<string> {
       '  paths:',
       '    - ./memory',
       'skills:',
-      '  summarize:',
-      '    description: Summarize content',
+      '  ui-stream-project:',
+      '    description: Stream content for the UI test',
       '    prompt: |',
-      '      Summarize the following content into concise bullet points.',
+      '      Stream the following content chunk by chunk.',
       'mcps: {}'
     ].join('\n'),
     'utf8'

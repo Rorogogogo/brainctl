@@ -48,11 +48,17 @@ export function createUiRouteHandler(
         startSseStream(response);
 
         try {
-          const trace = await runService.execute(runRequest, {
-            onOutputChunk: (chunk) => {
-              writeSseEvent(response, 'output', chunk);
+          const trace = await runService.execute(
+            {
+              ...runRequest,
+              cwd: dependencies.cwd
+            },
+            {
+              onOutputChunk: (chunk) => {
+                writeSseEvent(response, 'output', chunk);
+              }
             }
-          });
+          );
 
           writeSseEvent(response, 'result', trace);
           response.end();
