@@ -11,7 +11,14 @@ import type { ExecutorResolver } from '../executor/resolver.js';
 import type { ExecutionStep, ExecutionTrace, RunRequest } from '../types.js';
 
 export interface RunService {
-  execute(request: RunRequest): Promise<ExecutionTrace>;
+  execute(
+    request: RunRequest,
+    options?: RunServiceExecuteOptions
+  ): Promise<ExecutionTrace>;
+}
+
+export interface RunServiceExecuteOptions {
+  onOutputChunk?: (chunk: string) => void;
 }
 
 interface RunServiceDependencies {
@@ -24,7 +31,10 @@ export function createRunService(
   const resolver = dependencies.resolver ?? createExecutorResolver();
 
   return {
-    async execute(request: RunRequest): Promise<ExecutionTrace> {
+    async execute(
+      request: RunRequest,
+      options: RunServiceExecuteOptions = {}
+    ): Promise<ExecutionTrace> {
       const cwd = request.cwd ?? process.cwd();
       const config = await loadConfig({ cwd });
       const memory = await loadMemory({ paths: config.memory.paths });
@@ -49,7 +59,8 @@ export function createRunService(
         }
 
         const result = await executor.instance.run(context, {
-          streamOutput: true
+          streamOutput: true,
+          onOutputChunk: options.onOutputChunk
         });
 
         previousOutput = result.output;
