@@ -25,9 +25,11 @@ describe('ui run stream endpoint', () => {
 
   it('streams output chunks and the final run result as SSE events', async () => {
     const projectDir = await createProject();
+    const observedStreamOutput: Array<boolean | undefined> = [];
     const executor: Executor = {
       agent: 'claude',
       async run(_context, options) {
+        observedStreamOutput.push(options?.streamOutput);
         options?.onOutputChunk?.('first chunk');
         options?.onOutputChunk?.('second chunk');
 
@@ -96,6 +98,7 @@ describe('ui run stream endpoint', () => {
         finalExitCode: 0,
         finalOutput: 'first chunksecond chunk'
       });
+      expect(observedStreamOutput).toEqual([false]);
     } finally {
       await new Promise<void>((resolve) => {
         server.close(() => resolve());

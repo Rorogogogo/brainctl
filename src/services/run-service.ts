@@ -19,6 +19,7 @@ export interface RunService {
 
 export interface RunServiceExecuteOptions {
   onOutputChunk?: (chunk: string) => void;
+  streamOutput?: boolean;
 }
 
 interface RunServiceDependencies {
@@ -59,7 +60,7 @@ export function createRunService(
         }
 
         const result = await executor.instance.run(context, {
-          streamOutput: true,
+          streamOutput: options.streamOutput ?? true,
           onOutputChunk: options.onOutputChunk
         });
 

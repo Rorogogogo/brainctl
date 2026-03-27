@@ -56,7 +56,8 @@ export function createUiRouteHandler(
             {
               onOutputChunk: (chunk) => {
                 writeSseEvent(response, 'output', chunk);
-              }
+              },
+              streamOutput: false
             }
           );
 
