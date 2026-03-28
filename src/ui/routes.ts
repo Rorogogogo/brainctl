@@ -51,12 +51,18 @@ export function createUiRouteHandler(
           });
         }
 
+        if ('error' in runRequest) {
+          return sendJson(response, 400, {
+            error: runRequest.error
+          });
+        }
+
         startSseStream(response);
 
         try {
           const trace = await runService.execute(
             {
-              ...runRequest,
+              ...runRequest.request,
               cwd: dependencies.cwd
             },
             {
@@ -102,7 +108,8 @@ export function createUiRouteHandler(
 }
 
 function parseRunRequest(url: URL):
-  | RunRequest
+  | { request: RunRequest }
+  | { error: string }
   | null {
   const skill = url.searchParams.get('skill');
   const inputFile = url.searchParams.get('inputFile');
@@ -115,11 +122,17 @@ function parseRunRequest(url: URL):
     return null;
   }
 
+  if (fallbackAgent !== null && fallbackAgent === primaryAgent) {
+    return { error: 'fallbackAgent must differ from primaryAgent' };
+  }
+
   return {
-    skill,
-    inputFile,
-    primaryAgent,
-    fallbackAgent: fallbackAgent ?? undefined
+    request: {
+      skill,
+      inputFile,
+      primaryAgent,
+      fallbackAgent: fallbackAgent ?? undefined
+    }
   };
 }
 

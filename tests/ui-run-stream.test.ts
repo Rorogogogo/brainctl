@@ -172,6 +172,47 @@ describe('ui run stream endpoint', () => {
       });
     }
   });
+
+  it('rejects a fallback agent that matches the primary agent', async () => {
+    const projectDir = await createProject();
+    const server = createServer(
+      createUiRouteHandler({
+        cwd: projectDir
+      })
+    );
+
+    await new Promise<void>((resolve) => {
+      server.listen(0, '127.0.0.1', resolve);
+    });
+
+    try {
+      const address = server.address();
+      if (!address || typeof address === 'string') {
+        throw new Error('Test server did not bind to a TCP port.');
+      }
+
+      const response = await fetch(
+        new URL(
+          '/api/run/stream?skill=ui-stream-project&inputFile=./input.md&primaryAgent=claude&fallbackAgent=claude',
+          `http://127.0.0.1:${address.port}`
+        ),
+        {
+          headers: {
+            Accept: 'text/event-stream'
+          }
+        }
+      );
+
+      expect(response.status).toBe(400);
+      await expect(response.json()).resolves.toEqual({
+        error: 'fallbackAgent must differ from primaryAgent'
+      });
+    } finally {
+      await new Promise<void>((resolve) => {
+        server.close(() => resolve());
+      });
+    }
+  });
 });
 
 function parseSse(text: string): Array<{ event: string; data: string }> {
