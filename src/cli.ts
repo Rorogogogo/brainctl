@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { realpathSync } from 'node:fs';
+import { realpathSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -10,12 +10,17 @@ import { registerDoctorCommand } from './commands/doctor.js';
 import { registerInitCommand } from './commands/init.js';
 import { registerRunCommand } from './commands/run.js';
 import { registerStatusCommand } from './commands/status.js';
+import { registerUiCommand } from './commands/ui.js';
 import { printError } from './output.js';
 import { createDoctorService, type DoctorService } from './services/doctor-service.js';
 import { createInitService, type InitService } from './services/init-service.js';
 import { createRunService, type RunService } from './services/run-service.js';
 import { createStatusService, type StatusService } from './services/status-service.js';
 import { createExecutorResolver } from './executor/resolver.js';
+
+const packageVersion = JSON.parse(
+  readFileSync(new URL('../package.json', import.meta.url), 'utf8')
+) as { version: string };
 
 export interface CliServices {
   initService: InitService;
@@ -31,12 +36,13 @@ export function createProgram(overrides: Partial<CliServices> = {}): Command {
   program
     .name('brainctl')
     .description('Manage repeatable AI environments for local agent workflows')
-    .version('0.1.0');
+    .version(packageVersion.version);
 
   registerInitCommand(program, services.initService);
   registerStatusCommand(program, services.statusService);
   registerRunCommand(program, services.runService);
   registerDoctorCommand(program, services.doctorService);
+  registerUiCommand(program);
 
   return program;
 }

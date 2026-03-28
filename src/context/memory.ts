@@ -15,14 +15,19 @@ export async function loadMemory(options: LoadMemoryOptions): Promise<MemoryLoad
     .flat()
     .sort((left, right) => left.localeCompare(right));
 
-  const contents = await Promise.all(
-    markdownFiles.map(async (filePath) => (await readFile(filePath, 'utf8')).trim())
+  const entries = await Promise.all(
+    markdownFiles.map(async (filePath) => ({
+      path: filePath,
+      content: await readFile(filePath, 'utf8')
+    }))
   );
+  const contents = entries.map((entry) => entry.content.trim());
 
   return {
     files: markdownFiles,
     count: markdownFiles.length,
-    content: contents.filter((entry) => entry.length > 0).join('\n\n')
+    content: contents.filter((entry) => entry.length > 0).join('\n\n'),
+    entries
   };
 }
 

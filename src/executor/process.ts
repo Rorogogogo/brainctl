@@ -25,6 +25,7 @@ export async function runAgentProcess(
     child.stdout.on('data', (chunk) => {
       const text = chunk.toString();
       output += text;
+      options.runOptions?.onOutputChunk?.(text);
 
       if (options.runOptions?.streamOutput !== false) {
         process.stdout.write(chunk);
@@ -34,6 +35,7 @@ export async function runAgentProcess(
     child.stderr.on('data', (chunk) => {
       const text = chunk.toString();
       output += text;
+      options.runOptions?.onOutputChunk?.(text);
 
       if (options.runOptions?.streamOutput !== false) {
         process.stderr.write(chunk);

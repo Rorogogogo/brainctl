@@ -2,6 +2,7 @@ import type { AgentName } from '../types.js';
 
 export interface ExecutorRunOptions {
   streamOutput?: boolean;
+  onOutputChunk?: (chunk: string) => void;
 }
 
 export interface ExecutorResult {

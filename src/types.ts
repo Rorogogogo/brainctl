@@ -22,6 +22,10 @@ export interface MemoryLoadResult {
   content: string;
   files: string[];
   count: number;
+  entries: Array<{
+    path: string;
+    content: string;
+  }>;
 }
 
 export interface RunRequest {

@@ -43,6 +43,26 @@ describe('loadMemory', () => {
     expect(result.content).toBe('Second file\n\nFirst file');
   });
 
+  it('includes the content for each markdown file so the UI can preview one file at a time', async () => {
+    const projectDir = await mkdtemp(path.join(os.tmpdir(), 'brainctl-memory-'));
+    const memoryDir = path.join(projectDir, 'memory');
+    tempDirs.push(projectDir);
+
+    await mkdir(memoryDir, { recursive: true });
+    await writeFile(path.join(memoryDir, 'notes.md'), '# Notes\nKeep context close.', 'utf8');
+
+    const result = await loadMemory({
+      paths: [memoryDir]
+    });
+
+    expect(result.entries).toEqual([
+      {
+        path: path.join(memoryDir, 'notes.md'),
+        content: '# Notes\nKeep context close.'
+      }
+    ]);
+  });
+
   it('returns an empty result for empty directories', async () => {
     const projectDir = await mkdtemp(path.join(os.tmpdir(), 'brainctl-memory-'));
     const memoryDir = path.join(projectDir, 'memory');
