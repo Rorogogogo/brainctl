@@ -8,6 +8,7 @@ import { Command } from 'commander';
 
 import { registerDoctorCommand } from './commands/doctor.js';
 import { registerInitCommand } from './commands/init.js';
+import { registerMcpCommand } from './commands/mcp.js';
 import { registerRunCommand } from './commands/run.js';
 import { registerStatusCommand } from './commands/status.js';
 import { registerUiCommand } from './commands/ui.js';
@@ -43,6 +44,7 @@ export function createProgram(overrides: Partial<CliServices> = {}): Command {
   registerRunCommand(program, services.runService);
   registerDoctorCommand(program, services.doctorService);
   registerUiCommand(program);
+  registerMcpCommand(program);
 
   return program;
 }
