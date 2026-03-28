@@ -1,11 +1,15 @@
-import { mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { shouldRunMain } from '../src/cli.js';
+import { createProgram, shouldRunMain } from '../src/cli.js';
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 
 const tempDirs: string[] = [];
 
@@ -39,5 +43,30 @@ describe('shouldRunMain', () => {
     expect(
       shouldRunMain('/tmp/other-cli.js', pathToFileURL('/tmp/brainctl.js').href)
     ).toBe(false);
+  });
+});
+
+describe('createProgram version output', () => {
+  it('reports the package version for --version', async () => {
+    const packageJson = JSON.parse(
+      await readFile(new URL('../package.json', import.meta.url), 'utf8')
+    ) as { version: string };
+    const writes: string[] = [];
+    const writeSpy = vi
+      .spyOn(process.stdout, 'write')
+      .mockImplementation(((chunk: string | Uint8Array) => {
+        writes.push(String(chunk));
+        return true;
+      }) as typeof process.stdout.write);
+    const program = createProgram();
+
+    program.exitOverride();
+
+    await expect(
+      program.parseAsync(['node', 'brainctl', '--version'], { from: 'node' })
+    ).rejects.toMatchObject({ code: 'commander.version', exitCode: 0 });
+
+    expect(writes).toEqual([`${packageJson.version}\n`]);
+    writeSpy.mockRestore();
   });
 });

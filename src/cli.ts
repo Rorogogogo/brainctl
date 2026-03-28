@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { realpathSync } from 'node:fs';
+import { realpathSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -18,6 +18,10 @@ import { createRunService, type RunService } from './services/run-service.js';
 import { createStatusService, type StatusService } from './services/status-service.js';
 import { createExecutorResolver } from './executor/resolver.js';
 
+const packageVersion = JSON.parse(
+  readFileSync(new URL('../package.json', import.meta.url), 'utf8')
+) as { version: string };
+
 export interface CliServices {
   initService: InitService;
   runService: RunService;
@@ -32,7 +36,7 @@ export function createProgram(overrides: Partial<CliServices> = {}): Command {
   program
     .name('brainctl')
     .description('Manage repeatable AI environments for local agent workflows')
-    .version('0.1.0');
+    .version(packageVersion.version);
 
   registerInitCommand(program, services.initService);
   registerStatusCommand(program, services.statusService);
