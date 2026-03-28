@@ -219,6 +219,10 @@ button:disabled {
   box-shadow: var(--shadow-soft);
 }
 
+.section-button:disabled {
+  opacity: 0.62;
+}
+
 .section-button.is-active {
   background: #101114;
   color: #fff;
@@ -503,6 +507,140 @@ button:disabled {
   gap: 16px;
 }
 
+.config-view {
+  gap: 16px;
+}
+
+.config-panel {
+  display: grid;
+  gap: 18px;
+}
+
+.config-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.config-list {
+  display: grid;
+  gap: 14px;
+}
+
+.config-card,
+.config-empty-state {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: rgba(255, 255, 255, 0.84);
+  padding: 18px;
+  box-shadow: var(--shadow-soft);
+}
+
+.config-card {
+  display: grid;
+  gap: 16px;
+}
+
+.config-card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.config-card-header h4,
+.config-empty-state strong {
+  margin: 0;
+  font-size: 1rem;
+  line-height: 1.25;
+  letter-spacing: -0.02em;
+}
+
+.config-empty-state p {
+  margin: 8px 0 0;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.config-field-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.secondary-button,
+.danger-button {
+  border-radius: 999px;
+  padding: 11px 15px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  font-weight: 650;
+  transition:
+    transform 140ms ease,
+    border-color 140ms ease,
+    background-color 140ms ease,
+    opacity 140ms ease;
+}
+
+.secondary-button {
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.88);
+  color: var(--text);
+}
+
+.danger-button {
+  border: 1px solid rgba(16, 17, 20, 0.12);
+  background: rgba(16, 17, 20, 0.04);
+  color: var(--text);
+}
+
+.secondary-button:hover:not(:disabled),
+.danger-button:hover:not(:disabled) {
+  transform: translateY(-1px);
+  border-color: var(--border-strong);
+}
+
+.secondary-button:disabled,
+.danger-button:disabled {
+  opacity: 0.5;
+}
+
+.editor-textarea {
+  min-height: 180px;
+  resize: vertical;
+}
+
+.editor-code,
+.editor-textarea {
+  font-family:
+    ui-monospace, SFMono-Regular, SF Mono, Menlo, Monaco, Consolas, "Liberation Mono",
+    monospace;
+  line-height: 1.55;
+}
+
+.save-feedback {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.88);
+  padding: 13px 15px;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 0.92rem;
+}
+
+.save-feedback.saved {
+  border-color: rgba(16, 17, 20, 0.14);
+}
+
+.save-feedback.error {
+  border-color: rgba(16, 17, 20, 0.18);
+}
+
 .run-panel {
   display: grid;
   gap: 18px;
@@ -538,6 +676,10 @@ button:disabled {
 .field-control:focus {
   outline: 2px solid rgba(16, 17, 20, 0.18);
   outline-offset: 2px;
+}
+
+.field-control:disabled {
+  opacity: 0.72;
 }
 
 .field-help {
@@ -734,6 +876,7 @@ button:disabled {
   .memory-layout,
   .run-detail-grid,
   .metrics-grid,
+  .config-field-grid,
   .run-agent-grid,
   .run-summary-grid {
     grid-template-columns: 1fr;
@@ -768,9 +911,20 @@ button:disabled {
     align-items: stretch;
   }
 
+  .config-toolbar,
+  .config-card-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
   .run-button {
     width: 100%;
     justify-content: center;
+  }
+
+  .secondary-button,
+  .danger-button {
+    width: 100%;
   }
 }
 

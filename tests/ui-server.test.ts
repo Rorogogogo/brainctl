@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
@@ -153,6 +153,345 @@ describe('ui server', () => {
       expect(response.status).toBe(404);
       expect(response.headers.get('content-type')).toContain('application/json');
       await expect(response.json()).resolves.toEqual({ error: 'Not found' });
+    } finally {
+      await server.close();
+    }
+  });
+
+  it('rejects PUT on non-config api routes with 405', async () => {
+    const projectDir = await mkdtemp(path.join(os.tmpdir(), 'brainctl-ui-'));
+    tempDirs.push(projectDir);
+
+    await mkdir(path.join(projectDir, 'memory'), { recursive: true });
+    await writeFile(
+      path.join(projectDir, 'ai-stack.yaml'),
+      [
+        'memory:',
+        '  paths:',
+        '    - ./memory',
+        'skills:',
+        '  summarize:',
+        '    description: Summarize content',
+        '    prompt: |',
+        '      Summarize the following content into concise bullet points.',
+        'mcps: {}'
+      ].join('\n'),
+      'utf8'
+    );
+
+    const server = await startUiServer({ cwd: projectDir, port: 0 });
+
+    try {
+      const response = await fetch(new URL('/api/overview', server.url), {
+        method: 'PUT'
+      });
+
+      expect(response.status).toBe(405);
+      expect(response.headers.get('content-type')).toContain('application/json');
+      await expect(response.json()).resolves.toEqual({ error: 'Method not allowed' });
+    } finally {
+      await server.close();
+    }
+  });
+
+  it('rejects PUT / as a method not allowed response instead of serving the SPA', async () => {
+    const projectDir = await mkdtemp(path.join(os.tmpdir(), 'brainctl-ui-'));
+    tempDirs.push(projectDir);
+
+    await mkdir(path.join(projectDir, 'memory'), { recursive: true });
+    await writeFile(
+      path.join(projectDir, 'ai-stack.yaml'),
+      [
+        'memory:',
+        '  paths:',
+        '    - ./memory',
+        'skills:',
+        '  summarize:',
+        '    description: Summarize content',
+        '    prompt: |',
+        '      Summarize the following content into concise bullet points.',
+        'mcps: {}'
+      ].join('\n'),
+      'utf8'
+    );
+
+    const server = await startUiServer({ cwd: projectDir, port: 0 });
+
+    try {
+      const response = await fetch(new URL('/', server.url), {
+        method: 'PUT'
+      });
+
+      expect(response.status).toBe(405);
+      expect(response.headers.get('content-type')).toContain('application/json');
+      await expect(response.json()).resolves.toEqual({ error: 'Method not allowed' });
+    } finally {
+      await server.close();
+    }
+  });
+
+  it('returns 400 for invalid config bodies without overwriting ai-stack.yaml', async () => {
+    const projectDir = await mkdtemp(path.join(os.tmpdir(), 'brainctl-ui-'));
+    tempDirs.push(projectDir);
+
+    await mkdir(path.join(projectDir, 'memory'), { recursive: true });
+    const configPath = path.join(projectDir, 'ai-stack.yaml');
+    const originalContents = [
+      'memory:',
+      '  paths:',
+      '    - ./memory',
+      'skills:',
+      '  summarize:',
+      '    description: Summarize content',
+      '    prompt: |',
+      '      Summarize the following content into concise bullet points.',
+      'mcps: {}'
+    ].join('\n');
+    await writeFile(configPath, originalContents, 'utf8');
+
+    const server = await startUiServer({ cwd: projectDir, port: 0 });
+
+    try {
+      const response = await fetch(new URL('/api/config', server.url), {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          memory: {
+            paths: ['./memory']
+          },
+          skills: {
+            summarize: {
+              description: 'Summarize content'
+            }
+          },
+          mcps: {}
+        })
+      });
+
+      expect(response.status).toBe(400);
+      expect(response.headers.get('content-type')).toContain('application/json');
+      await expect(response.json()).resolves.toMatchObject({ error: expect.any(String) });
+      await expect(readFile(configPath, 'utf8')).resolves.toBe(originalContents);
+    } finally {
+      await server.close();
+    }
+  });
+
+  it('returns 400 for config writes with memory paths outside the workspace root', async () => {
+    const projectDir = await mkdtemp(path.join(os.tmpdir(), 'brainctl-ui-'));
+    tempDirs.push(projectDir);
+
+    const outsideDir = await mkdtemp(path.join(os.tmpdir(), 'brainctl-ui-outside-'));
+    tempDirs.push(outsideDir);
+
+    await mkdir(path.join(projectDir, 'memory'), { recursive: true });
+    const configPath = path.join(projectDir, 'ai-stack.yaml');
+    const originalContents = [
+      'memory:',
+      '  paths:',
+      '    - ./memory',
+      'skills:',
+      '  summarize:',
+      '    description: Summarize content',
+      '    prompt: |',
+      '      Summarize the following content into concise bullet points.',
+      'mcps: {}'
+    ].join('\n');
+    await writeFile(configPath, originalContents, 'utf8');
+
+    const server = await startUiServer({ cwd: projectDir, port: 0 });
+
+    try {
+      const response = await fetch(new URL('/api/config', server.url), {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          memory: {
+            paths: [path.join(outsideDir, 'memory')]
+          },
+          skills: {
+            summarize: {
+              description: 'Summarize content',
+              prompt: 'Summarize the following content into concise bullet points.'
+            }
+          },
+          mcps: {}
+        })
+      });
+
+      expect(response.status).toBe(400);
+      expect(response.headers.get('content-type')).toContain('application/json');
+      await expect(response.json()).resolves.toEqual({
+        error: 'Memory paths must stay within the workspace root.'
+      });
+      await expect(readFile(configPath, 'utf8')).resolves.toBe(originalContents);
+    } finally {
+      await server.close();
+    }
+  });
+
+  it('returns 400 Invalid JSON body for malformed or empty PUT /api/config payloads', async () => {
+    const projectDir = await mkdtemp(path.join(os.tmpdir(), 'brainctl-ui-'));
+    tempDirs.push(projectDir);
+
+    await mkdir(path.join(projectDir, 'memory'), { recursive: true });
+    await writeFile(
+      path.join(projectDir, 'ai-stack.yaml'),
+      [
+        'memory:',
+        '  paths:',
+        '    - ./memory',
+        'skills:',
+        '  summarize:',
+        '    description: Summarize content',
+        '    prompt: |',
+        '      Summarize the following content into concise bullet points.',
+        'mcps: {}'
+      ].join('\n'),
+      'utf8'
+    );
+
+    const server = await startUiServer({ cwd: projectDir, port: 0 });
+
+    try {
+      const malformedResponse = await fetch(new URL('/api/config', server.url), {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: '{'
+      });
+
+      expect(malformedResponse.status).toBe(400);
+      await expect(malformedResponse.json()).resolves.toEqual({
+        error: 'Invalid JSON body'
+      });
+
+      const emptyResponse = await fetch(new URL('/api/config', server.url), {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: ''
+      });
+
+      expect(emptyResponse.status).toBe(400);
+      await expect(emptyResponse.json()).resolves.toEqual({
+        error: 'Invalid JSON body'
+      });
+    } finally {
+      await server.close();
+    }
+  });
+
+  it('maps invalid on-disk config reads to a 400 JSON response', async () => {
+    const projectDir = await mkdtemp(path.join(os.tmpdir(), 'brainctl-ui-'));
+    tempDirs.push(projectDir);
+
+    await mkdir(path.join(projectDir, 'memory'), { recursive: true });
+    await writeFile(
+      path.join(projectDir, 'ai-stack.yaml'),
+      [
+        'memory:',
+        '  paths:',
+        '    - ./memory',
+        'mcps: {}'
+      ].join('\n'),
+      'utf8'
+    );
+
+    const server = await startUiServer({ cwd: projectDir, port: 0 });
+
+    try {
+      const response = await fetch(new URL('/api/config', server.url));
+      expect(response.status).toBe(400);
+      expect(response.headers.get('content-type')).toContain('application/json');
+      await expect(response.json()).resolves.toEqual({
+        error: 'ai-stack.yaml is missing the required "skills" section.'
+      });
+    } finally {
+      await server.close();
+    }
+  });
+
+  it('persists config updates through PUT /api/config and returns the saved JSON', async () => {
+    const projectDir = await mkdtemp(path.join(os.tmpdir(), 'brainctl-ui-'));
+    tempDirs.push(projectDir);
+
+    await mkdir(path.join(projectDir, 'memory'), { recursive: true });
+    await writeFile(
+      path.join(projectDir, 'ai-stack.yaml'),
+      [
+        'memory:',
+        '  paths:',
+        '    - ./memory',
+        'skills:',
+        '  summarize:',
+        '    description: Summarize content',
+        '    prompt: |',
+        '      Summarize the following content into concise bullet points.',
+        'mcps: {}'
+      ].join('\n'),
+      'utf8'
+    );
+
+    const server = await startUiServer({ cwd: projectDir, port: 0 });
+    const updatedConfig = {
+      memory: {
+        paths: ['./memory']
+      },
+      skills: {
+        summarize: {
+          description: 'Summarize content',
+          prompt: 'Summarize the following content into concise bullet points.'
+        },
+        research: {
+          description: 'Research content',
+          prompt: 'Research the following topic and return key findings.'
+        }
+      },
+      mcps: {
+        github: {
+          command: 'npx',
+          args: ['-y', '@modelcontextprotocol/server-github']
+        }
+      }
+    };
+
+    try {
+      const response = await fetch(new URL('/api/config', server.url), {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(updatedConfig)
+      });
+
+      expect(response.ok).toBe(true);
+      expect(response.headers.get('content-type')).toContain('application/json');
+      await expect(response.json()).resolves.toMatchObject({
+        configPath: path.join(projectDir, 'ai-stack.yaml'),
+        rootDir: projectDir,
+        memory: {
+          paths: [path.join(projectDir, 'memory')]
+        },
+        skills: updatedConfig.skills,
+        mcps: updatedConfig.mcps
+      });
+
+      const diskConfigResponse = await fetch(new URL('/api/config', server.url));
+      expect(diskConfigResponse.ok).toBe(true);
+      await expect(diskConfigResponse.json()).resolves.toMatchObject({
+        memory: {
+          paths: [path.join(projectDir, 'memory')]
+        },
+        skills: updatedConfig.skills,
+        mcps: updatedConfig.mcps
+      });
     } finally {
       await server.close();
     }

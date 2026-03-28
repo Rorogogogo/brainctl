@@ -12,7 +12,13 @@ import {
   Workflow
 } from 'lucide-react';
 
+import McpView from './McpView';
 import RunView from './RunView';
+import SkillsView from './SkillsView';
+import {
+  getEditorNavigationDisposition,
+  type SkillSavePayloadEntry
+} from './config-editor';
 
 type ViewKey = 'overview' | 'memory' | 'skills' | 'mcp' | 'run';
 
@@ -25,6 +31,11 @@ interface AgentStatus {
   agent: 'claude' | 'codex';
   available: boolean;
   command?: string;
+}
+
+interface SkillConfig {
+  description?: string;
+  prompt: string;
 }
 
 interface WorkspaceSnapshot {
@@ -40,24 +51,49 @@ interface WorkspaceSnapshot {
   agents: Record<'claude' | 'codex', AgentStatus>;
 }
 
+interface WorkspaceConfig {
+  configPath: string;
+  rootDir: string;
+  memory: {
+    paths: string[];
+  };
+  skills: Record<string, SkillConfig>;
+  mcps: Record<string, unknown>;
+}
+
+interface ConfigSavePayload {
+  memory: WorkspaceConfig['memory'];
+  skills: Record<string, SkillConfig>;
+  mcps: Record<string, unknown>;
+}
+
+interface EditorGuardState {
+  isDirty: boolean;
+  isSaving: boolean;
+}
+
 interface SectionDefinition {
   key: ViewKey;
   label: string;
   icon: LucideIcon;
-  disabled?: boolean;
 }
 
 const sections: SectionDefinition[] = [
   { key: 'overview', label: 'Overview', icon: LayoutDashboard },
   { key: 'memory', label: 'Memory', icon: BookOpenText },
-  { key: 'skills', label: 'Skills', icon: FileText, disabled: true },
-  { key: 'mcp', label: 'MCP', icon: Database, disabled: true },
+  { key: 'skills', label: 'Skills', icon: FileText },
+  { key: 'mcp', label: 'MCP', icon: Database },
   { key: 'run', label: 'Run', icon: Workflow }
 ];
 
 export default function App() {
   const [activeView, setActiveView] = useState<ViewKey>('overview');
   const [workspace, setWorkspace] = useState<WorkspaceSnapshot | null>(null);
+  const [config, setConfig] = useState<WorkspaceConfig | null>(null);
+  const [editorGuards, setEditorGuards] = useState<Record<'skills' | 'mcp', EditorGuardState>>({
+    skills: { isDirty: false, isSaving: false },
+    mcp: { isDirty: false, isSaving: false }
+  });
   const [selectedMemoryPath, setSelectedMemoryPath] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -65,19 +101,12 @@ export default function App() {
   useEffect(() => {
     const controller = new AbortController();
 
-    async function loadWorkspace(): Promise<void> {
+    async function loadDashboard(): Promise<void> {
       try {
         setLoading(true);
-        const response = await fetch('/api/overview', {
-          signal: controller.signal
-        });
-        const payload = (await response.json().catch(() => null)) as WorkspaceSnapshot | { error?: string } | null;
-
-        if (!response.ok) {
-          throw new Error(payload && typeof payload.error === 'string' ? payload.error : 'Failed to load workspace data.');
-        }
-
-        setWorkspace(payload as WorkspaceSnapshot);
+        const data = await fetchDashboardData(controller.signal);
+        setWorkspace(data.workspace);
+        setConfig(data.config);
         setError(null);
       } catch (loadError) {
         if (loadError instanceof DOMException && loadError.name === 'AbortError') {
@@ -92,7 +121,7 @@ export default function App() {
       }
     }
 
-    void loadWorkspace();
+    void loadDashboard();
 
     return () => {
       controller.abort();
@@ -113,8 +142,111 @@ export default function App() {
     });
   }, [workspace]);
 
+  async function saveSkills(nextSkills: Record<string, SkillSavePayloadEntry>): Promise<void> {
+    if (!config) {
+      throw new Error('Config is still loading.');
+    }
+
+    await saveConfig({
+      memory: config.memory,
+      skills: nextSkills,
+      mcps: config.mcps
+    });
+  }
+
+  async function saveMcps(nextMcps: Record<string, unknown>): Promise<void> {
+    if (!config) {
+      throw new Error('Config is still loading.');
+    }
+
+    await saveConfig({
+      memory: config.memory,
+      skills: config.skills,
+      mcps: nextMcps
+    });
+  }
+
+  async function saveConfig(nextConfig: ConfigSavePayload): Promise<void> {
+    const savedConfig = await fetchJson<WorkspaceConfig>('/api/config', {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(nextConfig)
+    });
+
+    setConfig(savedConfig);
+
+    try {
+      const refreshedWorkspace = await fetchJson<WorkspaceSnapshot>('/api/overview');
+      setWorkspace(refreshedWorkspace);
+    } catch (refreshError) {
+      const message =
+        refreshError instanceof Error
+          ? refreshError.message
+          : 'Failed to refresh workspace data after save.';
+
+      throw new Error(`Saved config, but failed to refresh dashboard state. ${message}`);
+    }
+  }
+
   const selectedMemory =
     workspace?.memory.entries.find((entry) => entry.path === selectedMemoryPath) ?? null;
+  const activeEditorGuard =
+    activeView === 'skills' || activeView === 'mcp' ? editorGuards[activeView] : null;
+  const navigationLocked = activeEditorGuard?.isSaving ?? false;
+
+  function updateEditorGuard(view: 'skills' | 'mcp', nextState: EditorGuardState): void {
+    setEditorGuards((current) => {
+      const previousState = current[view];
+
+      if (
+        previousState.isDirty === nextState.isDirty &&
+        previousState.isSaving === nextState.isSaving
+      ) {
+        return current;
+      }
+
+      return {
+        ...current,
+        [view]: nextState
+      };
+    });
+  }
+
+  function handleViewChange(nextView: ViewKey): void {
+    if (nextView === activeView) {
+      return;
+    }
+
+    const guard =
+      activeView === 'skills' || activeView === 'mcp'
+        ? editorGuards[activeView]
+        : { isDirty: false, isSaving: false };
+
+    const disposition = getEditorNavigationDisposition({
+      activeView,
+      nextView,
+      isDirty: guard.isDirty,
+      isSaving: guard.isSaving
+    });
+
+    if (disposition === 'blocked') {
+      return;
+    }
+
+    if (disposition === 'confirm') {
+      const confirmed = window.confirm(
+        'You have unsaved changes in this editor. Discard them and switch views?'
+      );
+
+      if (!confirmed) {
+        return;
+      }
+    }
+
+    setActiveView(nextView);
+  }
 
   return (
     <main className="app-shell">
@@ -156,23 +288,16 @@ export default function App() {
                   <button
                     key={section.key}
                     type="button"
-                    className={`section-button${isActive ? ' is-active' : ''}${section.disabled ? ' is-disabled' : ''}`}
-                    onClick={() => {
-                      if (!section.disabled) {
-                        setActiveView(section.key);
-                      }
-                    }}
-                    disabled={section.disabled}
-                    aria-disabled={section.disabled}
+                    className={`section-button${isActive ? ' is-active' : ''}`}
+                    onClick={() => handleViewChange(section.key)}
+                    disabled={navigationLocked && !isActive}
                   >
                     <span className="section-button-icon">
                       <Icon size={16} />
                     </span>
                     <span className="section-button-label">
                       <span>{section.label}</span>
-                      <span className="section-button-subtitle">
-                        {section.disabled ? 'Coming soon' : 'Open now'}
-                      </span>
+                      <span className="section-button-subtitle">{sectionSubtitle(section.key)}</span>
                     </span>
                     <ChevronRight size={16} className="section-button-chevron" aria-hidden="true" />
                   </button>
@@ -194,7 +319,7 @@ export default function App() {
                 title="Could not load workspace"
                 message={error}
               />
-            ) : workspace ? (
+            ) : workspace && config ? (
               <>
                 <div className="workspace-header">
                   <div>
@@ -221,11 +346,21 @@ export default function App() {
                     selectedEntry={selectedMemory}
                     onSelectPath={setSelectedMemoryPath}
                   />
+                ) : activeView === 'skills' ? (
+                  <SkillsView
+                    skills={config.skills}
+                    onSave={saveSkills}
+                    onStateChange={(nextState) => updateEditorGuard('skills', nextState)}
+                  />
+                ) : activeView === 'mcp' ? (
+                  <McpView
+                    mcps={config.mcps}
+                    onSave={saveMcps}
+                    onStateChange={(nextState) => updateEditorGuard('mcp', nextState)}
+                  />
                 ) : activeView === 'run' ? (
                   <RunView workspace={workspace} />
-                ) : (
-                  <ComingSoonView label={sectionLabel(activeView)} />
-                )}
+                ) : null}
               </>
             ) : null}
           </section>
@@ -239,8 +374,18 @@ function OverviewView({ workspace }: { workspace: WorkspaceSnapshot }) {
   return (
     <div className="view-stack">
       <div className="metrics-grid">
-        <MetricCard icon={BookOpenText} label="Memory files" value={String(workspace.memory.count)} note="Markdown files loaded from the current workspace." />
-        <MetricCard icon={Database} label="MCP count" value={String(workspace.mcpCount)} note="Configured MCP entries in ai-stack.yaml." />
+        <MetricCard
+          icon={BookOpenText}
+          label="Memory files"
+          value={String(workspace.memory.count)}
+          note="Markdown files loaded from the current workspace."
+        />
+        <MetricCard
+          icon={Database}
+          label="MCP count"
+          value={String(workspace.mcpCount)}
+          note="Configured MCP entries in ai-stack.yaml."
+        />
         <MetricCard
           icon={LayoutDashboard}
           label="Config path"
@@ -284,7 +429,10 @@ function OverviewView({ workspace }: { workspace: WorkspaceSnapshot }) {
             return (
               <div key={agentName} className="agent-row">
                 <div className="agent-row-meta">
-                  <span className={`agent-status-dot${agent.available ? ' is-online' : ' is-offline'}`} aria-hidden="true" />
+                  <span
+                    className={`agent-status-dot${agent.available ? ' is-online' : ' is-offline'}`}
+                    aria-hidden="true"
+                  />
                   <div>
                     <strong>{agentName}</strong>
                     <p>{agent.available ? 'Available now' : 'Unavailable right now'}</p>
@@ -360,7 +508,9 @@ function MemoryView({
           <span className="muted-pill">Monospace</span>
         </div>
 
-        <p className="muted-copy">{selectedEntry?.path ?? 'Choose a markdown file from the list to inspect its contents.'}</p>
+        <p className="muted-copy">
+          {selectedEntry?.path ?? 'Choose a markdown file from the list to inspect its contents.'}
+        </p>
 
         <textarea
           className="memory-editor"
@@ -371,16 +521,6 @@ function MemoryView({
         />
       </section>
     </div>
-  );
-}
-
-function ComingSoonView({ label }: { label: string }) {
-  return (
-    <EmptyState
-      icon={Workflow}
-      title={`${label} is next`}
-      message="The shell already reserves space for this view, but the first usable pass is Overview and Memory."
-    />
   );
 }
 
@@ -431,10 +571,55 @@ function EmptyState({
   );
 }
 
+async function fetchDashboardData(signal?: AbortSignal): Promise<{
+  workspace: WorkspaceSnapshot;
+  config: WorkspaceConfig;
+}> {
+  const [workspace, config] = await Promise.all([
+    fetchJson<WorkspaceSnapshot>('/api/overview', { signal }),
+    fetchJson<WorkspaceConfig>('/api/config', { signal })
+  ]);
+
+  return { workspace, config };
+}
+
+async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
+  const response = await fetch(url, init);
+  const payload = (await response.json().catch(() => null)) as
+    | T
+    | {
+        error?: string;
+      }
+    | null;
+
+  if (!response.ok) {
+    throw new Error(
+      payload && typeof payload === 'object' && 'error' in payload && typeof payload.error === 'string'
+        ? payload.error
+        : `Request failed for ${url}.`
+    );
+  }
+
+  return payload as T;
+}
+
 function basename(filePath: string): string {
   return filePath.split(/[\\/]/).filter(Boolean).pop() ?? filePath;
 }
 
-function sectionLabel(view: ViewKey): string {
-  return sections.find((section) => section.key === view)?.label ?? 'Section';
+function sectionSubtitle(view: ViewKey): string {
+  switch (view) {
+    case 'overview':
+      return 'Workspace snapshot';
+    case 'memory':
+      return 'Read-only files';
+    case 'skills':
+      return 'Edit config';
+    case 'mcp':
+      return 'Edit JSON config';
+    case 'run':
+      return 'Execute now';
+    default:
+      return 'Open now';
+  }
 }

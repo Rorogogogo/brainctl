@@ -4,11 +4,11 @@ import path from 'node:path';
 import YAML from 'yaml';
 
 import { ConfigError } from '../errors.js';
-import type { BrainctlConfig } from '../types.js';
+import type { ConfigPayload } from '../config.js';
 
 export interface ConfigWriteRequest {
   cwd?: string;
-  config: BrainctlConfig;
+  config: ConfigPayload;
 }
 
 export interface ConfigWriteResult {

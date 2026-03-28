@@ -2,7 +2,10 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { loadConfig } from '../config.js';
+import { parseConfigPayload } from '../config.js';
+import { ConfigError } from '../errors.js';
 import { loadMemory } from '../context/memory.js';
+import { createConfigWriteService } from '../services/config-write-service.js';
 import { createRunService } from '../services/run-service.js';
 import type { RunService } from '../services/run-service.js';
 import { createStatusService } from '../services/status-service.js';
@@ -30,20 +33,25 @@ export function createUiRouteHandler(
 ): UiRouteHandler {
   const statusService = dependencies.statusService ?? createStatusService();
   const runService = dependencies.runService ?? createRunService();
+  const configWriteService = createConfigWriteService();
 
   return async (request, response) => {
     const url = new URL(request.url ?? '/', 'http://localhost');
 
-    if (request.method !== 'GET') {
-      return sendJson(response, 405, { error: 'Method not allowed' });
-    }
-
     switch (url.pathname) {
       case '/api/overview': {
+        if (request.method !== 'GET') {
+          return sendJson(response, 405, { error: 'Method not allowed' });
+        }
+
         const overview = await statusService.execute({ cwd: dependencies.cwd });
         return sendJson(response, 200, overview);
       }
       case '/api/run/stream': {
+        if (request.method !== 'GET') {
+          return sendJson(response, 405, { error: 'Method not allowed' });
+        }
+
         const runRequest = parseRunRequest(url);
         if (runRequest === null) {
           return sendJson(response, 400, {
@@ -85,15 +93,44 @@ export function createUiRouteHandler(
         return;
       }
       case '/api/config': {
+        if (request.method === 'PUT') {
+          const body = await readJsonBody(request);
+          if (!body.ok) {
+            return sendJson(response, 400, { error: 'Invalid JSON body' });
+          }
+
+          const config = parseConfigPayload(body.value);
+
+          await configWriteService.execute({
+            cwd: dependencies.cwd,
+            config
+          });
+
+          const savedConfig = await loadConfig({ cwd: dependencies.cwd });
+          return sendJson(response, 200, savedConfig);
+        }
+
+        if (request.method !== 'GET') {
+          return sendJson(response, 405, { error: 'Method not allowed' });
+        }
+
         const config = await loadConfig({ cwd: dependencies.cwd });
         return sendJson(response, 200, config);
       }
       case '/api/memory': {
+        if (request.method !== 'GET') {
+          return sendJson(response, 405, { error: 'Method not allowed' });
+        }
+
         const config = await loadConfig({ cwd: dependencies.cwd });
         const memory = await loadMemory({ paths: config.memory.paths });
         return sendJson(response, 200, memory);
       }
       case '/api/agents': {
+        if (request.method !== 'GET') {
+          return sendJson(response, 405, { error: 'Method not allowed' });
+        }
+
         const overview = await statusService.execute({ cwd: dependencies.cwd });
         return sendJson(response, 200, overview.agents);
       }
@@ -102,9 +139,35 @@ export function createUiRouteHandler(
           return sendJson(response, 404, { error: 'Not found' });
         }
 
+        if (request.method !== 'GET') {
+          return sendJson(response, 405, { error: 'Method not allowed' });
+        }
+
         return serveUiResponse(url.pathname, response);
     }
   };
+}
+
+async function readJsonBody(
+  request: IncomingMessage
+): Promise<{ ok: true; value: unknown } | { ok: false }> {
+  const chunks: Buffer[] = [];
+
+  for await (const chunk of request) {
+    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+  }
+
+  const rawBody = Buffer.concat(chunks).toString('utf8').trim();
+
+  if (rawBody.length === 0) {
+    return { ok: false };
+  }
+
+  try {
+    return { ok: true, value: JSON.parse(rawBody) as unknown };
+  } catch {
+    return { ok: false };
+  }
 }
 
 function parseRunRequest(url: URL):

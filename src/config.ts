@@ -10,12 +10,12 @@ interface LoadConfigOptions {
   cwd?: string;
 }
 
-interface ParsedConfig {
-  memory?: {
-    paths?: unknown;
+export interface ConfigPayload {
+  memory: {
+    paths: string[];
   };
-  skills?: unknown;
-  mcps?: unknown;
+  skills: Record<string, SkillConfig>;
+  mcps: Record<string, unknown>;
 }
 
 export async function loadConfig(options: LoadConfigOptions = {}): Promise<BrainctlConfig> {
@@ -30,13 +30,45 @@ export async function loadConfig(options: LoadConfigOptions = {}): Promise<Brain
     throw new ConfigError(`Could not read ai-stack.yaml in ${cwd}.`);
   }
 
-  let parsed: ParsedConfig;
+  let parsed: unknown;
 
   try {
-    parsed = (YAML.parse(source) ?? {}) as ParsedConfig;
+    parsed = YAML.parse(source) ?? {};
   } catch (error) {
     throw new ConfigError('ai-stack.yaml could not be parsed.');
   }
+
+  const config = parseConfigPayload(parsed);
+
+  return {
+    configPath,
+    rootDir: cwd,
+    memory: {
+      paths: config.memory.paths.map((memoryPath) => {
+        if (typeof memoryPath !== 'string' || memoryPath.trim().length === 0) {
+          throw new ConfigError('ai-stack.yaml contains an invalid memory path.');
+        }
+
+        return path.resolve(cwd, memoryPath);
+      })
+    },
+    skills: config.skills,
+    mcps: config.mcps
+  };
+}
+
+export function parseConfigPayload(value: unknown): ConfigPayload {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new ConfigError('ai-stack.yaml is missing the required "memory.paths" section.');
+  }
+
+  const parsed = value as {
+    memory?: {
+      paths?: unknown;
+    };
+    skills?: unknown;
+    mcps?: unknown;
+  };
 
   if (!parsed.memory || !Array.isArray(parsed.memory.paths)) {
     throw new ConfigError('ai-stack.yaml is missing the required "memory.paths" section.');
@@ -46,21 +78,17 @@ export async function loadConfig(options: LoadConfigOptions = {}): Promise<Brain
     throw new ConfigError('ai-stack.yaml is missing the required "skills" section.');
   }
 
-  const skills = normalizeSkills(parsed.skills);
-
   return {
-    configPath,
-    rootDir: cwd,
     memory: {
       paths: parsed.memory.paths.map((memoryPath) => {
         if (typeof memoryPath !== 'string' || memoryPath.trim().length === 0) {
           throw new ConfigError('ai-stack.yaml contains an invalid memory path.');
         }
 
-        return path.resolve(cwd, memoryPath);
+        return memoryPath;
       })
     },
-    skills,
+    skills: normalizeSkills(parsed.skills),
     mcps: normalizeMcps(parsed.mcps)
   };
 }

@@ -1,6 +1,7 @@
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 
+import { BrainctlError } from '../errors.js';
 import { createUiRouteHandler } from './routes.js';
 import type { StatusService } from '../services/status-service.js';
 
@@ -32,7 +33,8 @@ export async function startUiServer(
     try {
       await handler(request, response);
     } catch (error) {
-      response.statusCode = 500;
+      const isUserError = error instanceof BrainctlError && error.category === 'user';
+      response.statusCode = isUserError ? 400 : 500;
       response.setHeader('Content-Type', 'application/json; charset=utf-8');
       response.end(
         JSON.stringify({
