@@ -12,6 +12,8 @@ import {
   Workflow
 } from 'lucide-react';
 
+import RunView from './RunView';
+
 type ViewKey = 'overview' | 'memory' | 'skills' | 'mcp' | 'run';
 
 interface MemoryEntry {
@@ -50,7 +52,7 @@ const sections: SectionDefinition[] = [
   { key: 'memory', label: 'Memory', icon: BookOpenText },
   { key: 'skills', label: 'Skills', icon: FileText, disabled: true },
   { key: 'mcp', label: 'MCP', icon: Database, disabled: true },
-  { key: 'run', label: 'Run', icon: Workflow, disabled: true }
+  { key: 'run', label: 'Run', icon: Workflow }
 ];
 
 export default function App() {
@@ -219,6 +221,8 @@ export default function App() {
                     selectedEntry={selectedMemory}
                     onSelectPath={setSelectedMemoryPath}
                   />
+                ) : activeView === 'run' ? (
+                  <RunView workspace={workspace} />
                 ) : (
                   <ComingSoonView label={sectionLabel(activeView)} />
                 )}
