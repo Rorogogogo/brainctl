@@ -12,6 +12,8 @@ import {
   buildRunStreamUrl,
   createRunDefaults,
   getRunAgentOptions,
+  getRunFallbackAgentOptions,
+  normalizeRunFallbackAgent,
   type RunAgentName,
   type RunWorkspace
 } from './run-view';
@@ -69,6 +71,7 @@ export default function RunView({ workspace }: RunViewProps) {
   }, []);
 
   const agentOptions = getRunAgentOptions(workspace);
+  const fallbackAgentOptions = getRunFallbackAgentOptions(workspace, form.primaryAgent);
   const selectedSkill = form.skill.trim();
   const selectedInputFile = form.inputFile.trim();
   const canRun = state !== 'running' && selectedSkill.length > 0 && selectedInputFile.length > 0;
@@ -81,9 +84,9 @@ export default function RunView({ workspace }: RunViewProps) {
     streamRef.current = null;
 
     setState('running');
-    setOutput('');
-    setResult(null);
-    setErrorMessage(null);
+      setOutput('');
+      setResult(null);
+      setErrorMessage(null);
 
     const source = new EventSource(
       buildRunStreamUrl({
@@ -111,6 +114,23 @@ export default function RunView({ workspace }: RunViewProps) {
       } catch {
         setState('error');
         setErrorMessage('The run completed, but the final result payload could not be parsed.');
+      } finally {
+        source.close();
+        if (streamRef.current === source) {
+          streamRef.current = null;
+        }
+      }
+    });
+
+    source.addEventListener('run-error', (event) => {
+      try {
+        const payload = JSON.parse((event as MessageEvent<string>).data) as { error?: string };
+        finished = true;
+        setState('error');
+        setErrorMessage(payload.error ?? 'The run failed before a final result was received.');
+      } catch {
+        setState('error');
+        setErrorMessage('The run failed before a final result was received.');
       } finally {
         source.close();
         if (streamRef.current === source) {
@@ -207,10 +227,15 @@ export default function RunView({ workspace }: RunViewProps) {
                 className="field-control"
                 value={form.primaryAgent}
                 onChange={(event) =>
-                  setForm((current) => ({
-                    ...current,
-                    primaryAgent: event.target.value as RunAgentName
-                  }))
+                  setForm((current) => {
+                    const nextPrimary = event.target.value as RunAgentName;
+
+                    return {
+                      ...current,
+                      primaryAgent: nextPrimary,
+                      fallbackAgent: normalizeRunFallbackAgent(nextPrimary, current.fallbackAgent)
+                    };
+                  })
                 }
               >
                 {agentOptions.map((agent) => (
@@ -233,9 +258,9 @@ export default function RunView({ workspace }: RunViewProps) {
                     fallbackAgent: event.target.value as RunFormState['fallbackAgent']
                   }))
                 }
-              >
-                <option value="">None</option>
-                {agentOptions.map((agent) => (
+                >
+                  <option value="">None</option>
+                {fallbackAgentOptions.map((agent) => (
                   <option key={agent.agent} value={agent.agent}>
                     {formatAgentOption(agent)}
                   </option>

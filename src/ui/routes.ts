@@ -70,7 +70,7 @@ export function createUiRouteHandler(
           writeSseEvent(response, 'result', trace);
           response.end();
         } catch (error) {
-          writeSseEvent(response, 'error', {
+          writeSseEvent(response, 'run-error', {
             error: error instanceof Error ? error.message : 'Unexpected server error'
           });
           response.end();

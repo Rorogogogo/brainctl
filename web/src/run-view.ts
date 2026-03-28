@@ -45,6 +45,24 @@ export function getRunAgentOptions(workspace: RunWorkspace): RunAgentOption[] {
   return AGENT_ORDER.map((agent) => workspace.agents[agent]);
 }
 
+export function getRunFallbackAgentOptions(
+  workspace: RunWorkspace,
+  primaryAgent: RunAgentName
+): RunAgentOption[] {
+  return AGENT_ORDER.filter((agent) => agent !== primaryAgent).map((agent) => workspace.agents[agent]);
+}
+
+export function normalizeRunFallbackAgent(
+  primaryAgent: RunAgentName,
+  fallbackAgent: '' | RunAgentName
+): '' | RunAgentName {
+  if (fallbackAgent === primaryAgent) {
+    return '';
+  }
+
+  return fallbackAgent;
+}
+
 export function buildRunStreamUrl(params: RunStreamParams): string {
   const searchParams = new URLSearchParams({
     skill: params.skill,

@@ -105,6 +105,73 @@ describe('ui run stream endpoint', () => {
       });
     }
   });
+
+  it('streams a structured failure event when execution throws', async () => {
+    const projectDir = await createProject();
+    const executor: Executor = {
+      agent: 'claude',
+      async run() {
+        throw new Error('executor exploded');
+      }
+    };
+
+    const resolver: ExecutorResolver = {
+      async resolveExecutor() {
+        return executor;
+      },
+      async getAgentAvailability() {
+        return {
+          claude: { agent: 'claude', available: true, command: 'claude' },
+          codex: { agent: 'codex', available: false, command: 'codex' }
+        };
+      }
+    };
+
+    const runService = createRunService({ resolver });
+    const server = createServer(
+      createUiRouteHandler({
+        cwd: projectDir,
+        runService
+      })
+    );
+
+    await new Promise<void>((resolve) => {
+      server.listen(0, '127.0.0.1', resolve);
+    });
+
+    try {
+      const address = server.address();
+      if (!address || typeof address === 'string') {
+        throw new Error('Test server did not bind to a TCP port.');
+      }
+
+      const response = await fetch(
+        new URL(
+          '/api/run/stream?skill=ui-stream-project&inputFile=./input.md&primaryAgent=claude',
+          `http://127.0.0.1:${address.port}`
+        ),
+        {
+          headers: {
+            Accept: 'text/event-stream'
+          }
+        }
+      );
+
+      expect(response.ok).toBe(true);
+
+      const events = parseSse(await response.text());
+      const errorEvent = events.find((event) => event.event === 'run-error');
+      expect(errorEvent).toBeDefined();
+      expect(JSON.parse(errorEvent!.data)).toMatchObject({
+        error: 'executor exploded'
+      });
+      expect(events.some((event) => event.event === 'error')).toBe(false);
+    } finally {
+      await new Promise<void>((resolve) => {
+        server.close(() => resolve());
+      });
+    }
+  });
 });
 
 function parseSse(text: string): Array<{ event: string; data: string }> {
