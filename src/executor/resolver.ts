@@ -8,11 +8,12 @@ import { ClaudeExecutor } from './claude.js';
 import { CodexExecutor } from './codex.js';
 import type { Executor } from './types.js';
 
-const SUPPORTED_AGENTS: AgentName[] = ['claude', 'codex'];
+const SUPPORTED_AGENTS: AgentName[] = ['claude', 'codex', 'gemini'];
 
 const AGENT_COMMANDS: Record<AgentName, string> = {
   claude: 'claude',
-  codex: 'codex'
+  codex: 'codex',
+  gemini: 'gemini'
 };
 
 export interface AgentAvailability {
@@ -77,6 +78,8 @@ function createExecutor(agentName: AgentName): Executor {
       return new ClaudeExecutor();
     case 'codex':
       return new CodexExecutor();
+    default:
+      throw new AgentNotAvailableError(`Agent "${agentName}" does not have an executor implementation.`);
   }
 }
 

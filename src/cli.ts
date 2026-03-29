@@ -9,14 +9,18 @@ import { Command } from 'commander';
 import { registerDoctorCommand } from './commands/doctor.js';
 import { registerInitCommand } from './commands/init.js';
 import { registerMcpCommand } from './commands/mcp.js';
+import { registerProfileCommand } from './commands/profile.js';
 import { registerRunCommand } from './commands/run.js';
 import { registerStatusCommand } from './commands/status.js';
+import { registerSyncCommand } from './commands/sync.js';
 import { registerUiCommand } from './commands/ui.js';
 import { printError } from './output.js';
 import { createDoctorService, type DoctorService } from './services/doctor-service.js';
 import { createInitService, type InitService } from './services/init-service.js';
+import { createProfileService, type ProfileService } from './services/profile-service.js';
 import { createRunService, type RunService } from './services/run-service.js';
 import { createStatusService, type StatusService } from './services/status-service.js';
+import { createSyncService, type SyncService } from './services/sync-service.js';
 import { createExecutorResolver } from './executor/resolver.js';
 
 const packageVersion = JSON.parse(
@@ -28,6 +32,8 @@ export interface CliServices {
   runService: RunService;
   statusService: StatusService;
   doctorService: DoctorService;
+  profileService: ProfileService;
+  syncService: SyncService;
 }
 
 export function createProgram(overrides: Partial<CliServices> = {}): Command {
@@ -43,6 +49,8 @@ export function createProgram(overrides: Partial<CliServices> = {}): Command {
   registerStatusCommand(program, services.statusService);
   registerRunCommand(program, services.runService);
   registerDoctorCommand(program, services.doctorService);
+  registerProfileCommand(program, services.profileService);
+  registerSyncCommand(program, services.syncService);
   registerUiCommand(program);
   registerMcpCommand(program);
 
@@ -73,12 +81,15 @@ export function shouldRunMain(
 
 function createDefaultServices(overrides: Partial<CliServices>): CliServices {
   const resolver = createExecutorResolver();
+  const profileService = createProfileService();
 
   return {
     initService: createInitService(),
     runService: createRunService({ resolver }),
     statusService: createStatusService({ resolver }),
     doctorService: createDoctorService({ resolver }),
+    profileService,
+    syncService: createSyncService({ profileService }),
     ...overrides
   };
 }
