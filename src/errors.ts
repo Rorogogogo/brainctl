@@ -53,3 +53,21 @@ export class ExecutionError extends BrainctlError {
     super(message, 'system', 'EXECUTION_ERROR');
   }
 }
+
+export class ProfileError extends BrainctlError {
+  public constructor(message: string) {
+    super(message, 'user', 'PROFILE_ERROR');
+  }
+}
+
+export class ProfileNotFoundError extends BrainctlError {
+  public constructor(message: string) {
+    super(message, 'user', 'PROFILE_NOT_FOUND');
+  }
+}
+
+export class SyncError extends BrainctlError {
+  public constructor(message: string) {
+    super(message, 'system', 'SYNC_ERROR');
+  }
+}
