@@ -17,6 +17,8 @@ import { registerUiCommand } from './commands/ui.js';
 import { printError } from './output.js';
 import { createDoctorService, type DoctorService } from './services/doctor-service.js';
 import { createInitService, type InitService } from './services/init-service.js';
+import { createProfileExportService, type ProfileExportService } from './services/profile-export-service.js';
+import { createProfileImportService, type ProfileImportService } from './services/profile-import-service.js';
 import { createProfileService, type ProfileService } from './services/profile-service.js';
 import { createRunService, type RunService } from './services/run-service.js';
 import { createStatusService, type StatusService } from './services/status-service.js';
@@ -33,6 +35,8 @@ export interface CliServices {
   statusService: StatusService;
   doctorService: DoctorService;
   profileService: ProfileService;
+  profileExportService: ProfileExportService;
+  profileImportService: ProfileImportService;
   syncService: SyncService;
 }
 
@@ -49,7 +53,11 @@ export function createProgram(overrides: Partial<CliServices> = {}): Command {
   registerStatusCommand(program, services.statusService);
   registerRunCommand(program, services.runService);
   registerDoctorCommand(program, services.doctorService);
-  registerProfileCommand(program, services.profileService);
+  registerProfileCommand(program, {
+    profileService: services.profileService,
+    profileExportService: services.profileExportService,
+    profileImportService: services.profileImportService,
+  });
   registerSyncCommand(program, services.syncService);
   registerUiCommand(program);
   registerMcpCommand(program);
@@ -89,6 +97,8 @@ function createDefaultServices(overrides: Partial<CliServices>): CliServices {
     statusService: createStatusService({ resolver }),
     doctorService: createDoctorService({ resolver }),
     profileService,
+    profileExportService: createProfileExportService({ profileService }),
+    profileImportService: createProfileImportService(),
     syncService: createSyncService({ profileService }),
     ...overrides
   };

@@ -129,7 +129,7 @@ async function loadMetaConfig(cwd: string): Promise<BrainctlMetaConfig> {
   }
 }
 
-function parseProfile(source: string, name: string): ProfileConfig {
+export function parseProfile(source: string, name: string): ProfileConfig {
   let parsed: unknown;
   try {
     parsed = YAML.parse(source) ?? {};

@@ -8,6 +8,8 @@ import { loadConfig } from '../config.js';
 import { loadMemory } from '../context/memory.js';
 import { createDoctorService } from '../services/doctor-service.js';
 import { createMemoryWriteService } from '../services/memory-write-service.js';
+import { createProfileExportService } from '../services/profile-export-service.js';
+import { createProfileImportService } from '../services/profile-import-service.js';
 import { createProfileService } from '../services/profile-service.js';
 import { createRunService } from '../services/run-service.js';
 import { createStatusService } from '../services/status-service.js';
@@ -191,6 +193,42 @@ export function createMcpServer(options: { cwd?: string } = {}): FastMCP {
     execute: async () => {
       const syncService = createSyncService();
       const result = await syncService.execute({ cwd });
+      return JSON.stringify(result, null, 2);
+    },
+  });
+
+  server.addTool({
+    name: 'brainctl_export_profile',
+    description: 'Export a profile as a portable tarball. Packages the profile config and bundled MCP source code for sharing.',
+    parameters: z.object({
+      name: z.string().describe('Profile name to export'),
+      output_path: z.string().optional().describe('Output file path (defaults to <name>.tar.gz in cwd)'),
+    }),
+    execute: async (args) => {
+      const exportService = createProfileExportService();
+      const result = await exportService.execute({
+        cwd,
+        name: args.name,
+        outputPath: args.output_path,
+      });
+      return JSON.stringify(result, null, 2);
+    },
+  });
+
+  server.addTool({
+    name: 'brainctl_import_profile',
+    description: 'Import a profile from a tarball. Extracts bundled MCP source, installs dependencies, and registers the profile.',
+    parameters: z.object({
+      archive_path: z.string().describe('Path to the profile tarball'),
+      force: z.boolean().default(false).describe('Overwrite existing profile if it exists'),
+    }),
+    execute: async (args) => {
+      const importService = createProfileImportService();
+      const result = await importService.execute({
+        cwd,
+        archivePath: args.archive_path,
+        force: args.force,
+      });
       return JSON.stringify(result, null, 2);
     },
   });
