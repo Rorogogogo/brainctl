@@ -3,13 +3,17 @@ import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { loadConfig } from '../config.js';
 import { parseConfigPayload } from '../config.js';
-import { ConfigError } from '../errors.js';
+import { ConfigError, ProfileError, ProfileNotFoundError } from '../errors.js';
 import { loadMemory } from '../context/memory.js';
+import { createAgentConfigService } from '../services/agent-config-service.js';
+import type { AgentMcpEntry } from '../services/agent-config-service.js';
 import { createConfigWriteService } from '../services/config-write-service.js';
+import { createProfileService } from '../services/profile-service.js';
 import { createRunService } from '../services/run-service.js';
 import type { RunService } from '../services/run-service.js';
 import { createStatusService } from '../services/status-service.js';
 import type { StatusService } from '../services/status-service.js';
+import { createSyncService } from '../services/sync-service.js';
 import { startSseStream, writeSseEvent } from './streaming.js';
 import type { AgentName, RunRequest } from '../types.js';
 import path from 'node:path';
@@ -34,6 +38,9 @@ export function createUiRouteHandler(
   const statusService = dependencies.statusService ?? createStatusService();
   const runService = dependencies.runService ?? createRunService();
   const configWriteService = createConfigWriteService();
+  const profileService = createProfileService();
+  const syncService = createSyncService({ profileService });
+  const agentConfigService = createAgentConfigService();
 
   return async (request, response) => {
     const url = new URL(request.url ?? '/', 'http://localhost');
@@ -134,7 +141,159 @@ export function createUiRouteHandler(
         const overview = await statusService.execute({ cwd: dependencies.cwd });
         return sendJson(response, 200, overview.agents);
       }
-      default:
+      case '/api/agents/live': {
+        if (request.method !== 'GET') {
+          return sendJson(response, 405, { error: 'Method not allowed' });
+        }
+
+        const configs = await agentConfigService.readAll({ cwd: dependencies.cwd });
+        return sendJson(response, 200, configs);
+      }
+      case '/api/profiles': {
+        if (request.method === 'GET') {
+          const result = await profileService.list({ cwd: dependencies.cwd });
+          return sendJson(response, 200, result);
+        }
+
+        if (request.method === 'POST') {
+          const body = await readJsonBody(request);
+          if (!body.ok) {
+            return sendJson(response, 400, { error: 'Invalid JSON body' });
+          }
+
+          const data = body.value as Record<string, unknown>;
+          try {
+            const result = await profileService.create({
+              cwd: dependencies.cwd,
+              name: String(data.name ?? ''),
+              description: typeof data.description === 'string' ? data.description : undefined,
+            });
+            return sendJson(response, 201, result);
+          } catch (error) {
+            return sendProfileError(response, error);
+          }
+        }
+
+        return sendJson(response, 405, { error: 'Method not allowed' });
+      }
+      case '/api/sync': {
+        if (request.method !== 'POST') {
+          return sendJson(response, 405, { error: 'Method not allowed' });
+        }
+
+        try {
+          const result = await syncService.execute({ cwd: dependencies.cwd });
+          return sendJson(response, 200, result);
+        } catch (error) {
+          return sendJson(response, 500, {
+            error: error instanceof Error ? error.message : 'Sync failed',
+          });
+        }
+      }
+      default: {
+        // Agent MCP routes: /api/agents/:name/mcps(/:key)
+        const agentMcpMatch = url.pathname.match(/^\/api\/agents\/(claude|codex|gemini)\/mcps(?:\/(.+))?$/);
+        if (agentMcpMatch) {
+          const agentName = agentMcpMatch[1] as AgentName;
+          const mcpKey = agentMcpMatch[2] ? decodeURIComponent(agentMcpMatch[2]) : null;
+
+          if (request.method === 'POST' && !mcpKey) {
+            const body = await readJsonBody(request);
+            if (!body.ok) {
+              return sendJson(response, 400, { error: 'Invalid JSON body' });
+            }
+            const data = body.value as { key?: string; entry?: AgentMcpEntry };
+            if (!data.key || !data.entry?.command) {
+              return sendJson(response, 400, { error: 'Missing key or entry.command' });
+            }
+            try {
+              await agentConfigService.addMcp({
+                cwd: dependencies.cwd,
+                agent: agentName,
+                key: data.key,
+                entry: data.entry,
+              });
+              return sendJson(response, 200, { ok: true });
+            } catch (error) {
+              return sendJson(response, 500, {
+                error: error instanceof Error ? error.message : 'Failed to add MCP',
+              });
+            }
+          }
+
+          if (request.method === 'DELETE' && mcpKey) {
+            try {
+              await agentConfigService.removeMcp({
+                cwd: dependencies.cwd,
+                agent: agentName,
+                key: mcpKey,
+              });
+              return sendJson(response, 200, { ok: true });
+            } catch (error) {
+              return sendJson(response, 500, {
+                error: error instanceof Error ? error.message : 'Failed to remove MCP',
+              });
+            }
+          }
+
+          return sendJson(response, 405, { error: 'Method not allowed' });
+        }
+
+        const profileMatch = url.pathname.match(/^\/api\/profiles\/([^/]+)(\/activate)?$/);
+        if (profileMatch) {
+          const name = decodeURIComponent(profileMatch[1]);
+          const isActivate = profileMatch[2] === '/activate';
+
+          if (isActivate) {
+            if (request.method !== 'POST') {
+              return sendJson(response, 405, { error: 'Method not allowed' });
+            }
+            try {
+              const result = await profileService.use({ cwd: dependencies.cwd, name });
+              return sendJson(response, 200, result);
+            } catch (error) {
+              return sendProfileError(response, error);
+            }
+          }
+
+          if (request.method === 'GET') {
+            try {
+              const profile = await profileService.get({ cwd: dependencies.cwd, name });
+              return sendJson(response, 200, profile);
+            } catch (error) {
+              return sendProfileError(response, error);
+            }
+          }
+
+          if (request.method === 'PUT') {
+            const body = await readJsonBody(request);
+            if (!body.ok) {
+              return sendJson(response, 400, { error: 'Invalid JSON body' });
+            }
+            try {
+              await profileService.update({
+                cwd: dependencies.cwd,
+                name,
+                config: body.value as import('../types.js').ProfileConfig,
+              });
+              return sendJson(response, 200, { ok: true });
+            } catch (error) {
+              return sendProfileError(response, error);
+            }
+          }
+
+          if (request.method === 'DELETE') {
+            try {
+              await profileService.delete({ cwd: dependencies.cwd, name });
+              return sendJson(response, 200, { ok: true });
+            } catch (error) {
+              return sendProfileError(response, error);
+            }
+          }
+
+          return sendJson(response, 405, { error: 'Method not allowed' });
+        }
+
         if (url.pathname === '/api' || url.pathname.startsWith('/api/')) {
           return sendJson(response, 404, { error: 'Not found' });
         }
@@ -144,6 +303,7 @@ export function createUiRouteHandler(
         }
 
         return serveUiResponse(url.pathname, response);
+      }
     }
   };
 }
@@ -205,6 +365,18 @@ function parseAgentName(value: string | null): AgentName | null {
   }
 
   return null;
+}
+
+function sendProfileError(response: ServerResponse, error: unknown): void {
+  if (error instanceof ProfileNotFoundError) {
+    return sendJson(response, 404, { error: error.message });
+  }
+  if (error instanceof ProfileError) {
+    return sendJson(response, 400, { error: error.message });
+  }
+  return sendJson(response, 500, {
+    error: error instanceof Error ? error.message : 'Internal server error',
+  });
 }
 
 function sendJson(

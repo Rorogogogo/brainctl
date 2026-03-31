@@ -1,4 +1,4 @@
-import { readdir, readFile, writeFile, mkdir, stat } from 'node:fs/promises';
+import { readdir, readFile, writeFile, mkdir, stat, unlink } from 'node:fs/promises';
 import path from 'node:path';
 
 import YAML from 'yaml';
@@ -14,6 +14,8 @@ export interface ProfileService {
   list(options?: { cwd?: string }): Promise<{ profiles: string[]; activeProfile: string | null }>;
   get(options: { cwd?: string; name: string }): Promise<ProfileConfig>;
   create(options: { cwd?: string; name: string; description?: string }): Promise<{ profilePath: string }>;
+  update(options: { cwd?: string; name: string; config: ProfileConfig }): Promise<void>;
+  delete(options: { cwd?: string; name: string }): Promise<void>;
   use(options: { cwd?: string; name: string }): Promise<{ previousProfile: string | null }>;
   getMetaConfig(options?: { cwd?: string }): Promise<BrainctlMetaConfig>;
 }
@@ -84,6 +86,41 @@ export function createProfileService(): ProfileService {
       await writeFile(profilePath, YAML.stringify(scaffold), 'utf8');
 
       return { profilePath };
+    },
+
+    async update(options) {
+      const cwd = options.cwd ?? process.cwd();
+      const profilePath = path.join(cwd, PROFILES_DIR, `${options.name}.yaml`);
+
+      if (!(await pathExists(profilePath))) {
+        throw new ProfileNotFoundError(`Profile "${options.name}" not found.`);
+      }
+
+      const data: Record<string, unknown> = {
+        name: options.config.name,
+        ...(options.config.description ? { description: options.config.description } : {}),
+        skills: options.config.skills,
+        mcps: options.config.mcps,
+        memory: options.config.memory,
+      };
+
+      await writeFile(profilePath, YAML.stringify(data), 'utf8');
+    },
+
+    async delete(options) {
+      const cwd = options.cwd ?? process.cwd();
+      const profilePath = path.join(cwd, PROFILES_DIR, `${options.name}.yaml`);
+
+      if (!(await pathExists(profilePath))) {
+        throw new ProfileNotFoundError(`Profile "${options.name}" not found.`);
+      }
+
+      const meta = await loadMetaConfig(cwd);
+      if (meta.active_profile === options.name) {
+        throw new ProfileError('Cannot delete the active profile.');
+      }
+
+      await unlink(profilePath);
     },
 
     async use(options) {

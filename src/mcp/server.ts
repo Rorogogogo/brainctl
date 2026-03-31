@@ -6,6 +6,7 @@ import { z } from 'zod';
 
 import { loadConfig } from '../config.js';
 import { loadMemory } from '../context/memory.js';
+import { createAgentConfigService } from '../services/agent-config-service.js';
 import { createDoctorService } from '../services/doctor-service.js';
 import { createMemoryWriteService } from '../services/memory-write-service.js';
 import { createProfileExportService } from '../services/profile-export-service.js';
@@ -14,7 +15,7 @@ import { createProfileService } from '../services/profile-service.js';
 import { createRunService } from '../services/run-service.js';
 import { createStatusService } from '../services/status-service.js';
 import { createSyncService } from '../services/sync-service.js';
-import type { AgentName } from '../types.js';
+import type { AgentName, ProfileConfig } from '../types.js';
 
 const packageVersion = JSON.parse(
   readFileSync(new URL('../../package.json', import.meta.url), 'utf8')
@@ -198,6 +199,121 @@ export function createMcpServer(options: { cwd?: string } = {}): FastMCP {
   });
 
   server.addTool({
+    name: 'brainctl_get_profile',
+    description: 'Get the full config of a profile including all skills, MCPs, and memory paths.',
+    parameters: z.object({
+      name: z.string().describe('Profile name'),
+    }),
+    execute: async (args) => {
+      const profileService = createProfileService();
+      const profile = await profileService.get({ cwd, name: args.name });
+      return JSON.stringify(profile, null, 2);
+    },
+  });
+
+  server.addTool({
+    name: 'brainctl_create_profile',
+    description: 'Create a new profile with a default example skill.',
+    parameters: z.object({
+      name: z.string().describe('Profile name to create'),
+      description: z.string().optional().describe('Profile description'),
+    }),
+    execute: async (args) => {
+      const profileService = createProfileService();
+      const result = await profileService.create({
+        cwd,
+        name: args.name,
+        description: args.description,
+      });
+      return JSON.stringify(result, null, 2);
+    },
+  });
+
+  server.addTool({
+    name: 'brainctl_update_profile',
+    description: 'Update a profile config. Pass the full profile object with skills, mcps, and memory fields. Use this to add, remove, or modify skills and MCPs within a profile.',
+    parameters: z.object({
+      name: z.string().describe('Profile name to update'),
+      config: z.object({
+        name: z.string(),
+        description: z.string().optional(),
+        skills: z.record(z.string(), z.object({
+          description: z.string().optional(),
+          prompt: z.string(),
+        })),
+        mcps: z.record(z.string(), z.unknown()),
+        memory: z.object({
+          paths: z.array(z.string()),
+        }),
+      }).describe('Full profile config object'),
+    }),
+    execute: async (args) => {
+      const profileService = createProfileService();
+      await profileService.update({
+        cwd,
+        name: args.name,
+        config: args.config as ProfileConfig,
+      });
+      return JSON.stringify({ ok: true, updated: args.name });
+    },
+  });
+
+  server.addTool({
+    name: 'brainctl_delete_profile',
+    description: 'Delete a profile. Cannot delete the currently active profile.',
+    parameters: z.object({
+      name: z.string().describe('Profile name to delete'),
+    }),
+    execute: async (args) => {
+      const profileService = createProfileService();
+      await profileService.delete({ cwd, name: args.name });
+      return JSON.stringify({ ok: true, deleted: args.name });
+    },
+  });
+
+  server.addTool({
+    name: 'brainctl_copy_profile_items',
+    description: 'Copy skills and/or MCPs from one profile to another. Specify which skill and MCP keys to copy. Existing items with the same key in the target are overwritten.',
+    parameters: z.object({
+      source: z.string().describe('Source profile name'),
+      target: z.string().describe('Target profile name'),
+      skills: z.array(z.string()).default([]).describe('Skill keys to copy'),
+      mcps: z.array(z.string()).default([]).describe('MCP keys to copy'),
+    }),
+    execute: async (args) => {
+      const profileService = createProfileService();
+      const sourceProfile = await profileService.get({ cwd, name: args.source });
+      const targetProfile = await profileService.get({ cwd, name: args.target });
+
+      const copiedSkills: string[] = [];
+      const copiedMcps: string[] = [];
+
+      for (const key of args.skills) {
+        if (sourceProfile.skills[key]) {
+          targetProfile.skills[key] = sourceProfile.skills[key];
+          copiedSkills.push(key);
+        }
+      }
+
+      for (const key of args.mcps) {
+        if (sourceProfile.mcps[key]) {
+          targetProfile.mcps[key] = sourceProfile.mcps[key];
+          copiedMcps.push(key);
+        }
+      }
+
+      await profileService.update({ cwd, name: args.target, config: targetProfile });
+
+      return JSON.stringify({
+        source: args.source,
+        target: args.target,
+        copiedSkills,
+        copiedMcps,
+      }, null, 2);
+    },
+  });
+
+  server.addTool({
     name: 'brainctl_export_profile',
     description: 'Export a profile as a portable tarball. Packages the profile config and bundled MCP source code for sharing.',
     parameters: z.object({
@@ -230,6 +346,52 @@ export function createMcpServer(options: { cwd?: string } = {}): FastMCP {
         force: args.force,
       });
       return JSON.stringify(result, null, 2);
+    },
+  });
+
+  server.addTool({
+    name: 'brainctl_read_agent_configs',
+    description: 'Read the live MCP configs from all agents (Claude, Codex, Gemini). Shows what is actually configured in each agent right now, by reading their real config files.',
+    parameters: z.object({}),
+    execute: async () => {
+      const agentConfigService = createAgentConfigService();
+      const configs = await agentConfigService.readAll({ cwd });
+      return JSON.stringify(configs, null, 2);
+    },
+  });
+
+  server.addTool({
+    name: 'brainctl_add_agent_mcp',
+    description: 'Add or overwrite an MCP server entry in a specific agent config. Writes directly to the agent config file (e.g., ~/.claude.json).',
+    parameters: z.object({
+      agent: z.enum(['claude', 'codex', 'gemini']).describe('Target agent'),
+      key: z.string().describe('MCP server name/key'),
+      command: z.string().describe('Command to run the MCP server'),
+      args: z.array(z.string()).default([]).describe('Arguments for the command'),
+    }),
+    execute: async (args) => {
+      const agentConfigService = createAgentConfigService();
+      await agentConfigService.addMcp({
+        cwd,
+        agent: args.agent,
+        key: args.key,
+        entry: { command: args.command, args: args.args },
+      });
+      return JSON.stringify({ ok: true, agent: args.agent, key: args.key });
+    },
+  });
+
+  server.addTool({
+    name: 'brainctl_remove_agent_mcp',
+    description: 'Remove an MCP server entry from a specific agent config.',
+    parameters: z.object({
+      agent: z.enum(['claude', 'codex', 'gemini']).describe('Target agent'),
+      key: z.string().describe('MCP server name/key to remove'),
+    }),
+    execute: async (args) => {
+      const agentConfigService = createAgentConfigService();
+      await agentConfigService.removeMcp({ cwd, agent: args.agent, key: args.key });
+      return JSON.stringify({ ok: true, agent: args.agent, removed: args.key });
     },
   });
 

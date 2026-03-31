@@ -9,10 +9,12 @@ import {
   Database,
   FileText,
   LayoutDashboard,
+  Users,
   Workflow
 } from 'lucide-react';
 
 import McpView from './McpView';
+import ProfilesView from './ProfilesView';
 import RunView from './RunView';
 import SkillsView from './SkillsView';
 import {
@@ -20,7 +22,7 @@ import {
   type SkillSavePayloadEntry
 } from './config-editor';
 
-type ViewKey = 'overview' | 'memory' | 'skills' | 'mcp' | 'run';
+type ViewKey = 'overview' | 'memory' | 'skills' | 'mcp' | 'profiles' | 'run';
 
 interface MemoryEntry {
   path: string;
@@ -83,6 +85,7 @@ const sections: SectionDefinition[] = [
   { key: 'memory', label: 'Memory', icon: BookOpenText },
   { key: 'skills', label: 'Skills', icon: FileText },
   { key: 'mcp', label: 'MCP', icon: Database },
+  { key: 'profiles', label: 'Agents', icon: Users },
   { key: 'run', label: 'Run', icon: Workflow }
 ];
 
@@ -358,6 +361,8 @@ export default function App() {
                     onSave={saveMcps}
                     onStateChange={(nextState) => updateEditorGuard('mcp', nextState)}
                   />
+                ) : activeView === 'profiles' ? (
+                  <ProfilesView />
                 ) : activeView === 'run' ? (
                   <RunView workspace={workspace} />
                 ) : null}
@@ -617,6 +622,8 @@ function sectionSubtitle(view: ViewKey): string {
       return 'Edit config';
     case 'mcp':
       return 'Edit JSON config';
+    case 'profiles':
+      return 'Live agent MCPs';
     case 'run':
       return 'Execute now';
     default:

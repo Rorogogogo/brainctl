@@ -937,10 +937,311 @@ button:disabled {
   background: rgba(16, 17, 20, 0.07);
 }
 
+/* --- Profiles View --- */
+
+.profile-columns {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+  min-width: 0;
+}
+
+.profile-column {
+  display: grid;
+  gap: 16px;
+  align-content: start;
+}
+
+.profile-column-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.profile-column-title {
+  display: grid;
+  gap: 6px;
+}
+
+.profile-active-badge {
+  background: var(--text);
+  color: #fff;
+  border-color: var(--text);
+}
+
+.profile-drop-zone {
+  display: grid;
+  gap: 10px;
+  min-height: 60px;
+  border: 2px dashed transparent;
+  border-radius: var(--radius-lg);
+  padding: 12px;
+  transition: border-color 140ms ease, background-color 140ms ease;
+}
+
+.profile-drop-zone.is-over {
+  border-color: var(--border-strong);
+  background: rgba(16, 17, 20, 0.03);
+}
+
+.profile-card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.84);
+  padding: 14px 16px;
+  cursor: grab;
+  touch-action: none;
+  transition: transform 140ms ease, border-color 140ms ease, box-shadow 140ms ease;
+}
+
+.profile-card:hover {
+  transform: translateY(-1px);
+  border-color: var(--border-strong);
+  box-shadow: var(--shadow-soft);
+}
+
+.profile-card.is-dragging {
+  opacity: 0.4;
+}
+
+.profile-card-overlay {
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.96);
+  padding: 14px 16px;
+  box-shadow: 0 20px 50px rgba(17, 24, 39, 0.14);
+  cursor: grabbing;
+}
+
+.profile-card-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.profile-card-grip {
+  color: var(--muted);
+  flex-shrink: 0;
+}
+
+.profile-card-content {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.profile-card-content strong {
+  font-size: 0.88rem;
+  font-weight: 650;
+}
+
+.profile-card-content .muted-copy {
+  font-size: 0.76rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent-config-path {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.7rem;
+  word-break: break-all;
+}
+
+.agent-skills-section {
+  margin-top: 4px;
+}
+
+.agent-skills-section .eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-bottom: 8px;
+}
+
+.agent-skills-list {
+  display: grid;
+  gap: 6px;
+}
+
+.agent-skill-item {
+  display: grid;
+  gap: 2px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.6);
+  border: 1px solid var(--border);
+}
+
+.agent-skill-item strong {
+  font-size: 0.84rem;
+  font-weight: 600;
+}
+
+.agent-skill-item .muted-copy {
+  font-size: 0.74rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.profile-card-grip-area {
+  cursor: grab;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  touch-action: none;
+}
+
+.profile-card-remove {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--muted);
+  padding: 4px;
+  border-radius: 6px;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  transition: color 140ms ease, background 140ms ease;
+}
+
+.profile-card-remove:hover {
+  color: #b91c1c;
+  background: rgba(185, 28, 28, 0.08);
+}
+
+/* Pending change card states */
+.profile-card.is-pending-add {
+  border-color: rgba(22, 163, 74, 0.4);
+  background: rgba(22, 163, 74, 0.06);
+}
+
+.profile-card.is-pending-remove {
+  border-color: rgba(185, 28, 28, 0.3);
+  background: rgba(185, 28, 28, 0.05);
+  opacity: 0.6;
+  text-decoration: line-through;
+}
+
+.pending-badge {
+  font-size: 0.7rem;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 6px;
+  flex-shrink: 0;
+  line-height: 1;
+}
+
+.pending-badge.is-add {
+  color: #16a34a;
+  background: rgba(22, 163, 74, 0.1);
+}
+
+.pending-badge.is-remove {
+  color: #b91c1c;
+  background: rgba(185, 28, 28, 0.1);
+}
+
+/* Pending changes bar */
+.pending-changes-bar {
+  display: grid;
+  gap: 12px;
+  border: 1px solid rgba(59, 130, 246, 0.3);
+  background: rgba(59, 130, 246, 0.04);
+}
+
+.pending-changes-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.pending-changes-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.pending-changes-list {
+  display: grid;
+  gap: 6px;
+}
+
+.pending-change-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.82rem;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.6);
+  border: 1px solid var(--border);
+}
+
+.pending-change-item.is-add {
+  border-color: rgba(22, 163, 74, 0.2);
+}
+
+.pending-change-item.is-remove {
+  border-color: rgba(185, 28, 28, 0.2);
+}
+
+.pending-change-icon {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+}
+
+.pending-change-item.is-add .pending-change-icon {
+  color: #16a34a;
+}
+
+.pending-change-item.is-remove .pending-change-icon {
+  color: #b91c1c;
+}
+
+.pending-change-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.pending-change-text strong {
+  font-weight: 650;
+}
+
+.pending-change-undo {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--muted);
+  padding: 3px;
+  border-radius: 4px;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  transition: color 140ms ease;
+}
+
+.pending-change-undo:hover {
+  color: var(--text);
+}
+
+.profile-loading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--muted);
+  padding: 20px 0;
+}
+
 @media (max-width: 1100px) {
   .shell-grid,
   .memory-layout,
-  .metrics-grid {
+  .metrics-grid,
+  .profile-columns {
     grid-template-columns: 1fr;
   }
 
