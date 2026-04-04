@@ -1,3 +1,4 @@
+import { execSync } from 'node:child_process';
 import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -497,6 +498,206 @@ describe('ui server', () => {
     }
   });
 
+  it('returns MCP preflight results without mutating agent config files', async () => {
+    const projectDir = await mkdtemp(path.join(os.tmpdir(), 'brainctl-ui-'));
+    tempDirs.push(projectDir);
+
+    await mkdir(path.join(projectDir, 'memory'), { recursive: true });
+    await writeFile(
+      path.join(projectDir, 'ai-stack.yaml'),
+      [
+        'memory:',
+        '  paths:',
+        '    - ./memory',
+        'skills:',
+        '  summarize:',
+        '    description: Summarize content',
+        '    prompt: |',
+        '      Summarize the following content into concise bullet points.',
+        'mcps: {}'
+      ].join('\n'),
+      'utf8'
+    );
+
+    const server = await startUiServer({ cwd: projectDir, port: 0 });
+
+    try {
+      const response = await fetch(new URL('/api/agents/codex/mcps/check', server.url), {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          key: 'local-server',
+          entry: {
+            command: 'node',
+            args: ['./missing-server.js']
+          }
+        })
+      });
+
+      expect(response.ok).toBe(true);
+      await expect(response.json()).resolves.toMatchObject({
+        ok: false,
+        checks: expect.arrayContaining([
+          expect.objectContaining({
+            label: 'Entrypoint',
+            status: 'error'
+          })
+        ])
+      });
+    } finally {
+      await server.close();
+    }
+  });
+
+  it('rejects MCP writes that fail preflight validation', async () => {
+    const projectDir = await mkdtemp(path.join(os.tmpdir(), 'brainctl-ui-'));
+    tempDirs.push(projectDir);
+
+    await mkdir(path.join(projectDir, 'memory'), { recursive: true });
+    await writeFile(
+      path.join(projectDir, 'ai-stack.yaml'),
+      [
+        'memory:',
+        '  paths:',
+        '    - ./memory',
+        'skills:',
+        '  summarize:',
+        '    description: Summarize content',
+        '    prompt: |',
+        '      Summarize the following content into concise bullet points.',
+        'mcps: {}'
+      ].join('\n'),
+      'utf8'
+    );
+
+    const server = await startUiServer({ cwd: projectDir, port: 0 });
+
+    try {
+      const response = await fetch(new URL('/api/agents/claude/mcps', server.url), {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          key: 'local-server',
+          entry: {
+            command: 'node',
+            args: ['./missing-server.js']
+          }
+        })
+      });
+
+      expect(response.status).toBe(400);
+      await expect(response.json()).resolves.toEqual({
+        error:
+          'MCP "local-server" cannot be added to claude: Entrypoint script was not found: ' +
+          path.join(projectDir, 'missing-server.js')
+      });
+    } finally {
+      await server.close();
+    }
+  });
+
+  it('returns skill preflight results for unsupported plugin-backed entries', async () => {
+    const projectDir = await mkdtemp(path.join(os.tmpdir(), 'brainctl-ui-'));
+    tempDirs.push(projectDir);
+
+    await mkdir(path.join(projectDir, 'memory'), { recursive: true });
+    await writeFile(
+      path.join(projectDir, 'ai-stack.yaml'),
+      [
+        'memory:',
+        '  paths:',
+        '    - ./memory',
+        'skills:',
+        '  summarize:',
+        '    description: Summarize content',
+        '    prompt: |',
+        '      Summarize the following content into concise bullet points.',
+        'mcps: {}'
+      ].join('\n'),
+      'utf8'
+    );
+
+    const server = await startUiServer({ cwd: projectDir, port: 0 });
+
+    try {
+      const response = await fetch(new URL('/api/agents/codex/skills/check', server.url), {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          name: 'github',
+          sourceAgent: 'claude',
+          source: 'claude-plugins-official'
+        })
+      });
+
+      expect(response.ok).toBe(true);
+      await expect(response.json()).resolves.toMatchObject({
+        ok: false,
+        checks: expect.arrayContaining([
+          expect.objectContaining({
+            label: 'Source',
+            status: 'error'
+          })
+        ])
+      });
+    } finally {
+      await server.close();
+    }
+  });
+
+  it('rejects skill writes that fail preflight validation', async () => {
+    const projectDir = await mkdtemp(path.join(os.tmpdir(), 'brainctl-ui-'));
+    tempDirs.push(projectDir);
+
+    await mkdir(path.join(projectDir, 'memory'), { recursive: true });
+    await writeFile(
+      path.join(projectDir, 'ai-stack.yaml'),
+      [
+        'memory:',
+        '  paths:',
+        '    - ./memory',
+        'skills:',
+        '  summarize:',
+        '    description: Summarize content',
+        '    prompt: |',
+        '      Summarize the following content into concise bullet points.',
+        'mcps: {}'
+      ].join('\n'),
+      'utf8'
+    );
+
+    const server = await startUiServer({ cwd: projectDir, port: 0 });
+
+    try {
+      const response = await fetch(new URL('/api/agents/gemini/skills', server.url), {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          name: 'github',
+          sourceAgent: 'claude',
+          source: 'claude-plugins-official'
+        })
+      });
+
+      expect(response.status).toBe(400);
+      await expect(response.json()).resolves.toEqual({
+        error:
+          'Skill "github" cannot be copied from claude to gemini: ' +
+          'Only local skill folders can be copied today. "github" is a plugin/managed entry from claude-plugins-official.'
+      });
+    } finally {
+      await server.close();
+    }
+  });
+
   it('rejects asset path traversal attempts', async () => {
     const projectDir = await mkdtemp(path.join(os.tmpdir(), 'brainctl-ui-'));
     tempDirs.push(projectDir);
@@ -524,6 +725,113 @@ describe('ui server', () => {
       const response = await fetch(new URL('/assets/../../package.json', server.url));
       expect(response.status).toBe(404);
       expect(response.headers.get('content-type')).toContain('text/plain');
+    } finally {
+      await server.close();
+    }
+  });
+
+  it('exports a profile archive through the web api', async () => {
+    const projectDir = await mkdtemp(path.join(os.tmpdir(), 'brainctl-ui-'));
+    tempDirs.push(projectDir);
+
+    await mkdir(path.join(projectDir, 'memory'), { recursive: true });
+    await mkdir(path.join(projectDir, '.brainctl', 'profiles'), { recursive: true });
+    await writeFile(
+      path.join(projectDir, 'ai-stack.yaml'),
+      ['memory:', '  paths:', '    - ./memory', 'skills: {}', 'mcps: {}'].join('\n'),
+      'utf8'
+    );
+    await writeFile(
+      path.join(projectDir, '.brainctl', 'profiles', 'starter.yaml'),
+      [
+        'name: starter',
+        'skills:',
+        '  notes:',
+        '    description: Keep notes',
+        '    prompt: |',
+        '      Write notes.',
+        'mcps: {}',
+        'memory:',
+        '  paths:',
+        '    - ./memory',
+      ].join('\n'),
+      'utf8'
+    );
+
+    const server = await startUiServer({ cwd: projectDir, port: 0 });
+
+    try {
+      const response = await fetch(new URL('/api/profiles/export', server.url), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: 'starter' }),
+      });
+
+      expect(response.ok).toBe(true);
+      const result = await response.json();
+      expect(result.archivePath).toBe(path.join(projectDir, 'starter.tar.gz'));
+
+      const archive = await readFile(result.archivePath, 'utf8').catch(() => null);
+      expect(archive).not.toBeNull();
+    } finally {
+      await server.close();
+    }
+  });
+
+  it('imports a profile archive through the web api', async () => {
+    const projectDir = await mkdtemp(path.join(os.tmpdir(), 'brainctl-ui-'));
+    tempDirs.push(projectDir);
+
+    await mkdir(path.join(projectDir, 'memory'), { recursive: true });
+    await writeFile(
+      path.join(projectDir, 'ai-stack.yaml'),
+      ['memory:', '  paths:', '    - ./memory', 'skills: {}', 'mcps: {}'].join('\n'),
+      'utf8'
+    );
+
+    const archiveStageDir = await mkdtemp(path.join(os.tmpdir(), 'brainctl-archive-'));
+    tempDirs.push(archiveStageDir);
+    await writeFile(
+      path.join(archiveStageDir, 'profile.yaml'),
+      [
+        'name: imported',
+        'skills:',
+        '  review:',
+        '    description: Review code',
+        '    prompt: |',
+        '      Review the code.',
+        'mcps: {}',
+        'memory:',
+        '  paths:',
+        '    - ./memory',
+      ].join('\n'),
+      'utf8'
+    );
+
+    const archivePath = path.join(projectDir, 'imported.tar.gz');
+    execSync(`tar -czf "${archivePath}" -C "${archiveStageDir}" .`);
+
+    const server = await startUiServer({ cwd: projectDir, port: 0 });
+
+    try {
+      const response = await fetch(new URL('/api/profiles/import', server.url), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ archivePath }),
+      });
+
+      expect(response.ok).toBe(true);
+      await expect(response.json()).resolves.toEqual({
+        profileName: 'imported',
+        installedMcps: [],
+      });
+
+      const profileSource = await readFile(
+        path.join(projectDir, '.brainctl', 'profiles', 'imported.yaml'),
+        'utf8'
+      );
+      expect(profileSource).toContain('name: imported');
+      expect(profileSource).toContain('review:');
     } finally {
       await server.close();
     }

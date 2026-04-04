@@ -96,12 +96,14 @@ export function createProfileService(): ProfileService {
         throw new ProfileNotFoundError(`Profile "${options.name}" not found.`);
       }
 
+      const normalized = normalizeProfileConfig(options.config, options.name);
+
       const data: Record<string, unknown> = {
-        name: options.config.name,
-        ...(options.config.description ? { description: options.config.description } : {}),
-        skills: options.config.skills,
-        mcps: options.config.mcps,
-        memory: options.config.memory,
+        name: normalized.name,
+        ...(normalized.description ? { description: normalized.description } : {}),
+        skills: normalized.skills,
+        mcps: normalized.mcps,
+        memory: normalized.memory,
       };
 
       await writeFile(profilePath, YAML.stringify(data), 'utf8');
@@ -178,8 +180,15 @@ export function parseProfile(source: string, name: string): ProfileConfig {
     throw new ProfileError(`Profile "${name}" has invalid structure.`);
   }
 
-  const data = parsed as Record<string, unknown>;
+  return normalizeProfileConfig(parsed as Record<string, unknown>, name);
+}
 
+export function normalizeProfileConfig(value: unknown, name: string): ProfileConfig {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new ProfileError(`Profile "${name}" has invalid structure.`);
+  }
+
+  const data = value as Record<string, unknown>;
   const skills: Record<string, SkillConfig> = {};
   if (data.skills && typeof data.skills === 'object' && !Array.isArray(data.skills)) {
     for (const [key, value] of Object.entries(data.skills as Record<string, unknown>)) {
@@ -195,30 +204,7 @@ export function parseProfile(source: string, name: string): ProfileConfig {
     }
   }
 
-  const mcps: Record<string, McpServerConfig> = {};
-  if (data.mcps && typeof data.mcps === 'object' && !Array.isArray(data.mcps)) {
-    for (const [key, value] of Object.entries(data.mcps as Record<string, unknown>)) {
-      if (value && typeof value === 'object' && !Array.isArray(value)) {
-        const m = value as Record<string, unknown>;
-        if (m.type === 'npm' && typeof m.package === 'string') {
-          mcps[key] = {
-            type: 'npm',
-            package: m.package,
-            env: parseEnv(m.env),
-          };
-        } else if (m.type === 'bundled' && typeof m.command === 'string') {
-          mcps[key] = {
-            type: 'bundled',
-            path: typeof m.path === 'string' ? m.path : '.',
-            install: typeof m.install === 'string' ? m.install : undefined,
-            command: m.command,
-            args: Array.isArray(m.args) ? m.args.map(String) : undefined,
-            env: parseEnv(m.env),
-          };
-        }
-      }
-    }
-  }
+  const mcps = normalizeMcps(data.mcps, name);
 
   const memoryPaths: string[] = [];
   if (data.memory && typeof data.memory === 'object' && !Array.isArray(data.memory)) {
@@ -241,7 +227,132 @@ export function parseProfile(source: string, name: string): ProfileConfig {
   };
 }
 
-function parseEnv(value: unknown): Record<string, string> | undefined {
+function normalizeMcps(value: unknown, profileName: string): Record<string, McpServerConfig> {
+  if (value === undefined || value === null) {
+    return {};
+  }
+
+  if (typeof value !== 'object' || Array.isArray(value)) {
+    throw new ProfileError(`Profile "${profileName}" has an invalid "mcps" section.`);
+  }
+
+  const mcps: Record<string, McpServerConfig> = {};
+
+  for (const [key, rawValue] of Object.entries(value as Record<string, unknown>)) {
+    if (!rawValue || typeof rawValue !== 'object' || Array.isArray(rawValue)) {
+      throw new ProfileError(`MCP "${key}" must be an object.`);
+    }
+
+    const mcp = rawValue as Record<string, unknown>;
+
+    // Local profile files may still use the older type-based shape.
+    if (mcp.type === 'npm') {
+      if (typeof mcp.package !== 'string' || mcp.package.trim().length === 0) {
+        throw new ProfileError(`Local MCP "${key}" must include a non-empty package.`);
+      }
+
+      mcps[key] = {
+        kind: 'local',
+        source: 'npm',
+        package: mcp.package,
+        env: parseStringMap(mcp.env),
+      };
+      continue;
+    }
+
+    if (mcp.type === 'bundled') {
+      if (
+        typeof mcp.path !== 'string' ||
+        mcp.path.trim().length === 0 ||
+        typeof mcp.command !== 'string' ||
+        mcp.command.trim().length === 0
+      ) {
+        throw new ProfileError(
+          `Bundled local MCP "${key}" must include non-empty path and command fields.`
+        );
+      }
+
+      mcps[key] = {
+        kind: 'local',
+        source: 'bundled',
+        path: mcp.path,
+        install: typeof mcp.install === 'string' ? mcp.install : undefined,
+        command: mcp.command,
+        args: parseStringArray(mcp.args),
+        env: parseStringMap(mcp.env),
+      };
+      continue;
+    }
+
+    if (mcp.kind !== 'local' && mcp.kind !== 'remote') {
+      throw new ProfileError(`MCP "${key}" must declare kind "local" or "remote".`);
+    }
+
+    if (mcp.kind === 'remote') {
+      if (
+        (mcp.transport !== 'http' && mcp.transport !== 'sse') ||
+        typeof mcp.url !== 'string' ||
+        mcp.url.trim().length === 0
+      ) {
+        throw new ProfileError(
+          `Remote MCP "${key}" must include transport ("http" or "sse") and a url.`
+        );
+      }
+
+      mcps[key] = {
+        kind: 'remote',
+        transport: mcp.transport,
+        url: mcp.url,
+        headers: parseStringMap(mcp.headers),
+        env: parseStringMap(mcp.env),
+      };
+      continue;
+    }
+
+    if (mcp.source !== 'npm' && mcp.source !== 'bundled') {
+      throw new ProfileError(`Local MCP "${key}" must declare source "npm" or "bundled".`);
+    }
+
+    if (mcp.source === 'npm') {
+      if (typeof mcp.package !== 'string' || mcp.package.trim().length === 0) {
+        throw new ProfileError(`Local MCP "${key}" must include a non-empty package.`);
+      }
+
+      mcps[key] = {
+        kind: 'local',
+        source: 'npm',
+        package: mcp.package,
+        env: parseStringMap(mcp.env),
+      };
+      continue;
+    }
+
+    if (
+      typeof mcp.path !== 'string' ||
+      mcp.path.trim().length === 0 ||
+      typeof mcp.command !== 'string' ||
+      mcp.command.trim().length === 0
+    ) {
+      throw new ProfileError(
+        `Bundled local MCP "${key}" must include non-empty path and command fields.`
+      );
+    }
+
+    mcps[key] = {
+      kind: 'local',
+      source: 'bundled',
+      path: mcp.path,
+      install: typeof mcp.install === 'string' ? mcp.install : undefined,
+      command: mcp.command,
+      args: parseStringArray(mcp.args),
+      env: parseStringMap(mcp.env),
+    };
+  }
+
+  return mcps;
+}
+
+function parseStringMap(value: unknown): Record<string, string> | undefined {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     return undefined;
   }
@@ -250,6 +361,15 @@ function parseEnv(value: unknown): Record<string, string> | undefined {
     result[k] = String(v);
   }
   return Object.keys(result).length > 0 ? result : undefined;
+}
+
+function parseStringArray(value: unknown): string[] | undefined {
+  if (!Array.isArray(value)) {
+    return undefined;
+  }
+
+  const items = value.map(String);
+  return items.length > 0 ? items : undefined;
 }
 
 async function pathExists(targetPath: string): Promise<boolean> {

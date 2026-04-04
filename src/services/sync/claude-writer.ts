@@ -81,7 +81,11 @@ export function createClaudeWriter(): AgentConfigWriter {
 }
 
 function toClaudeFormat(config: McpServerConfig): Record<string, unknown> {
-  if (config.type === 'npm') {
+  if (config.kind === 'remote') {
+    throw new SyncError('Remote MCP servers are not supported in Claude sync.');
+  }
+
+  if (config.source === 'npm') {
     return {
       type: 'stdio',
       command: 'npx',

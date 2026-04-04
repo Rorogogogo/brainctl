@@ -1,632 +1,412 @@
-import { useEffect, useState } from 'react';
-import type { LucideIcon } from 'lucide-react';
-import {
-  BookOpenText,
-  Bot,
-  ChevronRight,
-  CircleAlert,
-  CircleCheck,
-  Database,
-  FileText,
-  LayoutDashboard,
-  Users,
-  Workflow
-} from 'lucide-react';
+import { useEffect, useState, type ReactNode } from 'react';
+import { Bot, Boxes, Download, Loader2, X } from 'lucide-react';
 
-import McpView from './McpView';
+import { AgentLogo } from './agent-brand';
 import ProfilesView from './ProfilesView';
-import RunView from './RunView';
-import SkillsView from './SkillsView';
-import {
-  getEditorNavigationDisposition,
-  type SkillSavePayloadEntry
-} from './config-editor';
 
-type ViewKey = 'overview' | 'memory' | 'skills' | 'mcp' | 'profiles' | 'run';
-
-interface MemoryEntry {
-  path: string;
-  content: string;
+interface ProfilesResponse {
+  profiles: string[];
+  activeProfile: string | null;
 }
 
-interface AgentStatus {
-  agent: 'claude' | 'codex';
-  available: boolean;
-  command?: string;
-}
-
-interface SkillConfig {
-  description?: string;
-  prompt: string;
-}
-
-interface WorkspaceSnapshot {
-  configPath: string;
-  memory: {
-    content: string;
-    count: number;
-    entries: MemoryEntry[];
-    files: string[];
-  };
-  skills: string[];
-  mcpCount: number;
-  agents: Record<'claude' | 'codex', AgentStatus>;
-}
-
-interface WorkspaceConfig {
-  configPath: string;
-  rootDir: string;
-  memory: {
-    paths: string[];
-  };
-  skills: Record<string, SkillConfig>;
-  mcps: Record<string, unknown>;
-}
-
-interface ConfigSavePayload {
-  memory: WorkspaceConfig['memory'];
-  skills: Record<string, SkillConfig>;
-  mcps: Record<string, unknown>;
-}
-
-interface EditorGuardState {
-  isDirty: boolean;
-  isSaving: boolean;
-}
-
-interface SectionDefinition {
-  key: ViewKey;
-  label: string;
-  icon: LucideIcon;
-}
-
-const sections: SectionDefinition[] = [
-  { key: 'overview', label: 'Overview', icon: LayoutDashboard },
-  { key: 'memory', label: 'Memory', icon: BookOpenText },
-  { key: 'skills', label: 'Skills', icon: FileText },
-  { key: 'mcp', label: 'MCP', icon: Database },
-  { key: 'profiles', label: 'Agents', icon: Users },
-  { key: 'run', label: 'Run', icon: Workflow }
-];
-
-export default function App() {
-  const [activeView, setActiveView] = useState<ViewKey>('overview');
-  const [workspace, setWorkspace] = useState<WorkspaceSnapshot | null>(null);
-  const [config, setConfig] = useState<WorkspaceConfig | null>(null);
-  const [editorGuards, setEditorGuards] = useState<Record<'skills' | 'mcp', EditorGuardState>>({
-    skills: { isDirty: false, isSaving: false },
-    mcp: { isDirty: false, isSaving: false }
-  });
-  const [selectedMemoryPath, setSelectedMemoryPath] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    const controller = new AbortController();
-
-    async function loadDashboard(): Promise<void> {
-      try {
-        setLoading(true);
-        const data = await fetchDashboardData(controller.signal);
-        setWorkspace(data.workspace);
-        setConfig(data.config);
-        setError(null);
-      } catch (loadError) {
-        if (loadError instanceof DOMException && loadError.name === 'AbortError') {
-          return;
-        }
-
-        setError(loadError instanceof Error ? loadError.message : 'Failed to load workspace data.');
-      } finally {
-        if (!controller.signal.aborted) {
-          setLoading(false);
-        }
-      }
-    }
-
-    void loadDashboard();
-
-    return () => {
-      controller.abort();
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!workspace) {
-      return;
-    }
-
-    setSelectedMemoryPath((currentPath) => {
-      if (currentPath && workspace.memory.entries.some((entry) => entry.path === currentPath)) {
-        return currentPath;
-      }
-
-      return workspace.memory.entries[0]?.path ?? null;
-    });
-  }, [workspace]);
-
-  async function saveSkills(nextSkills: Record<string, SkillSavePayloadEntry>): Promise<void> {
-    if (!config) {
-      throw new Error('Config is still loading.');
-    }
-
-    await saveConfig({
-      memory: config.memory,
-      skills: nextSkills,
-      mcps: config.mcps
-    });
-  }
-
-  async function saveMcps(nextMcps: Record<string, unknown>): Promise<void> {
-    if (!config) {
-      throw new Error('Config is still loading.');
-    }
-
-    await saveConfig({
-      memory: config.memory,
-      skills: config.skills,
-      mcps: nextMcps
-    });
-  }
-
-  async function saveConfig(nextConfig: ConfigSavePayload): Promise<void> {
-    const savedConfig = await fetchJson<WorkspaceConfig>('/api/config', {
-      method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(nextConfig)
-    });
-
-    setConfig(savedConfig);
-
-    try {
-      const refreshedWorkspace = await fetchJson<WorkspaceSnapshot>('/api/overview');
-      setWorkspace(refreshedWorkspace);
-    } catch (refreshError) {
-      const message =
-        refreshError instanceof Error
-          ? refreshError.message
-          : 'Failed to refresh workspace data after save.';
-
-      throw new Error(`Saved config, but failed to refresh dashboard state. ${message}`);
-    }
-  }
-
-  const selectedMemory =
-    workspace?.memory.entries.find((entry) => entry.path === selectedMemoryPath) ?? null;
-  const activeEditorGuard =
-    activeView === 'skills' || activeView === 'mcp' ? editorGuards[activeView] : null;
-  const navigationLocked = activeEditorGuard?.isSaving ?? false;
-
-  function updateEditorGuard(view: 'skills' | 'mcp', nextState: EditorGuardState): void {
-    setEditorGuards((current) => {
-      const previousState = current[view];
-
-      if (
-        previousState.isDirty === nextState.isDirty &&
-        previousState.isSaving === nextState.isSaving
-      ) {
-        return current;
-      }
-
-      return {
-        ...current,
-        [view]: nextState
-      };
-    });
-  }
-
-  function handleViewChange(nextView: ViewKey): void {
-    if (nextView === activeView) {
-      return;
-    }
-
-    const guard =
-      activeView === 'skills' || activeView === 'mcp'
-        ? editorGuards[activeView]
-        : { isDirty: false, isSaving: false };
-
-    const disposition = getEditorNavigationDisposition({
-      activeView,
-      nextView,
-      isDirty: guard.isDirty,
-      isSaving: guard.isSaving
-    });
-
-    if (disposition === 'blocked') {
-      return;
-    }
-
-    if (disposition === 'confirm') {
-      const confirmed = window.confirm(
-        'You have unsaved changes in this editor. Discard them and switch views?'
-      );
-
-      if (!confirmed) {
-        return;
-      }
-    }
-
-    setActiveView(nextView);
-  }
-
-  return (
-    <main className="app-shell">
-      <div className="shell">
-        <header className="topbar panel">
-          <div className="brand-block">
-            <div className="brand-mark" aria-hidden="true">
-              <Bot size={18} />
-            </div>
-            <div>
-              <p className="eyebrow">brainctl local control panel</p>
-              <h1>One workspace. Low friction.</h1>
-            </div>
-          </div>
-
-          <div className="status-strip">
-            <span className="status-chip">Local only</span>
-            <span className="status-chip">Single project</span>
-            <span className="status-chip">No auth</span>
-          </div>
-        </header>
-
-        <div className="shell-grid">
-          <aside className="nav-card panel" aria-label="Dashboard sections">
-            <div className="panel-heading">
-              <div>
-                <p className="eyebrow">Views</p>
-                <h2>Control surface</h2>
-              </div>
-              <span className="muted-pill">Monochrome</span>
-            </div>
-
-            <nav className="section-nav">
-              {sections.map((section) => {
-                const Icon = section.icon;
-                const isActive = activeView === section.key;
-
-                return (
-                  <button
-                    key={section.key}
-                    type="button"
-                    className={`section-button${isActive ? ' is-active' : ''}`}
-                    onClick={() => handleViewChange(section.key)}
-                    disabled={navigationLocked && !isActive}
-                  >
-                    <span className="section-button-icon">
-                      <Icon size={16} />
-                    </span>
-                    <span className="section-button-label">
-                      <span>{section.label}</span>
-                      <span className="section-button-subtitle">{sectionSubtitle(section.key)}</span>
-                    </span>
-                    <ChevronRight size={16} className="section-button-chevron" aria-hidden="true" />
-                  </button>
-                );
-              })}
-            </nav>
-          </aside>
-
-          <section className="workspace-card panel">
-            {loading ? (
-              <EmptyState
-                icon={LayoutDashboard}
-                title="Loading workspace"
-                message="Fetching the current project snapshot from the local backend."
-              />
-            ) : error ? (
-              <EmptyState
-                icon={CircleAlert}
-                title="Could not load workspace"
-                message={error}
-              />
-            ) : workspace && config ? (
-              <>
-                <div className="workspace-header">
-                  <div>
-                    <p className="eyebrow">Current project</p>
-                    <h2>{basename(workspace.configPath) || 'ai-stack.yaml'}</h2>
-                    <p className="muted-copy">{workspace.configPath}</p>
-                  </div>
-                  <div className="workspace-header-meta">
-                    <span className="status-chip">
-                      <CircleCheck size={14} />
-                      Ready
-                    </span>
-                    <span className="status-chip">{workspace.memory.count} memory files</span>
-                    <span className="status-chip">{workspace.mcpCount} MCP entries</span>
-                  </div>
-                </div>
-
-                {activeView === 'overview' ? (
-                  <OverviewView workspace={workspace} />
-                ) : activeView === 'memory' ? (
-                  <MemoryView
-                    entries={workspace.memory.entries}
-                    selectedPath={selectedMemoryPath}
-                    selectedEntry={selectedMemory}
-                    onSelectPath={setSelectedMemoryPath}
-                  />
-                ) : activeView === 'skills' ? (
-                  <SkillsView
-                    skills={config.skills}
-                    onSave={saveSkills}
-                    onStateChange={(nextState) => updateEditorGuard('skills', nextState)}
-                  />
-                ) : activeView === 'mcp' ? (
-                  <McpView
-                    mcps={config.mcps}
-                    onSave={saveMcps}
-                    onStateChange={(nextState) => updateEditorGuard('mcp', nextState)}
-                  />
-                ) : activeView === 'profiles' ? (
-                  <ProfilesView />
-                ) : activeView === 'run' ? (
-                  <RunView workspace={workspace} />
-                ) : null}
-              </>
-            ) : null}
-          </section>
-        </div>
-      </div>
-    </main>
-  );
-}
-
-function OverviewView({ workspace }: { workspace: WorkspaceSnapshot }) {
-  return (
-    <div className="view-stack">
-      <div className="metrics-grid">
-        <MetricCard
-          icon={BookOpenText}
-          label="Memory files"
-          value={String(workspace.memory.count)}
-          note="Markdown files loaded from the current workspace."
-        />
-        <MetricCard
-          icon={Database}
-          label="MCP count"
-          value={String(workspace.mcpCount)}
-          note="Configured MCP entries in ai-stack.yaml."
-        />
-        <MetricCard
-          icon={LayoutDashboard}
-          label="Config path"
-          value={workspace.configPath}
-          note="The dashboard reads from this file."
-          wide
-        />
-      </div>
-
-      <section className="panel-inner">
-        <div className="section-header">
-          <div>
-            <p className="eyebrow">Skills</p>
-            <h3>{workspace.skills.length} defined skills</h3>
-          </div>
-          <span className="muted-pill">Sorted alphabetically</span>
-        </div>
-
-        <div className="chip-row">
-          {workspace.skills.map((skill) => (
-            <span key={skill} className="skill-chip">
-              {skill}
-            </span>
-          ))}
-        </div>
-      </section>
-
-      <section className="panel-inner">
-        <div className="section-header">
-          <div>
-            <p className="eyebrow">Agents</p>
-            <h3>Availability</h3>
-          </div>
-          <span className="muted-pill">Local executors</span>
-        </div>
-
-        <div className="agent-list">
-          {(['claude', 'codex'] as const).map((agentName) => {
-            const agent = workspace.agents[agentName];
-
-            return (
-              <div key={agentName} className="agent-row">
-                <div className="agent-row-meta">
-                  <span
-                    className={`agent-status-dot${agent.available ? ' is-online' : ' is-offline'}`}
-                    aria-hidden="true"
-                  />
-                  <div>
-                    <strong>{agentName}</strong>
-                    <p>{agent.available ? 'Available now' : 'Unavailable right now'}</p>
-                  </div>
-                </div>
-                <span className="agent-command">{agent.command ?? 'n/a'}</span>
-              </div>
-            );
-          })}
-        </div>
-      </section>
-    </div>
-  );
-}
-
-function MemoryView({
-  entries,
-  selectedPath,
-  selectedEntry,
-  onSelectPath
-}: {
-  entries: MemoryEntry[];
-  selectedPath: string | null;
-  selectedEntry: MemoryEntry | null;
-  onSelectPath: (path: string) => void;
-}) {
-  if (entries.length === 0) {
-    return (
-      <EmptyState
-        icon={BookOpenText}
-        title="No memory files yet"
-        message="Add markdown files to the configured memory path and they will appear here."
-      />
-    );
-  }
-
-  return (
-    <div className="memory-layout">
-      <aside className="panel-inner memory-list">
-        <div className="section-header">
-          <div>
-            <p className="eyebrow">Markdown files</p>
-            <h3>{entries.length} files</h3>
-          </div>
-          <span className="muted-pill">Read only</span>
-        </div>
-
-        <div className="memory-file-list" role="list">
-          {entries.map((entry) => {
-            const isSelected = entry.path === selectedPath;
-
-            return (
-              <button
-                key={entry.path}
-                type="button"
-                className={`memory-file-button${isSelected ? ' is-selected' : ''}`}
-                onClick={() => onSelectPath(entry.path)}
-              >
-                <strong>{basename(entry.path)}</strong>
-                <span>{entry.path}</span>
-              </button>
-            );
-          })}
-        </div>
-      </aside>
-
-      <section className="panel-inner memory-preview">
-        <div className="section-header">
-          <div>
-            <p className="eyebrow">Preview surface</p>
-            <h3>{selectedEntry ? basename(selectedEntry.path) : 'Select a file'}</h3>
-          </div>
-          <span className="muted-pill">Monospace</span>
-        </div>
-
-        <p className="muted-copy">
-          {selectedEntry?.path ?? 'Choose a markdown file from the list to inspect its contents.'}
-        </p>
-
-        <textarea
-          className="memory-editor"
-          readOnly
-          spellCheck={false}
-          value={selectedEntry?.content ?? ''}
-          aria-label="Read-only memory preview"
-        />
-      </section>
-    </div>
-  );
-}
-
-function MetricCard({
-  icon: Icon,
-  label,
-  value,
-  note,
-  wide = false
-}: {
-  icon: LucideIcon;
-  label: string;
-  value: string;
-  note: string;
-  wide?: boolean;
-}) {
-  return (
-    <article className={`metric-card${wide ? ' is-wide' : ''}`}>
-      <div className="metric-card-header">
-        <span className="metric-card-icon" aria-hidden="true">
-          <Icon size={16} />
-        </span>
-        <span className="metric-card-label">{label}</span>
-      </div>
-      <strong className="metric-card-value">{value}</strong>
-      <p className="metric-card-note">{note}</p>
-    </article>
-  );
-}
-
-function EmptyState({
-  icon: Icon,
-  title,
-  message
-}: {
-  icon: LucideIcon;
-  title: string;
-  message: string;
-}) {
-  return (
-    <div className="empty-state">
-      <span className="empty-state-icon" aria-hidden="true">
-        <Icon size={18} />
-      </span>
-      <h2>{title}</h2>
-      <p>{message}</p>
-    </div>
-  );
-}
-
-async function fetchDashboardData(signal?: AbortSignal): Promise<{
-  workspace: WorkspaceSnapshot;
-  config: WorkspaceConfig;
-}> {
-  const [workspace, config] = await Promise.all([
-    fetchJson<WorkspaceSnapshot>('/api/overview', { signal }),
-    fetchJson<WorkspaceConfig>('/api/config', { signal })
-  ]);
-
-  return { workspace, config };
-}
+type ActionPanel = 'pack' | 'install' | null;
 
 async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
   const response = await fetch(url, init);
-  const payload = (await response.json().catch(() => null)) as
-    | T
-    | {
-        error?: string;
-      }
-    | null;
-
   if (!response.ok) {
-    throw new Error(
-      payload && typeof payload === 'object' && 'error' in payload && typeof payload.error === 'string'
-        ? payload.error
-        : `Request failed for ${url}.`
-    );
+    const body = await response.json().catch(() => ({ error: response.statusText }));
+    throw new Error((body as { error?: string }).error ?? `HTTP ${response.status}`);
   }
-
-  return payload as T;
+  return response.json() as Promise<T>;
 }
 
-function basename(filePath: string): string {
-  return filePath.split(/[\\/]/).filter(Boolean).pop() ?? filePath;
+function ActionButton({
+  icon,
+  label,
+  active,
+  onClick,
+}: {
+  icon: ReactNode;
+  label: string;
+  active: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      className={[
+        'inline-flex min-h-10 items-center gap-2 rounded-full border px-4 text-sm font-medium transition',
+        active
+          ? 'border-zinc-900 bg-zinc-900 text-white'
+          : 'border-zinc-200 bg-white text-zinc-900 hover:border-zinc-300',
+      ].join(' ')}
+      type="button"
+      onClick={onClick}
+    >
+      {icon}
+      <span>{label}</span>
+    </button>
+  );
 }
 
-function sectionSubtitle(view: ViewKey): string {
-  switch (view) {
-    case 'overview':
-      return 'Workspace snapshot';
-    case 'memory':
-      return 'Read-only files';
-    case 'skills':
-      return 'Edit config';
-    case 'mcp':
-      return 'Edit JSON config';
-    case 'profiles':
-      return 'Live agent MCPs';
-    case 'run':
-      return 'Execute now';
-    default:
-      return 'Open now';
+function StatusNote({
+  tone,
+  children,
+}: {
+  tone: 'success' | 'error';
+  children: ReactNode;
+}) {
+  return (
+    <div
+      className={[
+        'rounded-2xl border px-4 py-3 text-sm',
+        tone === 'success'
+          ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+          : 'border-rose-200 bg-rose-50 text-rose-700',
+      ].join(' ')}
+    >
+      {children}
+    </div>
+  );
+}
+
+function PanelShell({
+  title,
+  description,
+  onClose,
+  children,
+}: {
+  title: string;
+  description: string;
+  onClose: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <div className="rounded-[28px] border border-zinc-200 bg-white p-5 shadow-[0_22px_60px_rgba(0,0,0,0.06)]">
+      <div className="mb-4 flex items-start justify-between gap-4">
+        <div className="space-y-1">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-zinc-500">
+            Action
+          </p>
+          <h2 className="text-lg font-semibold tracking-[-0.03em] text-zinc-950">{title}</h2>
+          <p className="text-sm text-zinc-500">{description}</p>
+        </div>
+        <button
+          className="inline-flex size-9 items-center justify-center rounded-full border border-zinc-200 text-zinc-500 transition hover:border-zinc-300 hover:text-zinc-900"
+          type="button"
+          onClick={onClose}
+        >
+          <X size={16} />
+        </button>
+      </div>
+      {children}
+    </div>
+  );
+}
+
+export default function App() {
+  const [activePanel, setActivePanel] = useState<ActionPanel>(null);
+  const [profiles, setProfiles] = useState<string[]>([]);
+  const [activeProfile, setActiveProfile] = useState<string | null>(null);
+  const [profilesLoading, setProfilesLoading] = useState(true);
+
+  const [packProfileName, setPackProfileName] = useState('');
+  const [packOutputPath, setPackOutputPath] = useState('');
+  const [packBusy, setPackBusy] = useState(false);
+  const [packResult, setPackResult] = useState<string | null>(null);
+  const [packError, setPackError] = useState<string | null>(null);
+
+  const [installArchivePath, setInstallArchivePath] = useState('');
+  const [installForce, setInstallForce] = useState(false);
+  const [installBusy, setInstallBusy] = useState(false);
+  const [installResult, setInstallResult] = useState<string | null>(null);
+  const [installError, setInstallError] = useState<string | null>(null);
+
+  useEffect(() => {
+    void loadProfiles();
+  }, []);
+
+  async function loadProfiles(): Promise<void> {
+    setProfilesLoading(true);
+    try {
+      const result = await fetchJson<ProfilesResponse>('/api/profiles');
+      setProfiles(result.profiles);
+      setActiveProfile(result.activeProfile);
+      setPackProfileName((current) => current || result.activeProfile || result.profiles[0] || '');
+    } catch {
+      // Keep header usable even if profiles fail to load.
+    } finally {
+      setProfilesLoading(false);
+    }
   }
+
+  async function handlePack(): Promise<void> {
+    if (!packProfileName) {
+      setPackError('Choose a profile to export.');
+      return;
+    }
+
+    setPackBusy(true);
+    setPackError(null);
+    setPackResult(null);
+    try {
+      const result = await fetchJson<{ archivePath: string }>('/api/profiles/export', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: packProfileName,
+          outputPath: packOutputPath.trim() || undefined,
+        }),
+      });
+      setPackResult(`Packed to ${result.archivePath}`);
+    } catch (error) {
+      setPackError((error as Error).message);
+    } finally {
+      setPackBusy(false);
+    }
+  }
+
+  async function handleInstall(): Promise<void> {
+    if (!installArchivePath.trim()) {
+      setInstallError('Enter a profile archive path.');
+      return;
+    }
+
+    setInstallBusy(true);
+    setInstallError(null);
+    setInstallResult(null);
+    try {
+      const result = await fetchJson<{ profileName: string; installedMcps: string[] }>('/api/profiles/import', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          archivePath: installArchivePath.trim(),
+          force: installForce,
+        }),
+      });
+
+      const mcpText =
+        result.installedMcps.length > 0
+          ? ` Installed bundled MCPs: ${result.installedMcps.join(', ')}.`
+          : '';
+      setInstallResult(`Installed profile "${result.profileName}".${mcpText}`);
+      await loadProfiles();
+    } catch (error) {
+      setInstallError((error as Error).message);
+    } finally {
+      setInstallBusy(false);
+    }
+  }
+
+  return (
+    <main className="min-h-screen bg-white px-4 py-4 text-zinc-950 sm:px-6 lg:px-8">
+      <div className="mx-auto grid w-full max-w-[1420px] gap-3">
+        <header className="flex flex-col gap-3 rounded-[28px] border border-zinc-200 bg-white px-5 py-4 shadow-[0_18px_50px_rgba(0,0,0,0.04)] lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex min-w-0 items-center gap-3">
+            <span className="grid size-10 place-items-center rounded-2xl border border-zinc-200 bg-white text-zinc-900">
+              <Bot size={18} />
+            </span>
+            <div className="space-y-0.5">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-zinc-500">Brainctl</p>
+              <h1 className="text-xl font-semibold tracking-[-0.04em] text-zinc-950">Transfer board</h1>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2 lg:justify-center">
+            {(['claude', 'codex', 'gemini'] as const).map((agent) => (
+              <span
+                key={agent}
+                className="inline-flex items-center gap-2 rounded-full border border-zinc-200 bg-white px-3 py-1.5 text-sm font-medium text-zinc-900"
+              >
+                <span className="grid size-[18px] place-items-center overflow-hidden text-zinc-900">
+                  <AgentLogo agent={agent} className="size-full object-contain" />
+                </span>
+                {agent === 'claude' ? 'Claude Code' : agent === 'codex' ? 'Codex' : 'Gemini'}
+              </span>
+            ))}
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <ActionButton
+              icon={<Boxes size={15} />}
+              label="Pack"
+              active={activePanel === 'pack'}
+              onClick={() => {
+                setActivePanel((current) => (current === 'pack' ? null : 'pack'));
+                setPackError(null);
+                setPackResult(null);
+              }}
+            />
+            <ActionButton
+              icon={<Download size={15} />}
+              label="Install"
+              active={activePanel === 'install'}
+              onClick={() => {
+                setActivePanel((current) => (current === 'install' ? null : 'install'));
+                setInstallError(null);
+                setInstallResult(null);
+              }}
+            />
+          </div>
+        </header>
+
+        {activePanel === 'pack' ? (
+          <PanelShell
+            title="Pack profile"
+            description="Export an existing Brainctl profile into a portable tarball."
+            onClose={() => setActivePanel(null)}
+          >
+            <div className="grid gap-4 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
+              <div className="space-y-3">
+                <label className="grid gap-2 text-sm">
+                  <span className="font-medium text-zinc-800">Profile</span>
+                  <select
+                    className="min-h-11 rounded-2xl border border-zinc-200 bg-white px-3 text-sm outline-none transition focus:border-zinc-400"
+                    value={packProfileName}
+                    onChange={(event) => setPackProfileName(event.target.value)}
+                    disabled={profilesLoading || profiles.length === 0 || packBusy}
+                  >
+                    {profiles.length === 0 ? (
+                      <option value="">No profiles found</option>
+                    ) : null}
+                    {profiles.map((profile) => (
+                      <option key={profile} value={profile}>
+                        {profile}{profile === activeProfile ? ' (active)' : ''}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="grid gap-2 text-sm">
+                  <span className="font-medium text-zinc-800">Output path</span>
+                  <input
+                    className="min-h-11 rounded-2xl border border-zinc-200 bg-white px-3 text-sm outline-none transition focus:border-zinc-400"
+                    placeholder="./my-profile.tar.gz"
+                    value={packOutputPath}
+                    onChange={(event) => setPackOutputPath(event.target.value)}
+                    disabled={packBusy}
+                  />
+                </label>
+
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    className="inline-flex min-h-11 items-center justify-center gap-2 rounded-full bg-zinc-950 px-5 text-sm font-medium text-white transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:bg-zinc-300"
+                    type="button"
+                    onClick={() => void handlePack()}
+                    disabled={packBusy || profiles.length === 0}
+                  >
+                    {packBusy ? <Loader2 size={15} className="animate-spin" /> : <Boxes size={15} />}
+                    Export tarball
+                  </button>
+                  <button
+                    className="inline-flex min-h-11 items-center justify-center rounded-full border border-zinc-200 px-5 text-sm font-medium text-zinc-900 transition hover:border-zinc-300"
+                    type="button"
+                    onClick={() => void loadProfiles()}
+                    disabled={packBusy}
+                  >
+                    Refresh profiles
+                  </button>
+                </div>
+              </div>
+
+              <div className="rounded-3xl border border-zinc-200 bg-zinc-50 p-4">
+                <p className="mb-3 text-[11px] font-semibold uppercase tracking-[0.16em] text-zinc-500">
+                  Available profiles
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {profiles.length === 0 ? (
+                    <span className="text-sm text-zinc-500">No profiles in this workspace yet.</span>
+                  ) : (
+                    profiles.map((profile) => (
+                      <button
+                        key={profile}
+                        className={[
+                          'rounded-full border px-3 py-1.5 text-sm transition',
+                          packProfileName === profile
+                            ? 'border-zinc-900 bg-zinc-900 text-white'
+                            : 'border-zinc-200 bg-white text-zinc-700 hover:border-zinc-300',
+                        ].join(' ')}
+                        type="button"
+                        onClick={() => setPackProfileName(profile)}
+                      >
+                        {profile}{profile === activeProfile ? ' · active' : ''}
+                      </button>
+                    ))
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-4 grid gap-3">
+              {packResult ? <StatusNote tone="success">{packResult}</StatusNote> : null}
+              {packError ? <StatusNote tone="error">{packError}</StatusNote> : null}
+            </div>
+          </PanelShell>
+        ) : null}
+
+        {activePanel === 'install' ? (
+          <PanelShell
+            title="Install profile"
+            description="Import a packed profile archive and unpack bundled MCPs into the local Brainctl store."
+            onClose={() => setActivePanel(null)}
+          >
+            <div className="grid gap-4 lg:grid-cols-[minmax(0,1.15fr)_minmax(260px,0.85fr)]">
+              <div className="space-y-3">
+                <label className="grid gap-2 text-sm">
+                  <span className="font-medium text-zinc-800">Archive path</span>
+                  <input
+                    className="min-h-11 rounded-2xl border border-zinc-200 bg-white px-3 text-sm outline-none transition focus:border-zinc-400"
+                    placeholder="/path/to/profile.tar.gz"
+                    value={installArchivePath}
+                    onChange={(event) => setInstallArchivePath(event.target.value)}
+                    disabled={installBusy}
+                  />
+                </label>
+
+                <label className="inline-flex items-center gap-3 rounded-2xl border border-zinc-200 bg-zinc-50 px-3 py-3 text-sm text-zinc-700">
+                  <input
+                    className="size-4 rounded border-zinc-300"
+                    type="checkbox"
+                    checked={installForce}
+                    onChange={(event) => setInstallForce(event.target.checked)}
+                    disabled={installBusy}
+                  />
+                  Overwrite an existing profile with the same name
+                </label>
+
+                <button
+                  className="inline-flex min-h-11 items-center justify-center gap-2 rounded-full bg-zinc-950 px-5 text-sm font-medium text-white transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:bg-zinc-300"
+                  type="button"
+                  onClick={() => void handleInstall()}
+                  disabled={installBusy}
+                >
+                  {installBusy ? <Loader2 size={15} className="animate-spin" /> : <Download size={15} />}
+                  Import archive
+                </button>
+              </div>
+
+              <div className="rounded-3xl border border-zinc-200 bg-zinc-50 p-4">
+                <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-zinc-500">
+                  What happens
+                </p>
+                <ul className="grid gap-2 text-sm leading-6 text-zinc-600">
+                  <li>Unpacks the tarball into the Brainctl profile store.</li>
+                  <li>Installs bundled MCP dependencies when the package includes them.</li>
+                  <li>Keeps the transfer board focused on local agent sync after import.</li>
+                </ul>
+              </div>
+            </div>
+
+            <div className="mt-4 grid gap-3">
+              {installResult ? <StatusNote tone="success">{installResult}</StatusNote> : null}
+              {installError ? <StatusNote tone="error">{installError}</StatusNote> : null}
+            </div>
+          </PanelShell>
+        ) : null}
+
+        <section className="rounded-[32px] border border-zinc-200 bg-white p-4 shadow-[0_20px_60px_rgba(0,0,0,0.05)] sm:p-5">
+          <ProfilesView />
+        </section>
+      </div>
+    </main>
+  );
 }

@@ -67,14 +67,16 @@ export interface DiagnosticCheck {
 
 // --- Profile & Sync types ---
 
-export interface NpmMcpServerConfig {
-  type: 'npm';
+export interface LocalNpmMcpServerConfig {
+  kind: 'local';
+  source: 'npm';
   package: string;
   env?: Record<string, string>;
 }
 
-export interface BundledMcpServerConfig {
-  type: 'bundled';
+export interface LocalBundledMcpServerConfig {
+  kind: 'local';
+  source: 'bundled';
   path: string;
   install?: string;
   command: string;
@@ -82,7 +84,16 @@ export interface BundledMcpServerConfig {
   env?: Record<string, string>;
 }
 
-export type McpServerConfig = NpmMcpServerConfig | BundledMcpServerConfig;
+export interface RemoteMcpServerConfig {
+  kind: 'remote';
+  transport: 'http' | 'sse';
+  url: string;
+  headers?: Record<string, string>;
+  env?: Record<string, string>;
+}
+
+export type LocalMcpServerConfig = LocalNpmMcpServerConfig | LocalBundledMcpServerConfig;
+export type McpServerConfig = LocalMcpServerConfig | RemoteMcpServerConfig;
 
 export interface ProfileConfig {
   name: string;

@@ -3,6 +3,11 @@ import { homedir } from 'node:os';
 import path from 'node:path';
 
 import type { AgentName } from '../../types.js';
+import {
+  mergeManagedPluginsIntoSkills,
+  readManagedPlugins,
+} from './managed-plugin-registry.js';
+import { readInstalledPlugins } from './plugin-skill-reader.js';
 
 export interface AgentMcpEntry {
   command: string;
@@ -13,6 +18,11 @@ export interface AgentMcpEntry {
 export interface AgentSkillEntry {
   name: string;
   source?: string; // e.g. "claude-plugins-official", "local"
+  kind?: 'skill' | 'plugin';
+  pluginSkills?: string[];
+  pluginMcps?: string[];
+  installPath?: string;
+  managed?: boolean;
 }
 
 export interface AgentLiveConfig {
@@ -211,36 +221,47 @@ function parseTomlArray(raw: string): string[] {
 /* ---- Skill readers ---- */
 
 async function readClaudePlugins(): Promise<AgentSkillEntry[]> {
+  const results: AgentSkillEntry[] = [];
+
+  // Read marketplace plugins
   try {
     const pluginsPath = path.join(homedir(), '.claude', 'plugins', 'installed_plugins.json');
-    const source = await readFile(pluginsPath, 'utf8');
-    const data = JSON.parse(source) as { plugins?: Record<string, unknown[]> };
-    if (!data.plugins) return [];
-
-    return Object.keys(data.plugins).map((key) => {
-      const [name, source] = key.split('@');
-      return { name, source };
-    });
+    results.push(...await readInstalledPlugins(pluginsPath));
   } catch {
-    return [];
+    // no plugins file
   }
+
+  // Read local skills from ~/.claude/skills/
+  try {
+    const skillsDir = path.join(homedir(), '.claude', 'skills');
+    const localSkills = await readSkillDirs(skillsDir);
+    results.push(...localSkills);
+  } catch {
+    // no skills dir
+  }
+
+  return results;
 }
 
 async function readCodexSkills(): Promise<AgentSkillEntry[]> {
   try {
     const skillsDir = path.join(homedir(), '.codex', 'skills');
-    return await readSkillDirs(skillsDir);
+    const localSkills = await readSkillDirs(skillsDir);
+    const managedPlugins = await readManagedPlugins({ agent: 'codex' });
+    return mergeManagedPluginsIntoSkills(localSkills, managedPlugins);
   } catch {
-    return [];
+    return await readManagedPlugins({ agent: 'codex' });
   }
 }
 
 async function readGeminiSkills(): Promise<AgentSkillEntry[]> {
   try {
     const skillsDir = path.join(homedir(), '.gemini', 'skills');
-    return await readSkillDirs(skillsDir);
+    const localSkills = await readSkillDirs(skillsDir);
+    const managedPlugins = await readManagedPlugins({ agent: 'gemini' });
+    return mergeManagedPluginsIntoSkills(localSkills, managedPlugins);
   } catch {
-    return [];
+    return await readManagedPlugins({ agent: 'gemini' });
   }
 }
 
@@ -252,9 +273,9 @@ async function readSkillDirs(skillsDir: string): Promise<AgentSkillEntry[]> {
   for (const entry of entries) {
     if (entry.name.startsWith('.')) continue;
     if (entry.isDirectory()) {
-      skills.push({ name: entry.name, source: 'local' });
+      skills.push({ name: entry.name, source: 'local', kind: 'skill' });
     } else if (entry.isSymbolicLink()) {
-      skills.push({ name: entry.name, source: 'linked' });
+      skills.push({ name: entry.name, source: 'linked', kind: 'skill' });
     }
   }
 

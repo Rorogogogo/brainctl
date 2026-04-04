@@ -66,7 +66,7 @@ async function stageProfile(
   const exportMcps: Record<string, unknown> = {};
 
   for (const [name, mcp] of Object.entries(profile.mcps)) {
-    if (mcp.type === 'bundled') {
+    if (mcp.kind === 'local' && mcp.source === 'bundled') {
       const sourcePath = path.isAbsolute(mcp.path)
         ? mcp.path
         : path.resolve(cwd, mcp.path);
@@ -80,16 +80,18 @@ async function stageProfile(
       });
 
       exportMcps[name] = {
-        type: 'bundled',
+        kind: 'local',
+        source: 'bundled',
         path: `./mcps/${name}`,
         ...(mcp.install ? { install: mcp.install } : {}),
         command: mcp.command,
         ...(mcp.args ? { args: mcp.args } : {}),
         ...(mcp.env ? { env: mcp.env } : {}),
       };
-    } else {
-      exportMcps[name] = mcp;
+      continue;
     }
+
+    exportMcps[name] = mcp;
   }
 
   return {

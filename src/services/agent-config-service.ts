@@ -1,7 +1,8 @@
-import { copyFile, mkdir, readFile, rename, writeFile } from 'node:fs/promises';
+import { copyFile, cp, mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import path from 'node:path';
 
+import { ValidationError } from '../errors.js';
 import type { AgentName } from '../types.js';
 import {
   createClaudeReader,
@@ -12,6 +13,9 @@ import {
   type AgentMcpEntry,
 } from './sync/agent-reader.js';
 import { formatTimestamp } from './sync/agent-writer.js';
+import { createMcpPreflightService, type McpPreflightService } from './mcp-preflight-service.js';
+import { createSkillPreflightService, type SkillPreflightService } from './skill-preflight-service.js';
+import { getSkillDir } from './skill-paths.js';
 
 export type { AgentLiveConfig, AgentMcpEntry, AgentSkillEntry } from './sync/agent-reader.js';
 
@@ -28,6 +32,20 @@ export interface AgentConfigService {
     agent: AgentName;
     key: string;
   }): Promise<void>;
+  copySkill(options: {
+    sourceAgent: AgentName;
+    targetAgent: AgentName;
+    skillName: string;
+  }): Promise<void>;
+  removeSkill(options: {
+    agent: AgentName;
+    skillName: string;
+  }): Promise<void>;
+}
+
+interface AgentConfigServiceDependencies {
+  mcpPreflightService?: McpPreflightService;
+  skillPreflightService?: SkillPreflightService;
 }
 
 const readers: Record<AgentName, AgentConfigReader> = {
@@ -36,7 +54,12 @@ const readers: Record<AgentName, AgentConfigReader> = {
   gemini: createGeminiReader(),
 };
 
-export function createAgentConfigService(): AgentConfigService {
+export function createAgentConfigService(
+  dependencies: AgentConfigServiceDependencies = {}
+): AgentConfigService {
+  const mcpPreflightService = dependencies.mcpPreflightService ?? createMcpPreflightService();
+  const skillPreflightService = dependencies.skillPreflightService ?? createSkillPreflightService();
+
   return {
     async readAll(options) {
       const results = await Promise.all([
@@ -49,6 +72,13 @@ export function createAgentConfigService(): AgentConfigService {
 
     async addMcp(options) {
       const { cwd, agent, key, entry } = options;
+      const preflight = await mcpPreflightService.execute({ cwd, agent, key, entry });
+      const firstError = preflight.checks.find((check) => check.status === 'error');
+      if (firstError) {
+        throw new ValidationError(
+          `MCP "${key}" cannot be added to ${agent}: ${firstError.message}`
+        );
+      }
 
       if (agent === 'claude') {
         await mutateClaudeConfig(cwd, (servers) => {
@@ -81,6 +111,33 @@ export function createAgentConfigService(): AgentConfigService {
           delete servers[key];
         });
       }
+    },
+
+    async copySkill(options) {
+      const { sourceAgent, targetAgent, skillName } = options;
+      const preflight = await skillPreflightService.execute({
+        sourceAgent,
+        targetAgent,
+        skillName,
+        source: 'local',
+      });
+      const firstError = preflight.checks.find((check) => check.status === 'error');
+      if (firstError) {
+        throw new ValidationError(
+          `Skill "${skillName}" cannot be copied from ${sourceAgent} to ${targetAgent}: ${firstError.message}`
+        );
+      }
+
+      const sourceDir = getSkillDir(sourceAgent, skillName);
+      const targetDir = getSkillDir(targetAgent, skillName);
+      await mkdir(path.dirname(targetDir), { recursive: true });
+      await cp(sourceDir, targetDir, { recursive: true });
+    },
+
+    async removeSkill(options) {
+      const { agent, skillName } = options;
+      const skillDir = getSkillDir(agent, skillName);
+      await rm(skillDir, { recursive: true, force: true });
     },
   };
 }

@@ -8,6 +8,7 @@ import { loadConfig } from '../config.js';
 import { loadMemory } from '../context/memory.js';
 import { createAgentConfigService } from '../services/agent-config-service.js';
 import { createDoctorService } from '../services/doctor-service.js';
+import { startUiServer, type UiServer } from '../ui/server.js';
 import { createMemoryWriteService } from '../services/memory-write-service.js';
 import { createProfileExportService } from '../services/profile-export-service.js';
 import { createProfileImportService } from '../services/profile-import-service.js';
@@ -346,6 +347,41 @@ export function createMcpServer(options: { cwd?: string } = {}): FastMCP {
         force: args.force,
       });
       return JSON.stringify(result, null, 2);
+    },
+  });
+
+  let uiServerInstance: UiServer | null = null;
+
+  server.addTool({
+    name: 'brainctl_open_ui',
+    description: 'Start the brainctl web dashboard. Returns the URL to open in a browser. If already running, returns the existing URL.',
+    parameters: z.object({
+      port: z.number().default(3333).describe('Port number for the UI server'),
+    }),
+    execute: async (args) => {
+      if (uiServerInstance) {
+        return JSON.stringify({ url: uiServerInstance.url, status: 'already_running' });
+      }
+      try {
+        uiServerInstance = await startUiServer({ cwd, port: args.port });
+        return JSON.stringify({ url: uiServerInstance.url, status: 'started' });
+      } catch (err) {
+        return JSON.stringify({ error: (err as Error).message, status: 'failed' });
+      }
+    },
+  });
+
+  server.addTool({
+    name: 'brainctl_close_ui',
+    description: 'Stop the brainctl web dashboard if it is running.',
+    parameters: z.object({}),
+    execute: async () => {
+      if (!uiServerInstance) {
+        return JSON.stringify({ status: 'not_running' });
+      }
+      await uiServerInstance.close();
+      uiServerInstance = null;
+      return JSON.stringify({ status: 'stopped' });
     },
   });
 

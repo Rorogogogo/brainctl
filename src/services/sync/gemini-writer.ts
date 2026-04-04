@@ -83,7 +83,11 @@ export function createGeminiWriter(): AgentConfigWriter {
 }
 
 function toGeminiFormat(config: McpServerConfig): Record<string, unknown> {
-  if (config.type === 'npm') {
+  if (config.kind === 'remote') {
+    throw new SyncError('Remote MCP servers are not supported in Gemini sync.');
+  }
+
+  if (config.source === 'npm') {
     return {
       command: 'npx',
       args: ['-y', config.package],

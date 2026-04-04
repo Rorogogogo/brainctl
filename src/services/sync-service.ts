@@ -1,4 +1,5 @@
 import type { AgentName, SyncAgentResult, SyncResult } from '../types.js';
+import { ProfileError } from '../errors.js';
 import type { AgentConfigWriter } from './sync/agent-writer.js';
 import { createClaudeWriter } from './sync/claude-writer.js';
 import { createCodexWriter } from './sync/codex-writer.js';
@@ -42,6 +43,13 @@ export function createSyncService(
       }
 
       const profile = await profileService.get({ cwd, name: meta.active_profile });
+      const remoteMcpName = Object.entries(profile.mcps).find(([, config]) => config.kind === 'remote')?.[0];
+      if (remoteMcpName) {
+        throw new ProfileError(
+          `Profile "${profile.name}" includes remote MCP "${remoteMcpName}". Remote MCP sync is not supported yet.`
+        );
+      }
+
       const results: SyncResult = [];
 
       for (const agent of meta.agents) {

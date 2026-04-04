@@ -112,6 +112,32 @@ brainctl run analyze ./report.md --with codex --fallback claude
 brainctl run review ./code.md --with gemini
 ```
 
+### Profile MCP Format
+
+Packed/published profiles should classify every MCP as either `local` or `remote`.
+
+```yaml
+mcps:
+  github:
+    kind: local
+    source: npm
+    package: "@modelcontextprotocol/server-github"
+
+  internal-docs:
+    kind: remote
+    transport: http
+    url: "https://mcp.example.com"
+```
+
+Rules:
+
+- local profile files may still use the older `type: npm` / `type: bundled` MCP shape
+- `brainctl profile export` writes the packed profile using the explicit format below
+- `local` MCPs must declare `source: npm` or `source: bundled`
+- `remote` MCPs must declare `transport` and `url`
+- bundled local MCPs must declare `path` and `command`
+- `brainctl sync` currently supports local MCPs only; remote MCPs remain in the profile package but are not written into agent configs yet
+
 ---
 
 ## 🧠 Config: `ai-stack.yaml`

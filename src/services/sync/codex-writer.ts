@@ -34,7 +34,8 @@ export function createCodexWriter(): AgentConfigWriter {
 
       // Always include brainctl itself
       allServers['brainctl'] = {
-        type: 'npm',
+        kind: 'local',
+        source: 'npm',
         package: 'brainctl',
       };
 
@@ -89,7 +90,11 @@ function buildMcpToml(servers: Record<string, McpServerConfig>): string {
   for (const [name, config] of Object.entries(servers)) {
     lines.push(`[mcp_servers.${name}]`);
 
-    if (config.type === 'npm') {
+    if (config.kind === 'remote') {
+      throw new SyncError('Remote MCP servers are not supported in Codex sync.');
+    }
+
+    if (config.source === 'npm') {
       lines.push(`command = "npx"`);
       lines.push(`args = ["-y", ${tomlString(config.package)}]`);
     } else {

@@ -62,7 +62,7 @@ export function createProfileImportService(): ProfileImportService {
         const mcpsBaseDir = path.join(cwd, PROFILES_DIR, profileName, 'mcps');
 
         for (const [name, mcp] of Object.entries(profile.mcps)) {
-          if (mcp.type !== 'bundled') continue;
+          if (!(mcp.kind === 'local' && mcp.source === 'bundled')) continue;
 
           const extractedMcpPath = path.join(extractDir, 'mcps', name);
           const destMcpPath = path.join(mcpsBaseDir, name);

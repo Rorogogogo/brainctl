@@ -17,6 +17,13 @@ The new service is a separate repository and deployment target. It is not an ext
 
 The local `brainctl` CLI remains responsible for importing packages, unpacking bundled MCP servers, installing dependencies locally, rewriting local paths, and syncing local agent configs.
 
+Packed profile artifacts should classify MCP entries explicitly:
+
+- `local`: installed or unpacked onto the user's machine before sync
+- `remote`: hosted elsewhere and referenced by connection metadata only
+
+This distinction belongs in the packed profile manifest itself so registry validation can reject ambiguous MCP definitions before publish, without forcing every local working profile file to migrate immediately.
+
 ## Stack
 
 - Rust
