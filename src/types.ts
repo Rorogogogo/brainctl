@@ -109,13 +109,17 @@ export interface LocalNpmMcpServerConfig {
   env?: Record<string, string>;
 }
 
+export type McpRuntime = 'node' | 'python' | 'java' | 'go' | 'rust' | 'binary';
+
 export interface LocalBundledMcpServerConfig {
   kind: 'local';
   source: 'bundled';
+  runtime: McpRuntime;
   path: string;
   install?: string;
   command: string;
   args?: string[];
+  exclude?: string[];
   env?: Record<string, string>;
 }
 
