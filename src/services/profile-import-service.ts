@@ -115,7 +115,16 @@ export function createProfileImportService(
           await mkdir(destMcpPath, { recursive: true });
           await cp(extractedMcpPath, destMcpPath, { recursive: true });
 
-          const installCmd = mcp.install ?? 'npm install';
+          const installCmd = mcp.install;
+          if (!installCmd) {
+            profile.mcps[name] = {
+              ...mcp,
+              path: destMcpPath,
+            };
+            installedMcps.push(name);
+            continue;
+          }
+
           try {
             execSync(installCmd, {
               cwd: destMcpPath,

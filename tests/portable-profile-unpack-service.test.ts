@@ -375,4 +375,63 @@ describe('createProfileImportService portable unpack', () => {
       'Bearer ${credentials.optional_token}'
     );
   });
+
+  it('imports a bundled binary MCP without running any install command', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'brainctl-unpack-'));
+    tempDirs.push(root);
+
+    const projectDir = path.join(root, 'workspace');
+    const archiveStageDir = path.join(root, 'archive-stage');
+    await mkdir(projectDir, { recursive: true });
+    await mkdir(path.join(archiveStageDir, 'bundle', 'myserver'), { recursive: true });
+    await writeFile(
+      path.join(archiveStageDir, 'bundle', 'myserver', 'server'),
+      '#!/bin/sh\necho hello',
+      'utf8'
+    );
+    await writeFile(
+      path.join(archiveStageDir, 'manifest.yaml'),
+      [
+        'schemaVersion: 1',
+        'profileName: binpkg',
+        'source:',
+        '  kind: profile',
+        '  profileName: binpkg',
+      ].join('\n'),
+      'utf8'
+    );
+    await writeFile(
+      path.join(archiveStageDir, 'profile.yaml'),
+      [
+        'name: binpkg',
+        'skills: {}',
+        'mcps:',
+        '  myserver:',
+        '    kind: local',
+        '    source: bundled',
+        '    runtime: binary',
+        '    path: ./bundle/myserver',
+        '    command: ./server',
+        'memory:',
+        '  paths: []',
+      ].join('\n'),
+      'utf8'
+    );
+
+    const archivePath = path.join(projectDir, 'binpkg.tar.gz');
+    execSync(`tar -czf "${archivePath}" -C "${archiveStageDir}" .`);
+
+    const mockPreflightService = {
+      execute: async () => ({ checks: [] }),
+    };
+
+    const service = createProfileImportService({ mcpPreflightService: mockPreflightService });
+    const result = await service.execute({
+      cwd: projectDir,
+      archivePath,
+    });
+
+    expect(result.profileName).toBe('binpkg');
+    expect(result.installedMcps).toContain('myserver');
+  });
 });
