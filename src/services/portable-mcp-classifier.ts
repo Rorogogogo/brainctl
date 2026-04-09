@@ -4,11 +4,13 @@ import { ValidationError } from '../errors.js';
 import type {
   LocalBundledMcpServerConfig,
   LocalNpmMcpServerConfig,
+  McpRuntime,
   RemoteMcpServerConfig,
 } from '../types.js';
 import type { AgentMcpEntry, PortableRemoteMcpMetadata } from './agent-config-service.js';
+import { detectMcpRuntime, extractEntrypoint } from './runtime-detector.js';
 
-const LOCAL_SCRIPT_RUNNERS = new Set(['node', 'nodejs']);
+const NPX_LIKE_COMMANDS = new Set(['npx', 'uvx']);
 
 export type PortableMcpClassification =
   | LocalNpmMcpServerConfig
@@ -37,21 +39,46 @@ export function classifyPortableMcp(options: {
     };
   }
 
-  const bundledPath = resolveBundledPath(options.cwd, options.entry);
-  if (bundledPath) {
-    return {
-      kind: 'local',
-      source: 'bundled',
-      path: bundledPath,
-      command: options.entry.command,
-      ...(options.entry.args ? { args: options.entry.args } : {}),
-      ...(options.entry.env ? { env: options.entry.env } : {}),
-    };
+  const runtime = detectMcpRuntime(options.entry.command);
+  if (runtime) {
+    return classifyBundledMcp(options.cwd, options.key, options.entry, runtime);
   }
 
   throw new PortableMcpClassificationError(
-    `MCP "${options.key}" cannot be packed from the live agent config because it is neither an explicit remote MCP nor a local npx/bundled entry.`
+    `MCP "${options.key}" cannot be packed: unrecognized command "${options.entry.command}".`
   );
+}
+
+function classifyBundledMcp(
+  cwd: string,
+  key: string,
+  entry: AgentMcpEntry,
+  runtime: McpRuntime
+): LocalBundledMcpServerConfig {
+  const entrypoint = extractEntrypoint(entry.command, entry.args ?? []);
+
+  let bundlePath: string;
+  if (runtime === 'rust') {
+    bundlePath = cwd;
+  } else if (entrypoint) {
+    const resolvedEntrypoint = path.resolve(cwd, entrypoint);
+    const entrypointDir = path.dirname(resolvedEntrypoint);
+    bundlePath = resolveProjectLocalPath(cwd, entrypointDir, key);
+  } else {
+    throw new PortableMcpClassificationError(
+      `MCP "${key}" cannot be packed: could not determine entrypoint from args.`
+    );
+  }
+
+  return {
+    kind: 'local',
+    source: 'bundled',
+    runtime,
+    path: bundlePath,
+    command: entry.command,
+    ...(entry.args ? { args: entry.args } : {}),
+    ...(entry.env ? { env: entry.env } : {}),
+  };
 }
 
 function classifyRemoteMcp(
@@ -89,31 +116,18 @@ function classifyRemoteMcp(
 }
 
 function resolveNpxPackage(entry: AgentMcpEntry): string | null {
-  if (entry.command !== 'npx') {
+  if (!NPX_LIKE_COMMANDS.has(entry.command)) {
     return null;
   }
 
   const packageName = resolveDeclaredNpxPackage(entry.args ?? []);
   if (!packageName) {
     throw new PortableMcpClassificationError(
-      'npx-based MCP entries must include a package or executable argument.'
+      'npx/uvx-based MCP entries must include a package or executable argument.'
     );
   }
 
   return packageName;
-}
-
-function resolveBundledPath(cwd: string, entry: AgentMcpEntry): string | null {
-  if (!LOCAL_SCRIPT_RUNNERS.has(entry.command)) {
-    return null;
-  }
-
-  const firstArg = entry.args?.[0];
-  if (!firstArg || !looksLikeLocalPath(firstArg)) {
-    return null;
-  }
-
-  return resolveProjectLocalPath(cwd, path.dirname(firstArg));
 }
 
 function resolveDeclaredNpxPackage(args: string[]): string | null {
@@ -150,19 +164,13 @@ function resolveDeclaredNpxPackage(args: string[]): string | null {
   return packageName;
 }
 
-function looksLikeLocalPath(value: string): boolean {
-  return (
-    value.startsWith('.') ||
-    value.startsWith('/') ||
-    value.includes(path.sep)
-  );
-}
-
-function resolveProjectLocalPath(cwd: string, candidate: string): string | null {
+function resolveProjectLocalPath(cwd: string, candidate: string, key: string): string {
   const resolved = path.resolve(cwd, candidate);
   const relative = path.relative(cwd, resolved);
   if (relative.startsWith(`..${path.sep}`) || relative === '..' || path.isAbsolute(relative)) {
-    return null;
+    throw new PortableMcpClassificationError(
+      `MCP "${key}" cannot be packed: path "${candidate}" is outside the project directory.`
+    );
   }
 
   return resolved;

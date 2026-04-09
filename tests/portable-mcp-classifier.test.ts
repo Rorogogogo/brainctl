@@ -80,9 +80,149 @@ describe('classifyPortableMcp', () => {
     expect(result).toEqual({
       kind: 'local',
       source: 'bundled',
+      runtime: 'node',
       path: path.join(cwd, 'dist'),
       command: 'node',
       args: ['./dist/index.js'],
+    });
+  });
+
+  it('classifies python script-runner entries as bundled with runtime', () => {
+    const cwd = path.join(path.sep, 'workspace', 'project');
+
+    const result = classifyPortableMcp({
+      cwd,
+      key: 'python-tool',
+      entry: {
+        command: 'python',
+        args: ['./src/server.py'],
+      },
+    });
+
+    expect(result).toEqual({
+      kind: 'local',
+      source: 'bundled',
+      runtime: 'python',
+      path: path.join(cwd, 'src'),
+      command: 'python',
+      args: ['./src/server.py'],
+    });
+  });
+
+  it('classifies java -jar entries as bundled with runtime', () => {
+    const cwd = path.join(path.sep, 'workspace', 'project');
+
+    const result = classifyPortableMcp({
+      cwd,
+      key: 'java-tool',
+      entry: {
+        command: 'java',
+        args: ['-jar', './dist/server.jar'],
+      },
+    });
+
+    expect(result).toEqual({
+      kind: 'local',
+      source: 'bundled',
+      runtime: 'java',
+      path: path.join(cwd, 'dist'),
+      command: 'java',
+      args: ['-jar', './dist/server.jar'],
+    });
+  });
+
+  it('classifies go run entries as bundled with runtime', () => {
+    const cwd = path.join(path.sep, 'workspace', 'project');
+
+    const result = classifyPortableMcp({
+      cwd,
+      key: 'go-tool',
+      entry: {
+        command: 'go',
+        args: ['run', './cmd/server'],
+      },
+    });
+
+    expect(result).toEqual({
+      kind: 'local',
+      source: 'bundled',
+      runtime: 'go',
+      path: path.join(cwd, 'cmd'),
+      command: 'go',
+      args: ['run', './cmd/server'],
+    });
+  });
+
+  it('classifies cargo run entries as bundled with runtime', () => {
+    const cwd = path.join(path.sep, 'workspace', 'project');
+
+    const result = classifyPortableMcp({
+      cwd,
+      key: 'rust-tool',
+      entry: {
+        command: 'cargo',
+        args: ['run'],
+      },
+    });
+
+    expect(result).toEqual({
+      kind: 'local',
+      source: 'bundled',
+      runtime: 'rust',
+      path: cwd,
+      command: 'cargo',
+      args: ['run'],
+    });
+  });
+
+  it('classifies relative path commands as bundled binary', () => {
+    const cwd = path.join(path.sep, 'workspace', 'project');
+    const result = classifyPortableMcp({
+      cwd,
+      key: 'local-path-tool',
+      entry: { command: './dist/server' },
+    });
+    expect(result).toEqual({
+      kind: 'local',
+      source: 'bundled',
+      runtime: 'binary',
+      path: path.join(cwd, 'dist'),
+      command: './dist/server',
+    });
+  });
+
+  it('classifies uvx as npm-like package runner', () => {
+    const result = classifyPortableMcp({
+      cwd: '/workspace/project',
+      key: 'fetch-tool',
+      entry: {
+        command: 'uvx',
+        args: ['mcp-server-fetch'],
+      },
+    });
+
+    expect(result).toEqual({
+      kind: 'local',
+      source: 'npm',
+      package: 'mcp-server-fetch',
+    });
+  });
+
+  it('adds runtime field to existing node bundled classification', () => {
+    const cwd = path.join(path.sep, 'workspace', 'project');
+
+    const result = classifyPortableMcp({
+      cwd,
+      key: 'node-tool',
+      entry: {
+        command: 'node',
+        args: ['./dist/index.js'],
+      },
+    });
+
+    expect(result).toMatchObject({
+      source: 'bundled',
+      runtime: 'node',
     });
   });
 
@@ -153,12 +293,12 @@ describe('classifyPortableMcp', () => {
         cwd: '/workspace/project',
         key: 'unknown-tool',
         entry: {
-          command: 'uvx',
-          args: ['my-server'],
+          command: 'docker',
+          args: ['run', 'my-image'],
         },
       })
     ).toThrowError(
-      'MCP "unknown-tool" cannot be packed from the live agent config because it is neither an explicit remote MCP nor a local npx/bundled entry.'
+      'MCP "unknown-tool" cannot be packed: unrecognized command "docker".'
     );
   });
 
@@ -171,40 +311,47 @@ describe('classifyPortableMcp', () => {
           command: '/usr/local/bin/tool',
         },
       })
-    ).toThrowError(PortableMcpClassificationError);
+    ).toThrowError('cannot be packed: path "/usr/local/bin" is outside the project directory');
   });
 
-  it('rejects path-based command launchers instead of treating them as bundled', () => {
-    expect(() =>
-      classifyPortableMcp({
-        cwd: '/workspace/project',
-        key: 'local-path-tool',
-        entry: {
-          command: './dist/index.js',
-        },
-      })
-    ).toThrowError(
-      'MCP "local-path-tool" cannot be packed from the live agent config because it is neither an explicit remote MCP nor a local npx/bundled entry.'
-    );
+  it('classifies relative path commands as bundled binary', () => {
+    const cwd = path.join(path.sep, 'workspace', 'project');
+    const result = classifyPortableMcp({
+      cwd,
+      key: 'local-path-tool',
+      entry: { command: './dist/index.js' },
+    });
+    expect(result).toEqual({
+      kind: 'local',
+      source: 'bundled',
+      runtime: 'binary',
+      path: path.join(cwd, 'dist'),
+      command: './dist/index.js',
+    });
   });
 
   it.each([
     ['tool.py'],
     ['tool.sh'],
     ['data.json'],
-  ])('rejects bare local filename %s for script runners', (filename) => {
-    expect(() =>
-      classifyPortableMcp({
-        cwd: '/workspace/project',
-        key: filename,
-        entry: {
-          command: 'node',
-          args: [filename],
-        },
-      })
-    ).toThrowError(
-      `MCP "${filename}" cannot be packed from the live agent config because it is neither an explicit remote MCP nor a local npx/bundled entry.`
-    );
+  ])('classifies bare local filename %s for node script runners as bundled at cwd', (filename) => {
+    const cwd = '/workspace/project';
+    const result = classifyPortableMcp({
+      cwd,
+      key: filename,
+      entry: {
+        command: 'node',
+        args: [filename],
+      },
+    });
+    expect(result).toEqual({
+      kind: 'local',
+      source: 'bundled',
+      runtime: 'node',
+      path: cwd,
+      command: 'node',
+      args: [filename],
+    });
   });
 
   it('rejects npx entries that do not declare a package', () => {
