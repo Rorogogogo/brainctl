@@ -7,11 +7,19 @@ import path from 'node:path';
 import YAML from 'yaml';
 
 import { ProfileError } from '../errors.js';
-import type { AgentName, PortableCredentialSpec, PortableProfileManifest, ProfileConfig } from '../types.js';
+import type {
+  AgentName,
+  LocalBundledMcpServerConfig,
+  McpServerConfig,
+  PortableCredentialSpec,
+  PortableProfileManifest,
+  ProfileConfig,
+} from '../types.js';
 import { createAgentConfigService, type AgentConfigService } from './agent-config-service.js';
 import { redactPortableMcpCredentials } from './credential-redaction-service.js';
 import { createProfileService, type ProfileService } from './profile-service.js';
 import { classifyPortableMcp } from './portable-mcp-classifier.js';
+import { findProjectRoot, getDefaultExclude, getDefaultInstall } from './runtime-detector.js';
 
 const packageVersion = JSON.parse(
   readFileSync(new URL('../../package.json', import.meta.url), 'utf8')
@@ -59,9 +67,10 @@ export function createPortableProfilePackService(
         for (const [key, sourcePath] of packed.bundledSources) {
           const destPath = path.join(stagingDir, 'mcps', key);
           await mkdir(destPath, { recursive: true });
+          const excludePatterns = getExcludePatternsForMcp(packed.profile.mcps[key]);
           await cp(sourcePath, destPath, {
             recursive: true,
-            filter: (src) => !src.includes('node_modules'),
+            filter: (src) => !matchesExcludePattern(src, excludePatterns),
           });
         }
 
@@ -111,15 +120,36 @@ async function buildPackedProfile(options: {
     ...Object.keys(agentConfig.remoteMcpServers),
   ]);
   const mcps = Object.fromEntries(
-    Array.from(mcpKeys, (key) => [
-      key,
-      classifyPortableMcp({
+    Array.from(mcpKeys, (key) => {
+      const classified = classifyPortableMcp({
         cwd: options.cwd,
         key,
         entry: agentConfig.mcpServers[key] ?? { command: '' },
         remote: agentConfig.remoteMcpServers[key],
-      }),
-    ])
+      });
+
+      if (classified.kind === 'local' && classified.source === 'bundled') {
+        const entrypoint = agentConfig.mcpServers[key]?.args?.[0];
+        const entrypointPath = entrypoint
+          ? path.resolve(agentSource.cwd, entrypoint)
+          : classified.path;
+        const { marker } = findProjectRoot(entrypointPath, classified.runtime);
+        if (!classified.install) {
+          const defaultInstall = getDefaultInstall(classified.runtime, marker, classified.path, entrypoint);
+          if (defaultInstall) {
+            classified.install = defaultInstall;
+          }
+        }
+        if (!classified.exclude) {
+          const defaultExclude = getDefaultExclude(classified.runtime, marker);
+          if (defaultExclude) {
+            classified.exclude = defaultExclude;
+          }
+        }
+      }
+
+      return [key, classified];
+    })
   );
 
   const profileName = `${sanitizePackName(path.basename(options.cwd) || 'workspace')}-${agentSource.agent}`;
@@ -199,4 +229,23 @@ function sanitizePackName(value: string): string {
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '') || 'workspace';
+}
+
+function getExcludePatternsForMcp(mcp: McpServerConfig): string[] {
+  if (mcp.kind === 'local' && mcp.source === 'bundled' && mcp.exclude) {
+    return mcp.exclude;
+  }
+  return ['node_modules'];
+}
+
+function matchesExcludePattern(filePath: string, patterns: string[]): boolean {
+  const basename = path.basename(filePath);
+  for (const pattern of patterns) {
+    if (pattern.startsWith('*')) {
+      if (basename.endsWith(pattern.slice(1))) return true;
+    } else if (basename === pattern) {
+      return true;
+    }
+  }
+  return false;
 }
