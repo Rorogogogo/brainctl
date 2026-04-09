@@ -18,6 +18,7 @@ import { createSkillPreflightService, type SkillPreflightService } from './skill
 import { getSkillDir } from './skill-paths.js';
 
 export type { AgentLiveConfig, AgentMcpEntry, AgentSkillEntry } from './sync/agent-reader.js';
+export type { PortableRemoteMcpMetadata } from './sync/agent-reader.js';
 
 export interface AgentConfigService {
   readAll(options: { cwd: string }): Promise<AgentLiveConfig[]>;

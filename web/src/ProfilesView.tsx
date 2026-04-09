@@ -217,32 +217,37 @@ function DraggableCard({
 
   const statusClass =
     status === 'added'
-      ? ' is-pending-add'
+      ? ' border-emerald-200/80 bg-emerald-50/50'
       : status === 'removed'
-      ? ' is-pending-remove'
-      : '';
+      ? ' border-red-200/80 bg-red-50/50 opacity-75 line-through'
+      : ' border-zinc-200/80 bg-white';
+      
+  const editableClass = editable
+    ? ' cursor-grab hover:border-zinc-400 hover:shadow-md active:cursor-grabbing'
+    : '';
+
   const dragProps = editable ? { ...listeners, ...attributes } : {};
 
   return (
     <div
       ref={setNodeRef}
-      className={`profile-card${isDragging ? ' is-dragging' : ''}${statusClass}${editable ? ' is-editable' : ''}`}
+      className={`flex items-start gap-2 rounded-xl border p-2.5 shadow-sm transition-all ${isDragging ? 'opacity-45' : ''}${statusClass}${editableClass}`}
       {...dragProps}
     >
-      <div className="profile-card-row">
-        {icon ? <span className="profile-card-kind">{icon}</span> : null}
-        <div className="profile-card-content">
-          <strong>{label}</strong>
-          <span className="muted-copy">{sublabel}</span>
+      <div className="flex w-full items-start gap-2">
+        {icon ? <span className="grid size-6 shrink-0 place-items-center rounded-lg border border-zinc-200/80 bg-white text-zinc-900 shadow-sm">{icon}</span> : null}
+        <div className="grid min-w-0 flex-1 gap-0.5">
+          <strong className="truncate text-[13px] font-semibold text-zinc-900">{label}</strong>
+          <span className="truncate text-[11px] text-zinc-500">{sublabel}</span>
         </div>
         {status && (
-          <span className={`pending-badge${status === 'added' ? ' is-add' : ' is-remove'}`}>
+          <span className={`inline-flex shrink-0 items-center justify-center rounded-[6px] px-1.5 py-0.5 text-[11px] font-bold leading-none ${status === 'added' ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>
             {status === 'added' ? '+' : '-'}
           </span>
         )}
         {onRemove && !status && (
           <button
-            className="profile-card-remove"
+            className="grid size-6 shrink-0 place-items-center rounded-lg text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-zinc-900"
             type="button"
             onPointerDown={(event) => event.stopPropagation()}
             onClick={onRemove}
@@ -258,14 +263,14 @@ function DraggableCard({
 
 function OverlayCard({ label, sublabel }: { label: string; sublabel: string }) {
   return (
-    <div className="profile-card-overlay">
-      <div className="profile-card-row">
-        <span className="profile-card-kind">
+    <div className="flex items-start gap-2 rounded-xl border border-zinc-300 bg-white p-2.5 shadow-2xl shadow-zinc-900/10">
+      <div className="flex w-full items-start gap-2">
+        <span className="grid size-6 shrink-0 place-items-center rounded-lg border border-zinc-200/80 bg-white text-zinc-900 shadow-sm">
           <ArrowRightLeft size={14} />
         </span>
-        <div className="profile-card-content">
-          <strong>{label}</strong>
-          <span className="muted-copy">{sublabel}</span>
+        <div className="grid min-w-0 flex-1 gap-0.5">
+          <strong className="truncate text-[13px] font-semibold text-zinc-900">{label}</strong>
+          <span className="truncate text-[11px] text-zinc-500">{sublabel}</span>
         </div>
       </div>
     </div>
@@ -291,12 +296,18 @@ function StaticCard({
 }) {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id, disabled: !editable });
   const [expanded, setExpanded] = useState(false);
+  
   const statusClass =
     status === 'added'
-      ? ' is-pending-add'
+      ? ' border-emerald-200/80 bg-emerald-50/50'
       : status === 'removed'
-      ? ' is-pending-remove'
-      : '';
+      ? ' border-red-200/80 bg-red-50/50 opacity-75 line-through'
+      : ' border-zinc-200/80 bg-white';
+      
+  const editableClass = editable
+    ? ' cursor-grab hover:border-zinc-400 hover:shadow-md active:cursor-grabbing'
+    : '';
+
   const skillCount = details?.length ?? 0;
   const hasDetails = skillCount > 0;
   const dragProps = editable ? { ...listeners, ...attributes } : {};
@@ -304,24 +315,24 @@ function StaticCard({
   return (
     <div
       ref={setNodeRef}
-      className={`profile-card${isDragging ? ' is-dragging' : ''}${statusClass}${editable ? ' is-editable' : ''}`}
+      className={`flex flex-col items-start gap-1 rounded-xl border p-2.5 shadow-sm transition-all ${isDragging ? 'opacity-45' : ''}${statusClass}${editableClass}`}
       {...dragProps}
     >
-      <div className="profile-card-row">
-        <div className="profile-card-content">
-          <strong>{label}</strong>
-          <span className="muted-copy">{sublabel}</span>
+      <div className="flex w-full items-start gap-2">
+        <div className="grid min-w-0 flex-1 gap-0.5">
+          <strong className="truncate text-[13px] font-semibold text-zinc-900">{label}</strong>
+          <span className="truncate text-[11px] text-zinc-500">{sublabel}</span>
         </div>
         {status ? (
-          <span className={`pending-badge${status === 'added' ? ' is-add' : ' is-remove'}`}>
+          <span className={`inline-flex shrink-0 items-center justify-center rounded-[6px] px-1.5 py-0.5 text-[11px] font-bold leading-none ${status === 'added' ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>
             {status === 'added' ? '+' : '-'}
           </span>
         ) : (
-          <span className="pending-badge">plugin</span>
+          <span className="inline-flex shrink-0 items-center justify-center rounded-[6px] bg-zinc-100 px-1.5 py-0.5 text-[11px] font-bold leading-none text-zinc-500">plugin</span>
         )}
         {hasDetails ? (
           <button
-            className="profile-card-toggle"
+            className="grid size-6 shrink-0 place-items-center rounded-lg text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-zinc-900"
             type="button"
             onPointerDown={(event) => event.stopPropagation()}
             onClick={() => setExpanded((value) => !value)}
@@ -333,7 +344,7 @@ function StaticCard({
         ) : null}
         {onRemove && !status ? (
           <button
-            className="profile-card-remove"
+            className="grid size-6 shrink-0 place-items-center rounded-lg text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-zinc-900"
             type="button"
             onPointerDown={(event) => event.stopPropagation()}
             onClick={onRemove}
@@ -344,8 +355,8 @@ function StaticCard({
         ) : null}
       </div>
       {hasDetails && expanded ? (
-        <div className="profile-card-content profile-card-details">
-          <span className="muted-copy">
+        <div className="pl-1 pt-1">
+          <span className="text-[11px] leading-relaxed text-zinc-500">
             {details!.join(', ')}
           </span>
         </div>
@@ -372,14 +383,14 @@ function DroppableZone({
   return (
     <div
       ref={setNodeRef}
-      className={`profile-drop-zone${isOver ? ' is-over' : ''}`}
+      className={`grid min-h-[88px] gap-2 rounded-xl p-2 transition-all ${isOver ? 'bg-slate-50 shadow-inner ring-1 ring-zinc-200' : 'bg-transparent'}`}
     >
-      <div className="profile-drop-zone-header">
-        <div className="profile-drop-zone-title">
-          <span className="profile-drop-zone-icon">{icon}</span>
-          <p className="eyebrow">{label}</p>
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2.5">
+          <span className="grid size-6 shrink-0 place-items-center rounded-lg border border-zinc-200/80 bg-white text-zinc-900 shadow-sm">{icon}</span>
+          <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-400 m-0">{label}</p>
         </div>
-        <span className="profile-count-pill">{count}</span>
+        <span className="inline-flex min-w-[32px] items-center justify-center rounded-full border border-zinc-200/80 bg-white px-2 py-0.5 text-[11px] font-bold text-zinc-900 shadow-sm">{count}</span>
       </div>
       {children}
     </div>
@@ -415,32 +426,32 @@ function AgentColumn({
   const { skills: localSkills, plugins } = splitAgentSkillEntries(config.skills);
 
   return (
-    <div className={`profile-column panel-inner profile-column-${config.agent}`}>
-      <div className="profile-column-header">
-        <div className="profile-column-title">
-          <span className="profile-agent-mark">
-            <AgentLogo agent={config.agent} className="profile-agent-logo" />
+    <div className={`flex flex-col gap-4 rounded-2xl border border-zinc-200/80 bg-white p-5 shadow-sm profile-column-${config.agent}`}>
+      <div className="flex items-start justify-between gap-4">
+        <div className="flex min-w-0 items-center gap-3">
+          <span className="grid size-10 place-items-center rounded-xl border border-zinc-200/80 bg-gradient-to-b from-white to-zinc-50 text-sm font-bold shadow-sm">
+            <AgentLogo agent={config.agent} className="size-5 overflow-hidden" />
           </span>
-          <div>
-          <p className="eyebrow">{AGENT_LABELS[config.agent] ?? config.agent}</p>
-          <p className="muted-copy agent-config-path">{config.configPath}</p>
+          <div className="space-y-0.5 overflow-hidden">
+            <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-400 m-0">{AGENT_LABELS[config.agent] ?? config.agent}</p>
+            <p className="font-mono text-[11px] text-zinc-500 m-0 break-all">{config.configPath}</p>
           </div>
         </div>
         <span
-          className={`status-chip${config.exists ? ' profile-active-badge' : ''}`}
+          className={`inline-flex items-center gap-1.5 rounded-full border border-zinc-200/80 px-2.5 py-1 text-[11px] font-semibold shadow-sm ${config.exists ? 'bg-zinc-900 text-white border-zinc-900' : 'bg-white text-zinc-500'}`}
         >
           {config.exists ? 'Found' : 'No config'}
         </span>
       </div>
 
-      <div className="profile-agent-stats">
-        <span className="profile-stat-chip">
+      <div className="flex flex-wrap gap-1.5">
+        <span className="inline-flex items-center gap-1.5 rounded-full border border-zinc-200/80 bg-white px-2.5 py-1 text-[11px] font-semibold text-zinc-500 shadow-sm">
           <Server size={12} /> {mcpEntries.length} MCPs
         </span>
-        <span className="profile-stat-chip">
+        <span className="inline-flex items-center gap-1.5 rounded-full border border-zinc-200/80 bg-white px-2.5 py-1 text-[11px] font-semibold text-zinc-500 shadow-sm">
           <FileText size={12} /> {localSkills.length} Skills
         </span>
-        <span className="profile-stat-chip">
+        <span className="inline-flex items-center gap-1.5 rounded-full border border-zinc-200/80 bg-white px-2.5 py-1 text-[11px] font-semibold text-zinc-500 shadow-sm">
           <Boxes size={12} /> {plugins.length} Plugins
         </span>
       </div>
@@ -478,7 +489,7 @@ function AgentColumn({
           );
         })}
         {mcpEntries.length === 0 && (
-          <p className="muted-copy">No MCPs configured.</p>
+          <p className="text-sm text-zinc-500 m-0">No MCPs configured.</p>
         )}
       </DroppableZone>
 
@@ -510,7 +521,7 @@ function AgentColumn({
           );
         })}
         {localSkills.length === 0 && (
-          <p className="muted-copy">No skills installed.</p>
+          <p className="text-sm text-zinc-500 m-0">No skills installed.</p>
         )}
       </DroppableZone>
 
@@ -541,7 +552,7 @@ function AgentColumn({
           );
         })}
         {plugins.length === 0 && (
-          <p className="muted-copy">No plugins discovered.</p>
+          <p className="text-sm text-zinc-500 m-0">No plugins discovered.</p>
         )}
       </DroppableZone>
     </div>
@@ -568,32 +579,32 @@ function PendingChangesBar({
   if (changes.length === 0) return null;
 
   return (
-    <div className="pending-changes-bar panel-inner">
-      <div className="pending-changes-header">
-        <p className="eyebrow">
+    <div className="sticky top-3 z-10 grid gap-3 rounded-2xl border border-zinc-200/80 bg-white p-5 shadow-xl shadow-zinc-200/40">
+      <div className="flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-center">
+        <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-400 m-0">
           {changes.length} pending change{changes.length > 1 ? 's' : ''}
         </p>
-        <div className="pending-changes-actions">
-          <button className="secondary-button" onClick={onDiscardAll} disabled={saving}>
+        <div className="flex flex-wrap gap-2">
+          <button className="inline-flex min-h-[36px] items-center gap-2 rounded-lg border border-zinc-200/80 bg-white px-3.5 text-sm font-medium text-zinc-600 shadow-sm transition-all hover:bg-zinc-50 hover:text-zinc-900 disabled:opacity-50" onClick={onDiscardAll} disabled={saving}>
             <Undo2 size={14} /> Discard all
           </button>
-          <button className="run-button" onClick={onSave} disabled={saving}>
-            {saving ? <Loader2 size={14} className="spinner" /> : <Save size={14} />}{' '}
+          <button className="inline-flex min-h-[36px] items-center gap-2 rounded-lg border border-zinc-900 bg-zinc-900 px-3.5 text-sm font-medium text-white shadow-md transition-all hover:bg-zinc-800 disabled:opacity-50" onClick={onSave} disabled={saving}>
+            {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}{' '}
             Save & apply
           </button>
         </div>
       </div>
-      <div className="pending-changes-list">
+      <div className="grid gap-2">
         {changes.map((change) => (
           <div
             key={change.id}
-            className={`pending-change-item${change.type === 'add' ? ' is-add' : ' is-remove'}`}
+            className={`flex items-center gap-3 rounded-xl border p-3 text-[13px] ${change.type === 'add' ? 'border-emerald-200/80 bg-emerald-50/50' : 'border-red-200/80 bg-red-50/50'}`}
           >
-            <span className="pending-change-icon">
-              {change.type === 'add' ? <Plus size={12} /> : <X size={12} />}
+            <span className={`grid place-items-center shrink-0 ${change.type === 'add' ? 'text-emerald-600' : 'text-red-600'}`}>
+              {change.type === 'add' ? <Plus size={14} /> : <X size={14} />}
             </span>
-            <span className="pending-change-text">
-              <strong>[{change.category}] {change.key}</strong>
+            <span className="flex-1 min-w-0 truncate">
+              <strong className="font-semibold text-zinc-900">[{change.category}] {change.key}</strong>
               {change.type === 'add' ? (
                 <>
                   {' '}&rarr; {AGENT_LABELS[change.agent]}
@@ -604,12 +615,12 @@ function PendingChangesBar({
               )}
             </span>
             <button
-              className="pending-change-undo"
+              className="grid size-[26px] shrink-0 place-items-center rounded-lg text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-zinc-900"
               onClick={() => onUndoChange(change.id)}
               title="Undo this change"
               disabled={saving}
             >
-              <Undo2 size={12} />
+              <Undo2 size={14} />
             </button>
           </div>
         ))}
@@ -1010,9 +1021,9 @@ export default function ProfilesView() {
 
   if (loading) {
     return (
-      <div className="view-stack">
-        <div className="profile-loading">
-          <Loader2 size={20} className="spinner" /> Loading agent configs...
+      <div className="grid gap-4">
+        <div className="flex items-center gap-2.5 py-3 text-zinc-500">
+          <Loader2 size={20} className="animate-spin" /> Loading agent configs...
         </div>
       </div>
     );
@@ -1029,25 +1040,25 @@ export default function ProfilesView() {
   );
 
   return (
-    <div className="view-stack">
-      <div className="profile-stage-header">
-        <div className="profile-stage-copy">
-          <h3>Local agents</h3>
-          <span className="muted-copy">Drag skills, MCPs, and plugins across columns.</span>
+    <div className="grid gap-6">
+      <div className="flex flex-col items-stretch gap-4 border-b border-zinc-100 pb-4 lg:flex-row lg:items-center lg:justify-between lg:pb-1">
+        <div className="grid gap-1">
+          <h3 className="text-lg font-semibold tracking-tight text-zinc-900 m-0">Local agents</h3>
+          <span className="text-sm text-zinc-500">Drag skills, MCPs, and plugins across columns.</span>
         </div>
 
-        <div className="profile-stage-toolbar">
-          <span className="profile-stage-pill">
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-zinc-200/80 bg-white px-2.5 py-1 text-[11px] font-semibold text-zinc-500 shadow-sm">
             <ArrowRightLeft size={13} /> {liveAgentCount} agents
           </span>
-          <span className="profile-stage-pill">
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-zinc-200/80 bg-white px-2.5 py-1 text-[11px] font-semibold text-zinc-500 shadow-sm">
             <Boxes size={13} /> {totalPortableItems} items
           </span>
-          <span className="profile-stage-pill">
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-zinc-200/80 bg-white px-2.5 py-1 text-[11px] font-semibold text-zinc-500 shadow-sm">
             <Save size={13} /> {pendingChanges.length} staged
           </span>
           <button
-            className={`secondary-button profile-edit-button${isEditMode ? ' is-active' : ''}`}
+            className={`inline-flex min-h-[36px] items-center gap-2 rounded-lg border px-3.5 text-sm font-medium shadow-sm transition-all disabled:opacity-50 ${isEditMode ? 'border-zinc-900 bg-zinc-900 text-white' : 'border-zinc-200/80 bg-white text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900'}`}
             type="button"
             onClick={() => setIsEditMode((value) => !value)}
             disabled={saving}
@@ -1056,7 +1067,7 @@ export default function ProfilesView() {
             {isEditMode ? 'Done editing' : 'Edit items'}
           </button>
           <button
-            className="secondary-button"
+            className="inline-flex min-h-[36px] items-center gap-2 rounded-lg border border-zinc-200/80 bg-white px-3.5 text-sm font-medium text-zinc-600 shadow-sm transition-all hover:bg-zinc-50 hover:text-zinc-900 disabled:opacity-50"
             onClick={() => {
               setPendingChanges([]);
               void fetchLiveConfigs();
@@ -1082,7 +1093,7 @@ export default function ProfilesView() {
         onDragStart={handleDragStart}
         onDragEnd={handleDragEnd}
       >
-        <div className="profile-columns">
+        <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-3">
           {previewConfigs.map((config) => (
             <AgentColumn
               key={config.agent}
@@ -1107,7 +1118,7 @@ export default function ProfilesView() {
       </DndContext>
 
       {feedback && (
-        <div className={`save-feedback${feedback.type === 'error' ? ' is-error' : ''}`}>
+        <div className={`inline-flex items-center gap-2 rounded-lg border px-3.5 py-3 text-sm transition-all ${feedback.type === 'error' ? 'border-red-200/80 bg-red-50/50 text-red-800' : 'border-emerald-200/80 bg-emerald-50/50 text-emerald-800'}`}>
           {feedback.type === 'success' ? <Check size={16} /> : null}
           <span>{feedback.message}</span>
         </div>

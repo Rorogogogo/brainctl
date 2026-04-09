@@ -1,0 +1,19 @@
+name: team-profile
+description: Portable profile for shared team workflows
+skills:
+  summarize:
+    prompt: Summarize the document.
+mcps:
+  github:
+    kind: local
+    source: npm
+    package: "@modelcontextprotocol/server-github"
+  docs:
+    kind: remote
+    transport: http
+    url: "https://mcp.example.com"
+    headers:
+      Authorization: "Bearer ${credentials.internal_api_key}"
+memory:
+  paths:
+    - ./memory

@@ -1,0 +1,12 @@
+schemaVersion: 1
+profileName: team-profile
+createdBy:
+  tool: brainctl
+  version: 0.1.0
+source:
+  kind: profile
+  profileName: team-profile
+credentials:
+  - key: internal_api_key
+    required: true
+    description: Internal API key for remote MCP auth

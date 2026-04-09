@@ -196,17 +196,40 @@ export function createUiRouteHandler(
           return sendJson(response, 400, { error: 'Invalid JSON body' });
         }
 
-        const data = body.value as { name?: string; outputPath?: string };
-        if (!data.name || data.name.trim().length === 0) {
-          return sendJson(response, 400, { error: 'Missing profile name' });
+        const data = body.value as
+          | {
+              source?: { source?: 'profile'; name?: string } | { source?: 'agent'; agent?: string };
+              name?: string;
+              agent?: string;
+              outputPath?: string;
+            }
+          | undefined;
+        const source = data?.source;
+        const agent =
+          source?.source === 'agent'
+            ? source.agent
+            : data?.agent;
+        const normalizedAgent =
+          agent === 'claude' || agent === 'codex' || agent === 'gemini' ? agent : undefined;
+        const name =
+          source?.source === 'profile'
+            ? source.name
+            : data?.name;
+        const normalizedName =
+          typeof name === 'string' && name.trim().length > 0 ? name.trim() : undefined;
+
+        if (!normalizedAgent && !normalizedName) {
+          return sendJson(response, 400, { error: 'Missing profile name or agent' });
         }
 
         try {
           const result = await profileExportService.execute({
             cwd: dependencies.cwd,
-            name: data.name.trim(),
+            source: normalizedAgent
+              ? { source: 'agent', agent: normalizedAgent, cwd: dependencies.cwd }
+              : { source: 'profile', name: normalizedName as string },
             outputPath:
-              typeof data.outputPath === 'string' && data.outputPath.trim().length > 0
+              typeof data?.outputPath === 'string' && data.outputPath.trim().length > 0
                 ? data.outputPath.trim()
                 : undefined,
           });
@@ -225,7 +248,11 @@ export function createUiRouteHandler(
           return sendJson(response, 400, { error: 'Invalid JSON body' });
         }
 
-        const data = body.value as { archivePath?: string; force?: boolean };
+        const data = body.value as {
+          archivePath?: string;
+          force?: boolean;
+          credentials?: Record<string, unknown>;
+        };
         if (!data.archivePath || data.archivePath.trim().length === 0) {
           return sendJson(response, 400, { error: 'Missing archivePath' });
         }
@@ -235,6 +262,7 @@ export function createUiRouteHandler(
             cwd: dependencies.cwd,
             archivePath: data.archivePath.trim(),
             force: data.force === true,
+            credentials: parseCredentialMap(data.credentials),
           });
           return sendJson(response, 200, result);
         } catch (error) {
@@ -689,6 +717,22 @@ function sendProfileError(response: ServerResponse, error: unknown): void {
   return sendJson(response, 500, {
     error: error instanceof Error ? error.message : 'Internal server error',
   });
+}
+
+function parseCredentialMap(value: Record<string, unknown> | undefined): Record<string, string> | undefined {
+  if (!value) {
+    return undefined;
+  }
+
+  const credentials: Record<string, string> = {};
+  for (const [key, credentialValue] of Object.entries(value)) {
+    if (typeof credentialValue !== 'string' || credentialValue.trim().length === 0) {
+      throw new ProfileError(`Credential "${key}" must be a non-empty string.`);
+    }
+    credentials[key] = credentialValue;
+  }
+
+  return Object.keys(credentials).length > 0 ? credentials : undefined;
 }
 
 function sendJson(

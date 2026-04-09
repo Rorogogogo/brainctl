@@ -1,0 +1,8 @@
+schemaVersion: 1
+profileName: bundled-profile
+createdBy:
+  tool: brainctl
+  version: 0.1.0
+source:
+  kind: agent
+  agent: claude

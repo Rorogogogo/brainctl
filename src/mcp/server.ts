@@ -318,14 +318,21 @@ export function createMcpServer(options: { cwd?: string } = {}): FastMCP {
     name: 'brainctl_export_profile',
     description: 'Export a profile as a portable tarball. Packages the profile config and bundled MCP source code for sharing.',
     parameters: z.object({
-      name: z.string().describe('Profile name to export'),
+      name: z.string().optional().describe('Profile name to export'),
+      agent: z.enum(['claude', 'codex', 'gemini']).optional().describe('Pack a live agent config instead of a saved profile'),
       output_path: z.string().optional().describe('Output file path (defaults to <name>.tar.gz in cwd)'),
     }),
     execute: async (args) => {
+      if (!args.name && !args.agent) {
+        return JSON.stringify({ error: 'Provide name or agent.' }, null, 2);
+      }
+
       const exportService = createProfileExportService();
       const result = await exportService.execute({
         cwd,
-        name: args.name,
+        source: args.agent
+          ? { source: 'agent', agent: args.agent, cwd }
+          : { source: 'profile', name: args.name as string },
         outputPath: args.output_path,
       });
       return JSON.stringify(result, null, 2);
@@ -338,6 +345,7 @@ export function createMcpServer(options: { cwd?: string } = {}): FastMCP {
     parameters: z.object({
       archive_path: z.string().describe('Path to the profile tarball'),
       force: z.boolean().default(false).describe('Overwrite existing profile if it exists'),
+      credentials: z.record(z.string(), z.string()).optional().describe('Credential values keyed by placeholder name'),
     }),
     execute: async (args) => {
       const importService = createProfileImportService();
@@ -345,6 +353,7 @@ export function createMcpServer(options: { cwd?: string } = {}): FastMCP {
         cwd,
         archivePath: args.archive_path,
         force: args.force,
+        credentials: args.credentials,
       });
       return JSON.stringify(result, null, 2);
     },

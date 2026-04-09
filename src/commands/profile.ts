@@ -61,13 +61,24 @@ export function registerProfileCommand(program: Command, services: ProfileComman
 
   profileCmd
     .command('export')
-    .argument('<name>', 'Profile name to export')
+    .argument('[name]', 'Profile name to export')
+    .option('-a, --agent <name>', 'Pack a live agent config instead (claude, codex, gemini)')
     .option('-o, --output <path>', 'Output file path')
     .description('Export a profile as a portable tarball')
-    .action(async (name: string, options: { output?: string }) => {
+    .action(async (name: string | undefined, options: { agent?: string; output?: string }) => {
+      const agent =
+        options.agent === 'claude' || options.agent === 'codex' || options.agent === 'gemini'
+          ? options.agent
+          : undefined;
+      if (!agent && !name) {
+        throw new Error('Provide a profile name or --agent <name>.');
+      }
+
       const result = await profileExportService.execute({
         cwd: process.cwd(),
-        name,
+        source: agent
+          ? { source: 'agent', agent, cwd: process.cwd() }
+          : { source: 'profile', name: name as string },
         outputPath: options.output,
       });
       console.log(`Exported profile to ${result.archivePath}`);
@@ -77,12 +88,14 @@ export function registerProfileCommand(program: Command, services: ProfileComman
     .command('import')
     .argument('<archive>', 'Path to profile tarball')
     .option('--force', 'Overwrite existing profile', false)
+    .option('-c, --credential <key=value>', 'Provide a credential value for import', collectCredentialOption, [])
     .description('Import a profile from a tarball')
-    .action(async (archive: string, options: { force: boolean }) => {
+    .action(async (archive: string, options: { force: boolean; credential: string[] }) => {
       const result = await profileImportService.execute({
         cwd: process.cwd(),
         archivePath: archive,
         force: options.force,
+        credentials: toCredentialMap(options.credential),
       });
 
       console.log(`Imported profile "${result.profileName}"`);
@@ -90,4 +103,32 @@ export function registerProfileCommand(program: Command, services: ProfileComman
         console.log(`Installed bundled MCPs: ${result.installedMcps.join(', ')}`);
       }
     });
+}
+
+function collectCredentialOption(value: string, previous: string[]): string[] {
+  return [...previous, value];
+}
+
+function toCredentialMap(values: string[]): Record<string, string> | undefined {
+  if (values.length === 0) {
+    return undefined;
+  }
+
+  const credentials: Record<string, string> = {};
+  for (const value of values) {
+    const separatorIndex = value.indexOf('=');
+    if (separatorIndex <= 0 || separatorIndex === value.length - 1) {
+      throw new Error(`Invalid credential "${value}". Use key=value.`);
+    }
+
+    const key = value.slice(0, separatorIndex).trim();
+    const credentialValue = value.slice(separatorIndex + 1).trim();
+    if (!key || !credentialValue) {
+      throw new Error(`Invalid credential "${value}". Use key=value.`);
+    }
+
+    credentials[key] = credentialValue;
+  }
+
+  return credentials;
 }
