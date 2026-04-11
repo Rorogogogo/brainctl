@@ -14,8 +14,9 @@
 
 - 🔀 **Multi-agent support** — Claude Code, Codex, and Gemini CLI from one config
 - 🖥️ **Web dashboard** — Visual drag-and-drop MCP management across agents
-- 🔌 **MCP server** — 20 tools exposable to any MCP-compatible agent
-- 📦 **Portable profiles** — Export/import skill + MCP bundles as tarballs
+- 🔌 **MCP server** — 22 tools exposable to any MCP-compatible agent
+- 📦 **Portable profiles** — Pack and share skill + MCP bundles as self-contained tarballs
+- 🌐 **Multi-runtime packing** — Auto-detects and bundles Node, Python, Java, Go, Rust, and binary MCP servers
 - 🧠 **Shared memory** — Markdown-based context files shared across agents
 - 🧩 **Reusable skills** — Prompt templates stored in `ai-stack.yaml`
 - 🔄 **Profile sync** — Push configs to all agents in one command
@@ -94,8 +95,8 @@ brainctl ui
 | `brainctl profile list` | List available profiles |
 | `brainctl profile create <name>` | Create a new profile |
 | `brainctl profile use <name>` | Switch active profile |
-| `brainctl profile export [name] [--agent <claude\|codex\|gemini>]` | Pack a saved profile or live agent config as a portable tarball |
-| `brainctl profile import <archive> [--credential key=value] [--force]` | Import portable tarball, resolve credentials, and install bundled MCPs |
+| `brainctl profile export [name] [--agent <agent>]` | Pack a profile or live agent config as a portable tarball |
+| `brainctl profile import <archive> [--credential key=value]` | Import portable tarball and install bundled MCPs |
 | `brainctl sync` | Sync active profile to all agent configs |
 | `brainctl ui` | Start the web dashboard |
 
@@ -112,9 +113,43 @@ brainctl run analyze ./report.md --with codex --fallback claude
 brainctl run review ./code.md --with gemini
 ```
 
-### Profile MCP Format
+### Portable Profiles
 
-Packed/published profiles should classify every MCP as either `local` or `remote`.
+Pack and share your MCP setup with teammates. brainctl auto-detects the runtime for each MCP server and creates a self-contained archive.
+
+**Supported runtimes:**
+
+| Runtime | Detection | Install on unpack | Excluded from archive |
+|---------|-----------|------------------|-----------------------|
+| Node.js | `node`, `npx` | `npm install` | `node_modules/` |
+| Python | `python`, `python3` | `pip install` or `uv sync` | `.venv/`, `__pycache__/` |
+| Java | `java -jar` | — (self-contained) | — |
+| Java (project) | `pom.xml`, `build.gradle` | `mvn package` or `gradle build` | `target/`, `build/` |
+| Go | `go run` | `go build ./...` | — |
+| Rust | `cargo run` | `cargo build --release` | `target/` |
+| Binary | `./server` | — (self-contained) | — |
+
+```bash
+# Pack from a saved profile
+brainctl profile export starter
+
+# Pack from a live agent config
+brainctl profile export --agent claude
+
+# Import with credential resolution
+brainctl profile import ./starter.tar.gz \
+  --credential github_token=ghp_xxx \
+  --credential internal_api_key=sk_live_xxx
+```
+
+Archives contain:
+- `manifest.yaml` — schema version, pack source, required credentials
+- `profile.yaml` — normalized MCP definitions with explicit `runtime`, `install`, and `exclude`
+- Bundled MCP directories (source code, jars, binaries — minus build artifacts)
+
+Credentials are automatically redacted to `${credentials.<key>}` placeholders on export.
+
+### Profile MCP Format
 
 ```yaml
 mcps:
@@ -123,56 +158,21 @@ mcps:
     source: npm
     package: "@modelcontextprotocol/server-github"
 
+  my-python-mcp:
+    kind: local
+    source: bundled
+    runtime: python
+    path: ./mcps/my-python-mcp
+    command: python
+    args: ["server.py"]
+    install: "pip install -r requirements.txt"
+    exclude: [".venv", "__pycache__", "*.pyc"]
+
   internal-docs:
     kind: remote
     transport: http
     url: "https://mcp.example.com"
 ```
-
-Rules:
-
-- local profile files may still use the older `type: npm` / `type: bundled` MCP shape
-- `brainctl profile export` writes the packed profile using the explicit format below
-- portable archives include both `manifest.yaml` and `profile.yaml`
-- `manifest.yaml` must declare `schemaVersion: 1`
-- `local` MCPs must declare `source: npm` or `source: bundled`
-- `remote` MCPs must declare `transport` and `url`
-- bundled local MCPs must declare `path` and `command`
-- packed credentials are rewritten to placeholders such as `${credentials.github_token}` instead of storing raw secret values
-- `brainctl profile import` can resolve placeholders from repeated `--credential key=value` flags
-- bundled MCP installs are validated after unpack; invalid remote MCP urls are rejected during import
-- `brainctl sync` currently supports local MCPs only; remote MCPs remain in the profile package but are not written into agent configs yet
-
-### Portable Pack / Import
-
-Use a saved Brainctl profile:
-
-```bash
-brainctl profile export starter
-brainctl profile import ./starter.tar.gz
-```
-
-Pack a live agent config directly:
-
-```bash
-brainctl profile export --agent claude
-brainctl profile export --agent gemini --output ./team-gemini.tar.gz
-```
-
-Import a profile that declares credential placeholders:
-
-```bash
-brainctl profile import ./starter.tar.gz \
-  --credential github_token=ghp_xxx \
-  --credential internal_api_key=sk_live_xxx
-```
-
-Portable archives are manifest-driven:
-
-- `manifest.yaml` records the schema version, pack source, and required credentials
-- `profile.yaml` stores the normalized MCP definitions
-- bundled MCP folders are copied into the archive and restored from their declared relative `path`
-- overwrite imports remove the previous bundled MCP directory before reinstalling
 
 ---
 
@@ -215,7 +215,7 @@ mcps: {}
 
 ## 🔌 MCP Server
 
-brainctl exposes **20 MCP tools** that any compatible agent can call:
+brainctl exposes **22 MCP tools** that any compatible agent can call:
 
 ```bash
 # Add brainctl as an MCP server in your agent config
@@ -239,7 +239,9 @@ brainctl exposes **20 MCP tools** that any compatible agent can call:
 | **Memory** | `read_memory`, `write_memory` |
 | **Profiles** | `list_profiles`, `get_profile`, `create_profile`, `update_profile`, `delete_profile`, `switch_profile`, `copy_profile_items`, `export_profile`, `import_profile` |
 | **Agent Configs** | `read_agent_configs`, `add_agent_mcp`, `remove_agent_mcp` |
-| **System** | `status`, `doctor`, `sync` |
+| **Sync** | `sync` |
+| **System** | `status`, `doctor` |
+| **UI** | `open_ui`, `close_ui` |
 
 ---
 
@@ -258,7 +260,7 @@ Opens a local dashboard at `http://127.0.0.1:3333` with:
 - **MCP Manager** — View and edit MCP configurations
 - **Memory Viewer** — Browse shared markdown memory files
 - **Run Console** — Execute skills with real-time streaming output
-- **Portable Pack / Install** — Pack saved profiles or live agent configs, and install archives with an optional credential JSON map
+- **Portable Pack / Install** — Pack profiles or live agent configs, and install archives with credential resolution
 
 ---
 
@@ -269,11 +271,11 @@ brainctl/
 ├── src/
 │   ├── cli.ts              # CLI entry point (Commander)
 │   ├── commands/            # 8 command handlers
-│   ├── services/            # 11 business logic services
+│   ├── services/            # Business logic services
 │   │   └── sync/            # Agent config readers/writers
 │   ├── context/             # Memory loader, skill resolver, context builder
 │   ├── executor/            # Agent spawning (Claude, Codex, Gemini)
-│   ├── mcp/                 # FastMCP server (20 tools)
+│   ├── mcp/                 # FastMCP server (22 tools)
 │   └── ui/                  # HTTP server with SSE streaming
 ├── web/src/                 # React dashboard (Vite + dnd-kit)
 ├── tests/                   # Vitest test suite
