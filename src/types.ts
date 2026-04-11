@@ -67,6 +67,41 @@ export interface DiagnosticCheck {
 
 // --- Profile & Sync types ---
 
+export interface PortableCredentialSpec {
+  key: string;
+  required: boolean;
+  description?: string;
+}
+
+// Placeholder values are persisted into portable profile archives instead of raw secrets.
+// Redaction preserves already-placeholderized bearer/token forms as-is.
+export type PortableCredentialPlaceholder = `\${credentials.${string}}`;
+export type PortableCredentialPreservedValue =
+  | PortableCredentialPlaceholder
+  | `Bearer ${PortableCredentialPlaceholder}`
+  | `Token ${PortableCredentialPlaceholder}`;
+
+export type PortableProfileSource =
+  | {
+      kind: 'profile';
+      profileName: string;
+    }
+  | {
+      kind: 'agent';
+      agent: AgentName;
+    };
+
+export interface PortableProfileManifest {
+  schemaVersion: 1;
+  profileName: string;
+  createdBy?: {
+    tool: string;
+    version: string;
+  };
+  source?: PortableProfileSource;
+  credentials?: PortableCredentialSpec[];
+}
+
 export interface LocalNpmMcpServerConfig {
   kind: 'local';
   source: 'npm';
@@ -74,13 +109,17 @@ export interface LocalNpmMcpServerConfig {
   env?: Record<string, string>;
 }
 
+export type McpRuntime = 'node' | 'python' | 'java' | 'go' | 'rust' | 'binary';
+
 export interface LocalBundledMcpServerConfig {
   kind: 'local';
   source: 'bundled';
+  runtime: McpRuntime;
   path: string;
   install?: string;
   command: string;
   args?: string[];
+  exclude?: string[];
   env?: Record<string, string>;
 }
 

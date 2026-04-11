@@ -17,12 +17,21 @@ The new service is a separate repository and deployment target. It is not an ext
 
 The local `brainctl` CLI remains responsible for importing packages, unpacking bundled MCP servers, installing dependencies locally, rewriting local paths, and syncing local agent configs.
 
+The hosted platform should accept only Brainctl-packed portable archives, not raw Claude/Codex/Gemini config uploads. The portable archive contract should stay explicit:
+
+- `manifest.yaml` with `schemaVersion`
+- normalized `profile.yaml`
+- explicit MCP kinds (`local` or `remote`)
+- credential placeholders instead of raw secrets
+
 Packed profile artifacts should classify MCP entries explicitly:
 
 - `local`: installed or unpacked onto the user's machine before sync
 - `remote`: hosted elsewhere and referenced by connection metadata only
 
 This distinction belongs in the packed profile manifest itself so registry validation can reject ambiguous MCP definitions before publish, without forcing every local working profile file to migrate immediately.
+
+Credential handling should be pack-time, not publish-time inference. `brainctl pack` should replace detected or declared secrets with `${credentials.key}` placeholders and emit the required credential list into the manifest so install flows can prompt deterministically.
 
 ## Stack
 

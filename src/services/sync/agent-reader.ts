@@ -15,6 +15,13 @@ export interface AgentMcpEntry {
   env?: Record<string, string>;
 }
 
+export interface PortableRemoteMcpMetadata {
+  transport: 'http' | 'sse';
+  url: string;
+  headers?: Record<string, string>;
+  env?: Record<string, string>;
+}
+
 export interface AgentSkillEntry {
   name: string;
   source?: string; // e.g. "claude-plugins-official", "local"
@@ -30,6 +37,7 @@ export interface AgentLiveConfig {
   configPath: string;
   exists: boolean;
   mcpServers: Record<string, AgentMcpEntry>;
+  remoteMcpServers: Record<string, PortableRemoteMcpMetadata>;
   skills: AgentSkillEntry[];
 }
 
@@ -60,10 +68,24 @@ export function createClaudeReader(): AgentConfigReader {
         }
 
         const skills = await readClaudePlugins();
-        return { agent: 'claude', configPath, exists: true, mcpServers, skills };
+        return {
+          agent: 'claude',
+          configPath,
+          exists: true,
+          mcpServers,
+          remoteMcpServers: {},
+          skills,
+        };
       } catch {
         const skills = await readClaudePlugins();
-        return { agent: 'claude', configPath, exists: false, mcpServers: {}, skills };
+        return {
+          agent: 'claude',
+          configPath,
+          exists: false,
+          mcpServers: {},
+          remoteMcpServers: {},
+          skills,
+        };
       }
     },
   };
@@ -78,10 +100,24 @@ export function createCodexReader(): AgentConfigReader {
         const source = await readFile(configPath, 'utf8');
         const mcpServers = parseCodexToml(source);
         const skills = await readCodexSkills();
-        return { agent: 'codex', configPath, exists: true, mcpServers, skills };
+        return {
+          agent: 'codex',
+          configPath,
+          exists: true,
+          mcpServers,
+          remoteMcpServers: {},
+          skills,
+        };
       } catch {
         const skills = await readCodexSkills();
-        return { agent: 'codex', configPath, exists: false, mcpServers: {}, skills };
+        return {
+          agent: 'codex',
+          configPath,
+          exists: false,
+          mcpServers: {},
+          remoteMcpServers: {},
+          skills,
+        };
       }
     },
   };
@@ -107,10 +143,24 @@ export function createGeminiReader(): AgentConfigReader {
         }
 
         const skills = await readGeminiSkills();
-        return { agent: 'gemini', configPath, exists: true, mcpServers, skills };
+        return {
+          agent: 'gemini',
+          configPath,
+          exists: true,
+          mcpServers,
+          remoteMcpServers: {},
+          skills,
+        };
       } catch {
         const skills = await readGeminiSkills();
-        return { agent: 'gemini', configPath, exists: false, mcpServers: {}, skills };
+        return {
+          agent: 'gemini',
+          configPath,
+          exists: false,
+          mcpServers: {},
+          remoteMcpServers: {},
+          skills,
+        };
       }
     },
   };

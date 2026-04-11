@@ -4,7 +4,9 @@ import path from 'node:path';
 import YAML from 'yaml';
 
 import { ProfileError, ProfileNotFoundError } from '../errors.js';
-import type { AgentName, BrainctlMetaConfig, McpServerConfig, ProfileConfig, SkillConfig } from '../types.js';
+import type { AgentName, BrainctlMetaConfig, McpRuntime, McpServerConfig, ProfileConfig, SkillConfig } from '../types.js';
+
+const VALID_RUNTIMES = new Set<McpRuntime>(['node', 'python', 'java', 'go', 'rust', 'binary']);
 
 const BRAINCTL_DIR = '.brainctl';
 const PROFILES_DIR = '.brainctl/profiles';
@@ -275,10 +277,12 @@ function normalizeMcps(value: unknown, profileName: string): Record<string, McpS
       mcps[key] = {
         kind: 'local',
         source: 'bundled',
+        runtime: parseMcpRuntime(mcp.runtime),
         path: mcp.path,
         install: typeof mcp.install === 'string' ? mcp.install : undefined,
         command: mcp.command,
         args: parseStringArray(mcp.args),
+        ...(Array.isArray(mcp.exclude) ? { exclude: mcp.exclude.filter((v: unknown) => typeof v === 'string') } : {}),
         env: parseStringMap(mcp.env),
       };
       continue;
@@ -341,10 +345,12 @@ function normalizeMcps(value: unknown, profileName: string): Record<string, McpS
     mcps[key] = {
       kind: 'local',
       source: 'bundled',
+      runtime: parseMcpRuntime(mcp.runtime),
       path: mcp.path,
       install: typeof mcp.install === 'string' ? mcp.install : undefined,
       command: mcp.command,
       args: parseStringArray(mcp.args),
+      ...(Array.isArray(mcp.exclude) ? { exclude: mcp.exclude.filter((v: unknown) => typeof v === 'string') } : {}),
       env: parseStringMap(mcp.env),
     };
   }
@@ -361,6 +367,13 @@ function parseStringMap(value: unknown): Record<string, string> | undefined {
     result[k] = String(v);
   }
   return Object.keys(result).length > 0 ? result : undefined;
+}
+
+function parseMcpRuntime(value: unknown): McpRuntime {
+  if (typeof value === 'string' && VALID_RUNTIMES.has(value as McpRuntime)) {
+    return value as McpRuntime;
+  }
+  return 'node';
 }
 
 function parseStringArray(value: unknown): string[] | undefined {

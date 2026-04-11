@@ -118,25 +118,32 @@ export default function RunView({ workspace }: RunViewProps) {
           ? 'Stream failed'
           : 'Ready';
 
+  const stateClasses = {
+    idle: 'border-zinc-200/80 bg-white text-zinc-500',
+    running: 'border-zinc-200 bg-zinc-100 text-zinc-700',
+    success: 'border-emerald-200/80 bg-emerald-50/50 text-emerald-800',
+    error: 'border-red-200/80 bg-red-50/50 text-red-800',
+  }[state];
+
   return (
-    <div className="view-stack run-view">
-      <section className="panel-inner run-panel">
-        <div className="section-header">
+    <div className="grid gap-6">
+      <section className="rounded-2xl border border-zinc-200/80 bg-white p-6 shadow-sm lg:p-8">
+        <div className="mb-6 flex items-start justify-between gap-4">
           <div>
-            <p className="eyebrow">Run workflow</p>
-            <h3>Launch a streamed execution</h3>
+            <p className="mb-1 block text-[10px] font-bold uppercase tracking-widest text-zinc-400">Run workflow</p>
+            <h3 className="m-0 text-xl font-semibold tracking-tight text-zinc-900">Launch a streamed execution</h3>
           </div>
-          <span className={`status-chip run-state ${state}`}>
-            {state === 'running' ? <LoaderCircle size={14} className="run-state-spinner" /> : null}
+          <span className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-[13px] font-medium shadow-sm transition-colors ${stateClasses}`}>
+            {state === 'running' ? <LoaderCircle size={14} className="animate-spin" /> : null}
             {statusLabel}
           </span>
         </div>
 
-        <form className="run-form" onSubmit={handleSubmit}>
-          <label className="field">
-            <span className="field-label">Skill</span>
+        <form className="grid gap-5" onSubmit={handleSubmit}>
+          <label className="grid gap-2 text-sm">
+            <span className="font-semibold text-zinc-800">Skill</span>
             <select
-              className="field-control"
+              className="min-h-[44px] w-full appearance-none rounded-xl border border-zinc-200 bg-white px-4 text-sm font-medium text-zinc-900 shadow-sm outline-none transition-all focus:border-zinc-400 focus:ring-4 focus:ring-zinc-100 disabled:opacity-50"
               value={form.skill}
               onChange={(event) => setForm((current) => ({ ...current, skill: event.target.value }))}
             >
@@ -149,13 +156,13 @@ export default function RunView({ workspace }: RunViewProps) {
                 </option>
               ))}
             </select>
-            <span className="field-help">Uses the selected skill prompt from ai-stack.yaml.</span>
+            <span className="text-[13px] leading-relaxed text-zinc-500">Uses the selected skill prompt from ai-stack.yaml.</span>
           </label>
 
-          <label className="field">
-            <span className="field-label">Input file path</span>
+          <label className="grid gap-2 text-sm">
+            <span className="font-semibold text-zinc-800">Input file path</span>
             <input
-              className="field-control"
+              className="min-h-[44px] w-full rounded-xl border border-zinc-200 bg-white px-4 text-sm font-medium text-zinc-900 shadow-sm outline-none transition-all placeholder:font-normal placeholder:text-zinc-400 focus:border-zinc-400 focus:ring-4 focus:ring-zinc-100 disabled:opacity-50"
               value={form.inputFile}
               onChange={(event) =>
                 setForm((current) => ({ ...current, inputFile: event.target.value }))
@@ -163,14 +170,14 @@ export default function RunView({ workspace }: RunViewProps) {
               placeholder="./input.md"
               spellCheck={false}
             />
-            <span className="field-help">Relative to the current workspace.</span>
+            <span className="text-[13px] leading-relaxed text-zinc-500">Relative to the current workspace.</span>
           </label>
 
-          <div className="run-agent-grid">
-            <label className="field">
-              <span className="field-label">Primary agent</span>
+          <div className="grid gap-5 sm:grid-cols-2">
+            <label className="grid gap-2 text-sm">
+              <span className="font-semibold text-zinc-800">Primary agent</span>
               <select
-                className="field-control"
+                className="min-h-[44px] w-full appearance-none rounded-xl border border-zinc-200 bg-white px-4 text-sm font-medium text-zinc-900 shadow-sm outline-none transition-all focus:border-zinc-400 focus:ring-4 focus:ring-zinc-100 disabled:opacity-50"
                 value={form.primaryAgent}
                 onChange={(event) =>
                   setForm((current) => {
@@ -190,13 +197,13 @@ export default function RunView({ workspace }: RunViewProps) {
                   </option>
                 ))}
               </select>
-              <span className="field-help">Unavailable agents stay selectable for fallback testing.</span>
+              <span className="text-[13px] leading-relaxed text-zinc-500">Unavailable agents stay selectable for fallback testing.</span>
             </label>
 
-            <label className="field">
-              <span className="field-label">Fallback agent</span>
+            <label className="grid gap-2 text-sm">
+              <span className="font-semibold text-zinc-800">Fallback agent</span>
               <select
-                className="field-control"
+                className="min-h-[44px] w-full appearance-none rounded-xl border border-zinc-200 bg-white px-4 text-sm font-medium text-zinc-900 shadow-sm outline-none transition-all focus:border-zinc-400 focus:ring-4 focus:ring-zinc-100 disabled:opacity-50"
                 value={form.fallbackAgent}
                 onChange={(event) =>
                   setForm((current) => ({
@@ -212,34 +219,38 @@ export default function RunView({ workspace }: RunViewProps) {
                   </option>
                 ))}
               </select>
-              <span className="field-help">Used only if the primary agent is unavailable.</span>
+              <span className="text-[13px] leading-relaxed text-zinc-500">Used only if the primary agent is unavailable.</span>
             </label>
           </div>
 
-          <div className="run-actions">
-            <button className="run-button" type="submit" disabled={!canRun}>
-              {state === 'running' ? <LoaderCircle size={16} className="run-button-spinner" /> : <Play size={16} />}
+          <div className="flex flex-col gap-4 pt-2 sm:flex-row sm:items-center">
+            <button
+              className="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-xl bg-zinc-950 px-6 text-sm font-medium text-white shadow-md transition-all hover:bg-zinc-800 hover:shadow-lg active:scale-[0.98] disabled:pointer-events-none disabled:opacity-50"
+              type="submit"
+              disabled={!canRun}
+            >
+              {state === 'running' ? <LoaderCircle size={16} className="animate-spin" /> : <Play size={16} />}
               {state === 'running' ? 'Running' : 'Run'}
             </button>
-            <p className="field-help">
-              Streams output from <code>/api/run/stream</code> and clears the previous run on submit.
+            <p className="text-[13px] leading-relaxed text-zinc-500">
+              Streams output from <code className="rounded-md bg-zinc-100 px-1.5 py-0.5 font-mono text-[11px] text-zinc-800">/api/run/stream</code> and clears the previous run on submit.
             </p>
           </div>
         </form>
       </section>
 
-      <div className="run-detail-grid">
-        <section className="panel-inner run-output-panel">
-          <div className="section-header">
+      <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1.3fr)_minmax(300px,0.9fr)]">
+        <section className="rounded-2xl border border-zinc-200/80 bg-white p-6 shadow-sm lg:p-8">
+          <div className="mb-6 flex items-start justify-between gap-4">
             <div>
-              <p className="eyebrow">Live output</p>
-              <h3>Streaming surface</h3>
+              <p className="mb-1 block text-[10px] font-bold uppercase tracking-widest text-zinc-400">Live output</p>
+              <h3 className="m-0 text-xl font-semibold tracking-tight text-zinc-900">Streaming surface</h3>
             </div>
-            <span className="muted-pill">EventSource</span>
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-zinc-200/80 bg-white px-2.5 py-1 text-[11px] font-semibold text-zinc-500 shadow-sm">EventSource</span>
           </div>
 
           <textarea
-            className="run-output"
+            className="min-h-[360px] w-full resize-y rounded-xl border border-zinc-200 bg-zinc-50/50 p-4 font-mono text-[13px] leading-relaxed text-zinc-800 shadow-sm outline-none transition-all placeholder:text-zinc-400 focus:border-zinc-400 focus:ring-4 focus:ring-zinc-100"
             readOnly
             spellCheck={false}
             value={output}
@@ -248,19 +259,19 @@ export default function RunView({ workspace }: RunViewProps) {
           />
         </section>
 
-        <section className="panel-inner run-summary-panel">
-          <div className="section-header">
+        <section className="rounded-2xl border border-zinc-200/80 bg-white p-6 shadow-sm lg:p-8">
+          <div className="mb-6 flex items-start justify-between gap-4">
             <div>
-              <p className="eyebrow">Final status</p>
-              <h3>Execution summary</h3>
+              <p className="mb-1 block text-[10px] font-bold uppercase tracking-widest text-zinc-400">Final status</p>
+              <h3 className="m-0 text-xl font-semibold tracking-tight text-zinc-900">Execution summary</h3>
             </div>
-            <span className="muted-pill">
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-zinc-200/80 bg-white px-2.5 py-1 text-[11px] font-semibold text-zinc-500 shadow-sm">
               {state === 'success' ? 'Complete' : state === 'error' ? 'Needs attention' : 'Pending'}
             </span>
           </div>
 
           {result && latestStep ? (
-            <div className="run-summary-grid">
+            <div className="grid gap-4 sm:grid-cols-2">
               <SummaryTile icon={CircleCheck} label="Exit status" value={String(result.finalExitCode)} />
               <SummaryTile icon={Terminal} label="Agent used" value={chosenAgent ?? 'n/a'} />
               <SummaryTile
@@ -293,12 +304,14 @@ function SummaryTile({
   value: string;
 }) {
   return (
-    <article className="run-summary-tile">
-      <span className="run-summary-tile-icon" aria-hidden="true">
-        <Icon size={16} />
+    <article className="flex items-center gap-3 rounded-xl border border-zinc-200/80 bg-zinc-50/50 p-4">
+      <span className="grid size-10 shrink-0 place-items-center rounded-lg border border-zinc-200/80 bg-white text-zinc-600 shadow-sm" aria-hidden="true">
+        <Icon size={18} />
       </span>
-      <span className="run-summary-tile-label">{label}</span>
-      <strong className="run-summary-tile-value">{value}</strong>
+      <div className="min-w-0 flex-1">
+        <span className="block text-[10px] font-bold uppercase tracking-widest text-zinc-400">{label}</span>
+        <strong className="mt-0.5 block truncate text-sm font-semibold text-zinc-900">{value}</strong>
+      </div>
     </article>
   );
 }
@@ -312,21 +325,21 @@ function EmptyRunSummary({
 }) {
   if (state === 'error') {
     return (
-      <div className="run-empty-state is-error">
-        <CircleAlert size={18} aria-hidden="true" />
+      <div className="flex items-start gap-3 rounded-xl border border-red-200/80 bg-red-50/50 p-4 text-sm text-red-800">
+        <CircleAlert size={18} className="mt-0.5 shrink-0" aria-hidden="true" />
         <div>
-          <strong>Run failed before completion</strong>
-          <p>{errorMessage ?? 'The stream ended without a result payload.'}</p>
+          <strong className="mb-1 block font-semibold">Run failed before completion</strong>
+          <p className="text-red-700/90">{errorMessage ?? 'The stream ended without a result payload.'}</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="run-empty-state">
-      <CircleCheck size={18} aria-hidden="true" />
+    <div className="flex items-start gap-3 rounded-xl border border-zinc-200/80 bg-zinc-50/50 p-4 text-sm text-zinc-600">
+      <CircleCheck size={18} className="mt-0.5 shrink-0 text-zinc-400" aria-hidden="true" />
       <div>
-        <strong>No completed run yet</strong>
+        <strong className="mb-1 block font-semibold text-zinc-900">No completed run yet</strong>
         <p>Start a run to see the final exit code and selected agent here.</p>
       </div>
     </div>

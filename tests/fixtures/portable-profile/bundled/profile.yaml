@@ -1,0 +1,16 @@
+name: bundled-profile
+skills:
+  build:
+    prompt: Build the project.
+mcps:
+  bundle:
+    kind: local
+    source: bundled
+    path: ./mcps/bundle
+    install: npm install
+    command: node
+    args:
+      - dist/index.js
+memory:
+  paths:
+    - ./memory

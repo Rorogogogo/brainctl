@@ -94,8 +94,8 @@ brainctl ui
 | `brainctl profile list` | List available profiles |
 | `brainctl profile create <name>` | Create a new profile |
 | `brainctl profile use <name>` | Switch active profile |
-| `brainctl profile export <name>` | Export profile as portable tarball |
-| `brainctl profile import <archive>` | Import profile from tarball |
+| `brainctl profile export [name] [--agent <claude\|codex\|gemini>]` | Pack a saved profile or live agent config as a portable tarball |
+| `brainctl profile import <archive> [--credential key=value] [--force]` | Import portable tarball, resolve credentials, and install bundled MCPs |
 | `brainctl sync` | Sync active profile to all agent configs |
 | `brainctl ui` | Start the web dashboard |
 
@@ -133,10 +133,46 @@ Rules:
 
 - local profile files may still use the older `type: npm` / `type: bundled` MCP shape
 - `brainctl profile export` writes the packed profile using the explicit format below
+- portable archives include both `manifest.yaml` and `profile.yaml`
+- `manifest.yaml` must declare `schemaVersion: 1`
 - `local` MCPs must declare `source: npm` or `source: bundled`
 - `remote` MCPs must declare `transport` and `url`
 - bundled local MCPs must declare `path` and `command`
+- packed credentials are rewritten to placeholders such as `${credentials.github_token}` instead of storing raw secret values
+- `brainctl profile import` can resolve placeholders from repeated `--credential key=value` flags
+- bundled MCP installs are validated after unpack; invalid remote MCP urls are rejected during import
 - `brainctl sync` currently supports local MCPs only; remote MCPs remain in the profile package but are not written into agent configs yet
+
+### Portable Pack / Import
+
+Use a saved Brainctl profile:
+
+```bash
+brainctl profile export starter
+brainctl profile import ./starter.tar.gz
+```
+
+Pack a live agent config directly:
+
+```bash
+brainctl profile export --agent claude
+brainctl profile export --agent gemini --output ./team-gemini.tar.gz
+```
+
+Import a profile that declares credential placeholders:
+
+```bash
+brainctl profile import ./starter.tar.gz \
+  --credential github_token=ghp_xxx \
+  --credential internal_api_key=sk_live_xxx
+```
+
+Portable archives are manifest-driven:
+
+- `manifest.yaml` records the schema version, pack source, and required credentials
+- `profile.yaml` stores the normalized MCP definitions
+- bundled MCP folders are copied into the archive and restored from their declared relative `path`
+- overwrite imports remove the previous bundled MCP directory before reinstalling
 
 ---
 
@@ -222,6 +258,7 @@ Opens a local dashboard at `http://127.0.0.1:3333` with:
 - **MCP Manager** — View and edit MCP configurations
 - **Memory Viewer** — Browse shared markdown memory files
 - **Run Console** — Execute skills with real-time streaming output
+- **Portable Pack / Install** — Pack saved profiles or live agent configs, and install archives with an optional credential JSON map
 
 ---
 
