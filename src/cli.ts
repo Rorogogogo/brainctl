@@ -2,6 +2,7 @@
 
 import { realpathSync, readFileSync } from 'node:fs';
 import path from 'node:path';
+import { createInterface } from 'node:readline';
 import { fileURLToPath } from 'node:url';
 
 import { Command } from 'commander';
@@ -15,6 +16,7 @@ import { registerStatusCommand } from './commands/status.js';
 import { registerSyncCommand } from './commands/sync.js';
 import { registerUiCommand } from './commands/ui.js';
 import { printError } from './output.js';
+import { createUpdateCheckService } from './services/update-check-service.js';
 import { createDoctorService, type DoctorService } from './services/doctor-service.js';
 import { createInitService, type InitService } from './services/init-service.js';
 import { createProfileExportService, type ProfileExportService } from './services/profile-export-service.js';
@@ -74,6 +76,49 @@ export async function main(argv: string[] = process.argv): Promise<void> {
     printError(error);
     process.exitCode = 1;
   }
+
+  // Skip update check for MCP mode (handled in mcp command), non-TTY, opt-out, or local dev
+  const isMcpCommand = argv.includes('mcp');
+  const isInteractive = process.stdin.isTTY && process.stdout.isTTY;
+  const isOptedOut = !!process.env.BRAINCTL_NO_UPDATE_CHECK;
+  const isLocalDev = import.meta.url.includes('/src/');
+
+  if (isMcpCommand || !isInteractive || isOptedOut || isLocalDev) return;
+
+  try {
+    const service = createUpdateCheckService();
+    const check = await service.check();
+    if (!check.isOutdated) return;
+
+    const answer = await promptYesNo(
+      `\n⚠ brainctl ${check.latest} is available (you have ${check.current}).\n  Update now? [Y/n] `
+    );
+
+    if (answer) {
+      process.stderr.write('  Updating...\n');
+      const result = await service.selfUpdate();
+      if (result.success) {
+        process.stderr.write(`  Updated to brainctl@${check.latest}\n`);
+      } else {
+        process.stderr.write(`  Update failed: ${result.error ?? 'unknown error'}\n`);
+        process.stderr.write('  Run manually: npm install -g brainctl\n');
+      }
+    }
+  } catch {
+    // Update check failed — don't interrupt the user
+  }
+}
+
+function promptYesNo(question: string): Promise<boolean> {
+  const rl = createInterface({ input: process.stdin, output: process.stderr });
+
+  return new Promise((resolve) => {
+    rl.question(question, (answer: string) => {
+      rl.close();
+      const trimmed = answer.trim().toLowerCase();
+      resolve(trimmed === '' || trimmed === 'y' || trimmed === 'yes');
+    });
+  });
 }
 
 export function shouldRunMain(
