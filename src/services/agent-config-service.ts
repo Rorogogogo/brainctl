@@ -11,6 +11,7 @@ import {
   type AgentConfigReader,
   type AgentLiveConfig,
   type AgentMcpEntry,
+  type PortableRemoteMcpMetadata,
 } from './sync/agent-reader.js';
 import { formatTimestamp } from './sync/agent-writer.js';
 import { createMcpPreflightService, type McpPreflightService } from './mcp-preflight-service.js';
@@ -26,7 +27,8 @@ export interface AgentConfigService {
     cwd: string;
     agent: AgentName;
     key: string;
-    entry: AgentMcpEntry;
+    entry?: AgentMcpEntry;
+    remoteEntry?: PortableRemoteMcpMetadata;
   }): Promise<void>;
   removeMcp(options: {
     cwd: string;
@@ -72,8 +74,8 @@ export function createAgentConfigService(
     },
 
     async addMcp(options) {
-      const { cwd, agent, key, entry } = options;
-      const preflight = await mcpPreflightService.execute({ cwd, agent, key, entry });
+      const { cwd, agent, key, entry, remoteEntry } = options;
+      const preflight = await mcpPreflightService.execute({ cwd, agent, key, entry, remoteEntry });
       const firstError = preflight.checks.find((check) => check.status === 'error');
       if (firstError) {
         throw new ValidationError(
@@ -83,15 +85,21 @@ export function createAgentConfigService(
 
       if (agent === 'claude') {
         await mutateClaudeConfig(cwd, (servers) => {
-          servers[key] = toClaudeEntry(entry);
+          servers[key] = remoteEntry ? toClaudeRemoteEntry(remoteEntry) : toClaudeEntry(entry!);
         });
       } else if (agent === 'codex') {
-        await mutateCodexConfig((servers) => {
-          servers[key] = entry;
+        await mutateCodexConfig(cwd, (state) => {
+          delete state.mcpServers[key];
+          delete state.remoteMcpServers[key];
+          if (remoteEntry) {
+            state.remoteMcpServers[key] = remoteEntry;
+          } else {
+            state.mcpServers[key] = entry!;
+          }
         });
       } else if (agent === 'gemini') {
         await mutateGeminiConfig(cwd, (servers) => {
-          servers[key] = toGeminiEntry(entry);
+          servers[key] = remoteEntry ? toGeminiRemoteEntry(remoteEntry) : toGeminiEntry(entry!);
         });
       }
     },
@@ -104,8 +112,9 @@ export function createAgentConfigService(
           delete servers[key];
         });
       } else if (agent === 'codex') {
-        await mutateCodexConfig((servers) => {
-          delete servers[key];
+        await mutateCodexConfig(cwd, (state) => {
+          delete state.mcpServers[key];
+          delete state.remoteMcpServers[key];
         });
       } else if (agent === 'gemini') {
         await mutateGeminiConfig(cwd, (servers) => {
@@ -159,12 +168,16 @@ async function mutateClaudeConfig(
     // fresh config
   }
 
+  // Apply mutation to user-scoped (top-level) MCPs
+  const userServers = (existing.mcpServers ?? {}) as Record<string, unknown>;
+  mutate(userServers);
+  existing.mcpServers = userServers;
+
+  // Apply mutation to project-scoped MCPs
   const projects = (existing.projects ?? {}) as Record<string, Record<string, unknown>>;
   const projectConfig = projects[cwd] ?? {};
   const servers = (projectConfig.mcpServers ?? {}) as Record<string, unknown>;
-
   mutate(servers);
-
   projectConfig.mcpServers = servers;
   projects[cwd] = projectConfig;
   existing.projects = projects;
@@ -181,10 +194,22 @@ function toClaudeEntry(entry: AgentMcpEntry): Record<string, unknown> {
   };
 }
 
+function toClaudeRemoteEntry(entry: PortableRemoteMcpMetadata): Record<string, unknown> {
+  return {
+    type: entry.transport === 'sse' ? 'sse' : 'http',
+    url: entry.url,
+    ...(entry.headers ? { headers: entry.headers } : {}),
+  };
+}
+
 /* ---- Codex: TOML with [mcp_servers.*] ---- */
 
 async function mutateCodexConfig(
-  mutate: (servers: Record<string, AgentMcpEntry>) => void
+  cwd: string,
+  mutate: (state: {
+    mcpServers: Record<string, AgentMcpEntry>;
+    remoteMcpServers: Record<string, PortableRemoteMcpMetadata>;
+  }) => void
 ): Promise<void> {
   const configPath = path.join(homedir(), '.codex', 'config.toml');
   let existingContent = '';
@@ -197,14 +222,17 @@ async function mutateCodexConfig(
   }
 
   // Read current servers via reader
-  const current = await readers.codex.read({ cwd: '' });
-  const servers = { ...current.mcpServers };
+  const current = await readers.codex.read({ cwd });
+  const state = {
+    mcpServers: { ...current.mcpServers },
+    remoteMcpServers: { ...current.remoteMcpServers },
+  };
 
-  mutate(servers);
+  mutate(state);
 
   // Rebuild: preserve non-mcp content + new mcp sections
   const nonMcp = stripCodexMcpSections(existingContent).trim();
-  const mcpToml = buildCodexMcpToml(servers);
+  const mcpToml = buildCodexMcpToml(state);
   const final = nonMcp.length > 0 ? `${nonMcp}\n\n${mcpToml}` : mcpToml;
 
   await mkdir(path.dirname(configPath), { recursive: true });
@@ -230,10 +258,13 @@ function stripCodexMcpSections(content: string): string {
   return result.join('\n');
 }
 
-function buildCodexMcpToml(servers: Record<string, AgentMcpEntry>): string {
+function buildCodexMcpToml(state: {
+  mcpServers: Record<string, AgentMcpEntry>;
+  remoteMcpServers: Record<string, PortableRemoteMcpMetadata>;
+}): string {
   const lines: string[] = [];
 
-  for (const [name, entry] of Object.entries(servers)) {
+  for (const [name, entry] of Object.entries(state.mcpServers)) {
     lines.push(`[mcp_servers.${name}]`);
     lines.push(`command = ${tomlStr(entry.command)}`);
     if (entry.args && entry.args.length > 0) {
@@ -249,6 +280,12 @@ function buildCodexMcpToml(servers: Record<string, AgentMcpEntry>): string {
     lines.push('');
   }
 
+  for (const [name, entry] of Object.entries(state.remoteMcpServers)) {
+    lines.push(`[mcp_servers.${name}]`);
+    lines.push(`url = ${tomlStr(entry.url)}`);
+    lines.push('');
+  }
+
   return lines.join('\n').trim();
 }
 
@@ -259,31 +296,53 @@ function tomlStr(value: string): string {
 /* ---- Gemini: JSON with mcpServers ---- */
 
 async function mutateGeminiConfig(
-  _cwd: string,
+  cwd: string,
   mutate: (servers: Record<string, unknown>) => void
 ): Promise<void> {
-  const configPath = path.join(homedir(), '.gemini', 'settings.json');
-  let existing: Record<string, unknown> = {};
+  const globalConfigPath = path.join(homedir(), '.gemini', 'settings.json');
+  const projectConfigPath = path.join(cwd, '.gemini', 'settings.json');
 
+  // Mutate global config
   try {
-    existing = JSON.parse(await readFile(configPath, 'utf8')) as Record<string, unknown>;
-    await backupFile(configPath);
+    const globalExisting = JSON.parse(await readFile(globalConfigPath, 'utf8')) as Record<string, unknown>;
+    await backupFile(globalConfigPath);
+    const globalServers = (globalExisting.mcpServers ?? {}) as Record<string, unknown>;
+    mutate(globalServers);
+    globalExisting.mcpServers = globalServers;
+    await atomicWriteJson(globalConfigPath, globalExisting);
   } catch {
-    // fresh config
+    // no global config — skip
   }
 
-  const servers = (existing.mcpServers ?? {}) as Record<string, unknown>;
-  mutate(servers);
-  existing.mcpServers = servers;
+  // Mutate project config
+  let projectExisting: Record<string, unknown> = {};
+  try {
+    projectExisting = JSON.parse(await readFile(projectConfigPath, 'utf8')) as Record<string, unknown>;
+    await backupFile(projectConfigPath);
+  } catch {
+    // fresh project config
+  }
 
-  await mkdir(path.dirname(configPath), { recursive: true });
-  await atomicWriteJson(configPath, existing);
+  const servers = (projectExisting.mcpServers ?? {}) as Record<string, unknown>;
+  mutate(servers);
+  projectExisting.mcpServers = servers;
+
+  await mkdir(path.dirname(projectConfigPath), { recursive: true });
+  await atomicWriteJson(projectConfigPath, projectExisting);
 }
 
 function toGeminiEntry(entry: AgentMcpEntry): Record<string, unknown> {
   return {
     command: entry.command,
     args: entry.args ?? [],
+    ...(entry.env ? { env: entry.env } : {}),
+  };
+}
+
+function toGeminiRemoteEntry(entry: PortableRemoteMcpMetadata): Record<string, unknown> {
+  return {
+    ...(entry.transport === 'http' ? { httpUrl: entry.url } : { url: entry.url }),
+    ...(entry.headers ? { headers: entry.headers } : {}),
     ...(entry.env ? { env: entry.env } : {}),
   };
 }

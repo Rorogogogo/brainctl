@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useState, type ReactNode } from 'react';
+import { toast } from 'sonner';
 import {
   DndContext,
   DragOverlay,
@@ -40,12 +41,12 @@ import {
   type PendingChange,
 } from './profiles-view';
 import { AgentLogo } from './agent-brand';
+import ConfirmDialog from './ConfirmDialog';
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
 /* ------------------------------------------------------------------ */
 
-type FeedbackState = { type: 'success' | 'error'; message: string } | null;
 
 interface McpPreflightResult {
   ok: boolean;
@@ -128,6 +129,7 @@ function applyPendingChanges(
   const result: AgentLiveConfig[] = configs.map((c) => ({
     ...c,
     mcpServers: { ...c.mcpServers },
+    remoteMcpServers: { ...c.remoteMcpServers },
     skills: [...c.skills],
   }));
   for (const change of changes) {
@@ -136,8 +138,13 @@ function applyPendingChanges(
     if (change.category === 'mcp') {
       if (change.type === 'add' && change.entry) {
         config.mcpServers[change.key] = change.entry;
+        delete config.remoteMcpServers[change.key];
+      } else if (change.type === 'add' && change.remoteEntry) {
+        config.remoteMcpServers[change.key] = change.remoteEntry;
+        delete config.mcpServers[change.key];
       } else if (change.type === 'remove') {
         delete config.mcpServers[change.key];
+        delete config.remoteMcpServers[change.key];
       }
     } else if (change.category === 'skill') {
       if (change.type === 'add' && change.skillEntry) {
@@ -422,7 +429,18 @@ function AgentColumn({
   onStagedRemove: (agent: string, category: 'mcp' | 'skill' | 'plugin', key: string) => void;
   editable: boolean;
 }) {
-  const mcpEntries = Object.entries(config.mcpServers);
+  const mcpEntries = [
+    ...Object.entries(config.mcpServers).map(([key, entry]) => ({
+      key,
+      type: 'local' as const,
+      sublabel: entry.args && entry.args.length > 0 ? `${entry.command} ${entry.args.join(' ')}` : entry.command,
+    })),
+    ...Object.entries(config.remoteMcpServers).map(([key, entry]) => ({
+      key,
+      type: 'remote' as const,
+      sublabel: `${entry.transport.toUpperCase()} ${entry.url}`,
+    })),
+  ];
   const { skills: localSkills, plugins } = splitAgentSkillEntries(config.skills);
 
   return (
@@ -463,12 +481,7 @@ function AgentColumn({
         icon={<Server size={14} />}
         count={mcpEntries.length}
       >
-        {mcpEntries.map(([key, entry]) => {
-          const sublabel =
-            entry.args && entry.args.length > 0
-              ? `${entry.command} ${entry.args.join(' ')}`
-              : entry.command;
-
+        {mcpEntries.map(({ key, sublabel, type }) => {
           const status = pendingAdded.has(key)
             ? ('added' as const)
             : pendingRemoved.has(key)
@@ -480,7 +493,7 @@ function AgentColumn({
               key={key}
               id={`${config.agent}:mcp:${key}`}
               label={key}
-              sublabel={sublabel}
+              sublabel={type === 'remote' ? `[remote] ${sublabel}` : sublabel}
               icon={<Server size={14} />}
               status={status}
               onRemove={editable ? () => onStagedRemove(config.agent, 'mcp', key) : undefined}
@@ -637,11 +650,10 @@ export default function ProfilesView() {
   const [agentConfigs, setAgentConfigs] = useState<AgentLiveConfig[]>([]);
   const [pendingChanges, setPendingChanges] = useState<PendingChange[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
-  const [feedback, setFeedback] = useState<FeedbackState>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [isEditMode, setIsEditMode] = useState(false);
-  const feedbackTimer = useRef<ReturnType<typeof setTimeout>>();
+  const [confirmOpen, setConfirmOpen] = useState(false);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } })
@@ -649,9 +661,11 @@ export default function ProfilesView() {
 
   const showFeedback = useCallback(
     (type: 'success' | 'error', message: string) => {
-      setFeedback({ type, message });
-      clearTimeout(feedbackTimer.current);
-      feedbackTimer.current = setTimeout(() => setFeedback(null), 4000);
+      if (type === 'success') {
+        toast.success(message);
+      } else {
+        toast.error(message);
+      }
     },
     []
   );
@@ -705,38 +719,24 @@ export default function ProfilesView() {
     setPendingChanges([]);
   }, []);
 
-  const handleSave = useCallback(async () => {
+  const handleSave = useCallback(() => {
     if (pendingChanges.length === 0) return;
+    setConfirmOpen(true);
+  }, [pendingChanges]);
 
+  const handleConfirmSave = useCallback(async () => {
+    setConfirmOpen(false);
     const changeCount = pendingChanges.length;
-    const summary = pendingChanges
-      .map((c) => {
-      const prefix = c.category === 'skill' ? '[skill] ' : '[mcp] ';
-      if (c.category === 'plugin') {
-        return c.type === 'add'
-          ? `+ [plugin] ${c.key} -> ${AGENT_LABELS[c.agent]}`
-          : `- [plugin] ${c.key} from ${AGENT_LABELS[c.agent]} (removes bundled skills and MCPs)`;
-      }
-      return c.type === 'add'
-          ? `+ ${prefix}${c.key} -> ${AGENT_LABELS[c.agent]}`
-          : `- ${prefix}${c.key} from ${AGENT_LABELS[c.agent]}`;
-      })
-      .join('\n');
-
-    const confirmed = window.confirm(
-      `Apply ${changeCount} change${changeCount > 1 ? 's' : ''} to agent configs?\n\n${summary}`
-    );
-    if (!confirmed) return;
 
     setSaving(true);
     try {
       const result = await applyPendingChangesWithApi(pendingChanges, async (change) => {
         if (change.category === 'mcp') {
-          if (change.type === 'add' && change.entry) {
+          if (change.type === 'add' && (change.entry || change.remoteEntry)) {
             await fetchJson(`/api/agents/${change.agent}/mcps`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ key: change.key, entry: change.entry }),
+              body: JSON.stringify({ key: change.key, entry: change.entry, remoteEntry: change.remoteEntry }),
             });
           } else if (change.type === 'remove') {
             await fetchJson(
@@ -806,6 +806,18 @@ export default function ProfilesView() {
     }
   }, [pendingChanges, fetchLiveConfigs, showFeedback]);
 
+  const changeSummaryLines = pendingChanges.map((c) => {
+    const prefix = c.category === 'skill' ? '[skill] ' : '[mcp] ';
+    if (c.category === 'plugin') {
+      return c.type === 'add'
+        ? `+ [plugin] ${c.key} -> ${AGENT_LABELS[c.agent]}`
+        : `- [plugin] ${c.key} from ${AGENT_LABELS[c.agent]}`;
+    }
+    return c.type === 'add'
+      ? `+ ${prefix}${c.key} -> ${AGENT_LABELS[c.agent]}`
+      : `- ${prefix}${c.key} from ${AGENT_LABELS[c.agent]}`;
+  });
+
   const handleDragStart = useCallback((event: DragStartEvent) => {
     if (!isEditMode) return;
     setActiveId(event.active.id as string);
@@ -829,7 +841,8 @@ export default function ProfilesView() {
 
       if (source.category === 'mcp') {
         const entry = sourceConfig.mcpServers[source.key];
-        if (!entry) return;
+        const remoteEntry = sourceConfig.remoteMcpServers[source.key];
+        if (!entry && !remoteEntry) return;
 
         const alreadyStaged = pendingChanges.some(
           (c) => c.type === 'add' && c.category === 'mcp' && c.agent === target.agent && c.key === source.key
@@ -843,6 +856,7 @@ export default function ProfilesView() {
           agent: target.agent,
           key: source.key,
           entry,
+          remoteEntry,
           sourceAgent: source.agent,
         };
         const stagingError = canStagePendingAddition(previewConfigs, nextChange);
@@ -858,7 +872,7 @@ export default function ProfilesView() {
               {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ key: source.key, entry }),
+                body: JSON.stringify({ key: source.key, entry, remoteEntry }),
               }
             );
 
@@ -1003,12 +1017,18 @@ export default function ProfilesView() {
 
     if (parsed.category === 'mcp') {
       const entry = config.mcpServers[parsed.key];
-      if (!entry) return null;
-      const sublabel =
-        entry.args && entry.args.length > 0
-          ? `${entry.command} ${entry.args.join(' ')}`
-          : entry.command;
-      return { label: parsed.key, sublabel };
+      if (entry) {
+        const sublabel =
+          entry.args && entry.args.length > 0
+            ? `${entry.command} ${entry.args.join(' ')}`
+            : entry.command;
+        return { label: parsed.key, sublabel };
+      }
+      const remoteEntry = config.remoteMcpServers[parsed.key];
+      if (remoteEntry) {
+        return { label: parsed.key, sublabel: `[remote] ${remoteEntry.transport.toUpperCase()} ${remoteEntry.url}` };
+      }
+      return null;
     } else if (parsed.category === 'skill') {
       const skill = config.skills.find((s) => s.name === parsed.key);
       if (!skill) return null;
@@ -1034,6 +1054,7 @@ export default function ProfilesView() {
     (sum, config) =>
       sum +
       Object.keys(config.mcpServers).length +
+      Object.keys(config.remoteMcpServers).length +
       splitAgentSkillEntries(config.skills).skills.length +
       splitAgentSkillEntries(config.skills).plugins.length,
     0
@@ -1117,12 +1138,26 @@ export default function ProfilesView() {
         </DragOverlay>
       </DndContext>
 
-      {feedback && (
-        <div className={`inline-flex items-center gap-2 rounded-lg border px-3.5 py-3 text-sm transition-all ${feedback.type === 'error' ? 'border-red-200/80 bg-red-50/50 text-red-800' : 'border-emerald-200/80 bg-emerald-50/50 text-emerald-800'}`}>
-          {feedback.type === 'success' ? <Check size={16} /> : null}
-          <span>{feedback.message}</span>
+      <ConfirmDialog
+        open={confirmOpen}
+        onOpenChange={setConfirmOpen}
+        title={`Apply ${pendingChanges.length} change${pendingChanges.length > 1 ? 's' : ''}?`}
+        description="The following changes will be written to agent config files:"
+        confirmLabel="Apply changes"
+        cancelLabel="Cancel"
+        variant="default"
+        onConfirm={() => void handleConfirmSave()}
+      >
+        <div className="mt-2 max-h-48 overflow-y-auto rounded-lg border border-zinc-200 bg-zinc-50 p-3">
+          <ul className="space-y-1 font-mono text-xs text-zinc-700">
+            {changeSummaryLines.map((line, i) => (
+              <li key={i} className={line.startsWith('+') ? 'text-emerald-700' : 'text-red-700'}>
+                {line}
+              </li>
+            ))}
+          </ul>
         </div>
-      )}
+      </ConfirmDialog>
     </div>
   );
 }
