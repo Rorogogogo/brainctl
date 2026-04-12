@@ -54,12 +54,27 @@ export function createClaudeReader(): AgentConfigReader {
         const source = await readFile(configPath, 'utf8');
         const data = JSON.parse(source) as Record<string, unknown>;
 
+        // Merge user-scoped MCPs (top-level) with project-scoped MCPs (project overrides user)
+        const userServers = (data.mcpServers ?? {}) as Record<string, Record<string, unknown>>;
         const projects = (data.projects ?? {}) as Record<string, Record<string, unknown>>;
         const projectConfig = projects[options.cwd] ?? {};
-        const rawServers = (projectConfig.mcpServers ?? {}) as Record<string, Record<string, unknown>>;
+        const projectServers = (projectConfig.mcpServers ?? {}) as Record<string, Record<string, unknown>>;
+        const rawServers = { ...userServers, ...projectServers };
 
         const mcpServers: Record<string, AgentMcpEntry> = {};
+        const remoteMcpServers: Record<string, PortableRemoteMcpMetadata> = {};
         for (const [name, entry] of Object.entries(rawServers)) {
+          if (isClaudeRemoteEntry(entry)) {
+            const url = typeof entry.url === 'string' ? entry.url : '';
+            remoteMcpServers[name] = {
+              transport: entry.type === 'sse' ? 'sse' : 'http',
+              url,
+              headers: parseEnvObject(entry.headers),
+              env: parseEnvObject(entry.env),
+            };
+            continue;
+          }
+
           mcpServers[name] = {
             command: String(entry.command ?? ''),
             args: Array.isArray(entry.args) ? entry.args.map(String) : undefined,
@@ -73,7 +88,7 @@ export function createClaudeReader(): AgentConfigReader {
           configPath,
           exists: true,
           mcpServers,
-          remoteMcpServers: {},
+          remoteMcpServers,
           skills,
         };
       } catch {
@@ -98,14 +113,14 @@ export function createCodexReader(): AgentConfigReader {
 
       try {
         const source = await readFile(configPath, 'utf8');
-        const mcpServers = parseCodexToml(source);
+        const { mcpServers, remoteMcpServers } = parseCodexToml(source);
         const skills = await readCodexSkills();
         return {
           agent: 'codex',
           configPath,
           exists: true,
           mcpServers,
-          remoteMcpServers: {},
+          remoteMcpServers,
           skills,
         };
       } catch {
@@ -125,43 +140,62 @@ export function createCodexReader(): AgentConfigReader {
 
 export function createGeminiReader(): AgentConfigReader {
   return {
-    async read() {
-      const configPath = path.join(homedir(), '.gemini', 'settings.json');
+    async read(options) {
+      const globalConfigPath = path.join(homedir(), '.gemini', 'settings.json');
+      const projectConfigPath = path.join(options.cwd, '.gemini', 'settings.json');
 
+      // Read global MCPs
+      let globalServers: Record<string, Record<string, unknown>> = {};
       try {
-        const source = await readFile(configPath, 'utf8');
-        const data = JSON.parse(source) as Record<string, unknown>;
-        const rawServers = (data.mcpServers ?? {}) as Record<string, Record<string, unknown>>;
+        const globalSource = await readFile(globalConfigPath, 'utf8');
+        const globalData = JSON.parse(globalSource) as Record<string, unknown>;
+        globalServers = (globalData.mcpServers ?? {}) as Record<string, Record<string, unknown>>;
+      } catch {
+        // no global config
+      }
 
-        const mcpServers: Record<string, AgentMcpEntry> = {};
-        for (const [name, entry] of Object.entries(rawServers)) {
-          mcpServers[name] = {
-            command: String(entry.command ?? ''),
-            args: Array.isArray(entry.args) ? entry.args.map(String) : undefined,
-            env: parseEnvObject(entry.env),
-          };
+      // Read project MCPs
+      let projectServers: Record<string, Record<string, unknown>> = {};
+      let projectExists = false;
+      try {
+        const projectSource = await readFile(projectConfigPath, 'utf8');
+        const projectData = JSON.parse(projectSource) as Record<string, unknown>;
+        projectServers = (projectData.mcpServers ?? {}) as Record<string, Record<string, unknown>>;
+        projectExists = true;
+      } catch {
+        // no project config
+      }
+
+      // Merge: project overrides global
+      const rawServers = { ...globalServers, ...projectServers };
+      const configPath = projectExists ? projectConfigPath : globalConfigPath;
+      const exists = projectExists || Object.keys(globalServers).length > 0;
+
+      const mcpServers: Record<string, AgentMcpEntry> = {};
+      const remoteMcpServers: Record<string, PortableRemoteMcpMetadata> = {};
+      for (const [name, entry] of Object.entries(rawServers)) {
+        const remoteEntry = toGeminiRemoteEntry(entry);
+        if (remoteEntry) {
+          remoteMcpServers[name] = remoteEntry;
+          continue;
         }
 
-        const skills = await readGeminiSkills();
-        return {
-          agent: 'gemini',
-          configPath,
-          exists: true,
-          mcpServers,
-          remoteMcpServers: {},
-          skills,
-        };
-      } catch {
-        const skills = await readGeminiSkills();
-        return {
-          agent: 'gemini',
-          configPath,
-          exists: false,
-          mcpServers: {},
-          remoteMcpServers: {},
-          skills,
+        mcpServers[name] = {
+          command: String(entry.command ?? ''),
+          args: Array.isArray(entry.args) ? entry.args.map(String) : undefined,
+          env: parseEnvObject(entry.env),
         };
       }
+
+      const skills = await readGeminiSkills();
+      return {
+        agent: 'gemini',
+        configPath,
+        exists,
+        mcpServers,
+        remoteMcpServers,
+        skills,
+      };
     },
   };
 }
@@ -175,14 +209,49 @@ function parseEnvObject(value: unknown): Record<string, string> | undefined {
   return Object.keys(result).length > 0 ? result : undefined;
 }
 
-function parseCodexToml(source: string): Record<string, AgentMcpEntry> {
-  const servers: Record<string, AgentMcpEntry> = {};
+function isClaudeRemoteEntry(entry: Record<string, unknown>): boolean {
+  if (typeof entry.url !== 'string' || entry.url.trim().length === 0) {
+    return false;
+  }
+
+  return entry.type === 'http' || entry.type === 'sse' || !('command' in entry);
+}
+
+function toGeminiRemoteEntry(entry: Record<string, unknown>): PortableRemoteMcpMetadata | null {
+  if (typeof entry.httpUrl === 'string' && entry.httpUrl.trim().length > 0) {
+    return {
+      transport: 'http',
+      url: entry.httpUrl,
+      headers: parseEnvObject(entry.headers),
+      env: parseEnvObject(entry.env),
+    };
+  }
+
+  if (typeof entry.url === 'string' && entry.url.trim().length > 0) {
+    return {
+      transport: 'sse',
+      url: entry.url,
+      headers: parseEnvObject(entry.headers),
+      env: parseEnvObject(entry.env),
+    };
+  }
+
+  return null;
+}
+
+function parseCodexToml(source: string): {
+  mcpServers: Record<string, AgentMcpEntry>;
+  remoteMcpServers: Record<string, PortableRemoteMcpMetadata>;
+} {
+  const mcpServers: Record<string, AgentMcpEntry> = {};
+  const remoteMcpServers: Record<string, PortableRemoteMcpMetadata> = {};
   const lines = source.split('\n');
 
   let currentServer: string | null = null;
   let inEnv = false;
   let currentEntry: AgentMcpEntry = { command: '' };
   let currentEnv: Record<string, string> = {};
+  let currentUrl: string | null = null;
 
   for (const line of lines) {
     const trimmed = line.trim();
@@ -199,13 +268,20 @@ function parseCodexToml(source: string): Record<string, AgentMcpEntry> {
     if (serverMatch) {
       // Save previous server
       if (currentServer) {
-        if (Object.keys(currentEnv).length > 0) currentEntry.env = currentEnv;
-        servers[currentServer] = currentEntry;
+        flushCodexServer({
+          currentServer,
+          currentEntry,
+          currentEnv,
+          currentUrl,
+          mcpServers,
+          remoteMcpServers,
+        });
       }
 
       currentServer = serverMatch[1];
       currentEntry = { command: '' };
       currentEnv = {};
+      currentUrl = null;
       inEnv = false;
       continue;
     }
@@ -213,11 +289,18 @@ function parseCodexToml(source: string): Record<string, AgentMcpEntry> {
     // New non-mcp section — flush current server
     if (/^\[/.test(trimmed) && !/^\[mcp_servers/.test(trimmed)) {
       if (currentServer) {
-        if (Object.keys(currentEnv).length > 0) currentEntry.env = currentEnv;
-        servers[currentServer] = currentEntry;
+        flushCodexServer({
+          currentServer,
+          currentEntry,
+          currentEnv,
+          currentUrl,
+          mcpServers,
+          remoteMcpServers,
+        });
         currentServer = null;
         currentEntry = { command: '' };
         currentEnv = {};
+        currentUrl = null;
       }
       inEnv = false;
       continue;
@@ -231,6 +314,8 @@ function parseCodexToml(source: string): Record<string, AgentMcpEntry> {
 
     if (inEnv) {
       currentEnv[key] = parseTomlValue(rawValue);
+    } else if (key === 'url') {
+      currentUrl = parseTomlValue(rawValue);
     } else if (key === 'command') {
       currentEntry.command = parseTomlValue(rawValue);
     } else if (key === 'args') {
@@ -240,11 +325,39 @@ function parseCodexToml(source: string): Record<string, AgentMcpEntry> {
 
   // Flush last server
   if (currentServer) {
-    if (Object.keys(currentEnv).length > 0) currentEntry.env = currentEnv;
-    servers[currentServer] = currentEntry;
+    flushCodexServer({
+      currentServer,
+      currentEntry,
+      currentEnv,
+      currentUrl,
+      mcpServers,
+      remoteMcpServers,
+    });
   }
 
-  return servers;
+  return { mcpServers, remoteMcpServers };
+}
+
+function flushCodexServer(options: {
+  currentServer: string;
+  currentEntry: AgentMcpEntry;
+  currentEnv: Record<string, string>;
+  currentUrl: string | null;
+  mcpServers: Record<string, AgentMcpEntry>;
+  remoteMcpServers: Record<string, PortableRemoteMcpMetadata>;
+}): void {
+  const { currentServer, currentEntry, currentEnv, currentUrl, mcpServers, remoteMcpServers } = options;
+
+  if (currentUrl) {
+    remoteMcpServers[currentServer] = {
+      transport: 'http',
+      url: currentUrl,
+    };
+    return;
+  }
+
+  if (Object.keys(currentEnv).length > 0) currentEntry.env = currentEnv;
+  mcpServers[currentServer] = currentEntry;
 }
 
 function parseTomlValue(raw: string): string {
