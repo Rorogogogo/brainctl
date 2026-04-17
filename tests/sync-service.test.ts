@@ -74,4 +74,66 @@ describe('createSyncService', () => {
       )
     );
   });
+
+  it('reports the synced MCP count from the profile without implicit extras', async () => {
+    const profileService: ProfileService = {
+      async list() {
+        return { profiles: ['team-profile'], activeProfile: 'team-profile' };
+      },
+      async get() {
+        return {
+          name: 'team-profile',
+          skills: {},
+          mcps: {},
+          memory: {
+            paths: ['./memory'],
+          },
+        };
+      },
+      async create() {
+        return { profilePath: '/tmp/team-profile.yaml' };
+      },
+      async update() {},
+      async delete() {},
+      async use() {
+        return { previousProfile: null };
+      },
+      async getMetaConfig() {
+        return {
+          active_profile: 'team-profile',
+          agents: ['claude'],
+        };
+      },
+    };
+
+    const writer: AgentConfigWriter = {
+      async write() {
+        return {
+          configPath: '/tmp/config',
+          backedUpTo: null,
+        };
+      },
+      async restore() {
+        return {
+          restoredFrom: '/tmp/config.bak',
+        };
+      },
+    };
+
+    const service = createSyncService({
+      profileService,
+      writers: {
+        claude: writer,
+      },
+    });
+
+    await expect(service.execute({ cwd: '/tmp/project' })).resolves.toEqual([
+      {
+        agent: 'claude',
+        configPath: '/tmp/config',
+        backedUpTo: null,
+        mcpCount: 0,
+      },
+    ]);
+  });
 });

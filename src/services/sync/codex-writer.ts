@@ -30,16 +30,7 @@ export function createCodexWriter(): AgentConfigWriter {
       }
 
       // Build MCP servers section
-      const allServers: Record<string, McpServerConfig> = { ...options.mcpServers };
-
-      // Always include brainctl itself
-      allServers['brainctl'] = {
-        kind: 'local',
-        source: 'npm',
-        package: 'brainctl',
-      };
-
-      const mcpToml = buildMcpToml(allServers);
+      const mcpToml = buildMcpToml(options.mcpServers);
 
       // Preserve non-mcp_servers content from existing config
       const existingNonMcp = stripMcpSections(existingContent);

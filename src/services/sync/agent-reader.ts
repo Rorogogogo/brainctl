@@ -7,7 +7,7 @@ import {
   mergeManagedPluginsIntoSkills,
   readManagedPlugins,
 } from './managed-plugin-registry.js';
-import { readInstalledPlugins } from './plugin-skill-reader.js';
+import { readCodexPlugins, readInstalledPlugins } from './plugin-skill-reader.js';
 
 export interface AgentMcpEntry {
   command: string;
@@ -28,6 +28,8 @@ export interface AgentSkillEntry {
   kind?: 'skill' | 'plugin';
   pluginSkills?: string[];
   pluginMcps?: string[];
+  pluginAgents?: string[];
+  pluginCommands?: string[];
   installPath?: string;
   managed?: boolean;
 }
@@ -83,12 +85,13 @@ export function createClaudeReader(): AgentConfigReader {
         }
 
         const skills = await readClaudePlugins();
+        const filtered = filterPluginOwnedMcps({ mcpServers, remoteMcpServers, skills });
         return {
           agent: 'claude',
           configPath,
           exists: true,
-          mcpServers,
-          remoteMcpServers,
+          mcpServers: filtered.mcpServers,
+          remoteMcpServers: filtered.remoteMcpServers,
           skills,
         };
       } catch {
@@ -115,12 +118,13 @@ export function createCodexReader(): AgentConfigReader {
         const source = await readFile(configPath, 'utf8');
         const { mcpServers, remoteMcpServers } = parseCodexToml(source);
         const skills = await readCodexSkills();
+        const filtered = filterPluginOwnedMcps({ mcpServers, remoteMcpServers, skills });
         return {
           agent: 'codex',
           configPath,
           exists: true,
-          mcpServers,
-          remoteMcpServers,
+          mcpServers: filtered.mcpServers,
+          remoteMcpServers: filtered.remoteMcpServers,
           skills,
         };
       } catch {
@@ -188,16 +192,41 @@ export function createGeminiReader(): AgentConfigReader {
       }
 
       const skills = await readGeminiSkills();
+      const filtered = filterPluginOwnedMcps({ mcpServers, remoteMcpServers, skills });
       return {
         agent: 'gemini',
         configPath,
         exists,
-        mcpServers,
-        remoteMcpServers,
+        mcpServers: filtered.mcpServers,
+        remoteMcpServers: filtered.remoteMcpServers,
         skills,
       };
     },
   };
+}
+
+function filterPluginOwnedMcps(options: {
+  mcpServers: Record<string, AgentMcpEntry>;
+  remoteMcpServers: Record<string, PortableRemoteMcpMetadata>;
+  skills: AgentSkillEntry[];
+}): {
+  mcpServers: Record<string, AgentMcpEntry>;
+  remoteMcpServers: Record<string, PortableRemoteMcpMetadata>;
+} {
+  const pluginOwned = new Set(
+    options.skills.flatMap((skill) => skill.pluginMcps ?? [])
+  );
+  if (pluginOwned.size === 0) {
+    return { mcpServers: options.mcpServers, remoteMcpServers: options.remoteMcpServers };
+  }
+
+  const mcpServers = Object.fromEntries(
+    Object.entries(options.mcpServers).filter(([key]) => !pluginOwned.has(key))
+  );
+  const remoteMcpServers = Object.fromEntries(
+    Object.entries(options.remoteMcpServers).filter(([key]) => !pluginOwned.has(key))
+  );
+  return { mcpServers, remoteMcpServers };
 }
 
 function parseEnvObject(value: unknown): Record<string, string> | undefined {
@@ -407,14 +436,29 @@ async function readClaudePlugins(): Promise<AgentSkillEntry[]> {
 }
 
 async function readCodexSkills(): Promise<AgentSkillEntry[]> {
+  const configTomlPath = path.join(homedir(), '.codex', 'config.toml');
+  const pluginsCacheDir = path.join(homedir(), '.codex', 'plugins', 'cache');
+  const nativePlugins = await readCodexPlugins({ configTomlPath, pluginsCacheDir });
+  const managedPlugins = await readManagedPlugins({ agent: 'codex' });
+
+  let localSkills: AgentSkillEntry[] = [];
   try {
     const skillsDir = path.join(homedir(), '.codex', 'skills');
-    const localSkills = await readSkillDirs(skillsDir);
-    const managedPlugins = await readManagedPlugins({ agent: 'codex' });
-    return mergeManagedPluginsIntoSkills(localSkills, managedPlugins);
+    localSkills = await readSkillDirs(skillsDir);
   } catch {
-    return await readManagedPlugins({ agent: 'codex' });
+    localSkills = [];
   }
+
+  const allPlugins = dedupePluginsByName([...managedPlugins, ...nativePlugins]);
+  return mergeManagedPluginsIntoSkills(localSkills, allPlugins);
+}
+
+function dedupePluginsByName(plugins: AgentSkillEntry[]): AgentSkillEntry[] {
+  const seen = new Map<string, AgentSkillEntry>();
+  for (const plugin of plugins) {
+    if (!seen.has(plugin.name)) seen.set(plugin.name, plugin);
+  }
+  return Array.from(seen.values());
 }
 
 async function readGeminiSkills(): Promise<AgentSkillEntry[]> {

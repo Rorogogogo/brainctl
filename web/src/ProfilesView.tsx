@@ -296,27 +296,27 @@ function StaticCard({
   id: string;
   label: string;
   sublabel: string;
-  details?: string[];
+  details?: Array<{ name: string; kind: 'skill' | 'mcp' | 'agent' | 'command' }>;
   status?: 'added' | 'removed';
   onRemove?: () => void;
   editable: boolean;
 }) {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id, disabled: !editable });
   const [expanded, setExpanded] = useState(false);
-  
+
   const statusClass =
     status === 'added'
       ? ' border-emerald-200/80 bg-emerald-50/50'
       : status === 'removed'
       ? ' border-red-200/80 bg-red-50/50 opacity-75 line-through'
       : ' border-zinc-200/80 bg-white';
-      
+
   const editableClass = editable
     ? ' cursor-grab hover:border-zinc-400 hover:shadow-md active:cursor-grabbing'
     : '';
 
-  const skillCount = details?.length ?? 0;
-  const hasDetails = skillCount > 0;
+  const detailCount = details?.length ?? 0;
+  const hasDetails = detailCount > 0;
   const dragProps = editable ? { ...listeners, ...attributes } : {};
 
   return (
@@ -362,10 +362,24 @@ function StaticCard({
         ) : null}
       </div>
       {hasDetails && expanded ? (
-        <div className="pl-1 pt-1">
-          <span className="text-[11px] leading-relaxed text-zinc-500">
-            {details!.join(', ')}
-          </span>
+        <div className="flex flex-wrap gap-1 pl-1 pt-1">
+          {details!.map((item) => (
+            <span
+              key={`${item.kind}:${item.name}`}
+              className={`inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-medium ${
+                item.kind === 'mcp'
+                  ? 'bg-indigo-50 text-indigo-700'
+                  : item.kind === 'agent'
+                  ? 'bg-amber-50 text-amber-700'
+                  : item.kind === 'command'
+                  ? 'bg-sky-50 text-sky-700'
+                  : 'bg-zinc-100 text-zinc-600'
+              }`}
+            >
+              <span className="text-[9px] uppercase tracking-wide opacity-60">{item.kind}</span>
+              {item.name}
+            </span>
+          ))}
         </div>
       ) : null}
     </div>
@@ -557,7 +571,12 @@ function AgentColumn({
               id={`${config.agent}:plugin:${plugin.name}`}
               label={plugin.name}
               sublabel={formatPluginSubtitle(plugin)}
-              details={plugin.pluginSkills}
+              details={[
+                ...(plugin.pluginSkills ?? []).map((name) => ({ name, kind: 'skill' as const })),
+                ...(plugin.pluginMcps ?? []).map((name) => ({ name, kind: 'mcp' as const })),
+                ...(plugin.pluginAgents ?? []).map((name) => ({ name, kind: 'agent' as const })),
+                ...(plugin.pluginCommands ?? []).map((name) => ({ name, kind: 'command' as const })),
+              ]}
               status={status}
               onRemove={editable && plugin.managed ? () => onStagedRemove(config.agent, 'plugin', plugin.name) : undefined}
               editable={editable}

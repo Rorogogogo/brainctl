@@ -36,13 +36,6 @@ export function createClaudeWriter(): AgentConfigWriter {
         mcpServers[name] = toClaudeFormat(config);
       }
 
-      // Always include brainctl itself
-      mcpServers['brainctl'] = {
-        type: 'stdio',
-        command: 'npx',
-        args: ['-y', 'brainctl', 'mcp'],
-      };
-
       // Merge into existing config (preserve other projects)
       const projects = (existing.projects ?? {}) as Record<string, Record<string, unknown>>;
       const projectConfig = projects[options.cwd] ?? {};

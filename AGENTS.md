@@ -15,10 +15,10 @@
 Use strict TypeScript with ESM semantics. Relative imports in `.ts` files should keep the existing `.js` extension style required by the `NodeNext` config. Follow the current 2-space indentation, semicolons, and small focused modules. Use `PascalCase` for React components (`RunView.tsx`), `camelCase` for functions and variables, and kebab-case for service-oriented filenames such as `run-service.ts`.
 
 ## Testing Guidelines
-Vitest is configured for the Node environment and discovers `tests/**/*.test.ts`. Add or update tests with every behavior change, especially around command parsing, service orchestration, executor behavior, and UI/API routes. Prefer deterministic temp-directory fixtures over machine-specific state. There is no formal coverage threshold, but new features should ship with regression coverage.
+Vitest is configured for the Node environment and discovers `tests/**/*.test.ts`. Add or update tests with every behavior change, especially around command parsing, service orchestration, executor behavior, sync writer output, and UI/API routes. Prefer deterministic temp-directory fixtures over machine-specific state. Use focused runs such as `npx vitest run tests/sync-service.test.ts tests/sync-writers.test.ts` when iterating on agent config sync behavior. There is no formal coverage threshold, but new features should ship with regression coverage.
 
 ## Commit & Pull Request Guidelines
 Recent history follows Conventional Commit prefixes such as `feat:`, `fix:`, and `chore:`; keep subjects short and imperative. Pull requests should summarize user-visible behavior changes, list verification commands run, and link related issues when available. Include screenshots for `web/` changes and terminal examples for CLI UX changes. If a change affects config shape or workflow, update `README.md` and any relevant note in `docs/plans/`.
 
 ## Configuration Notes
-Target Node `>=18.18.0`. `ai-stack.yaml` is resolved from the current working directory, so test commands from a realistic project folder. Avoid hardcoded local paths; use path helpers in code and temporary directories in tests.
+Target Node `>=18.18.0`. `ai-stack.yaml` is resolved from the current working directory, so test commands from a realistic project folder. `brainctl sync` should write only the MCP entries declared in the active profile; do not auto-inject extra MCP servers into Claude, Codex, or Gemini configs. Avoid hardcoded local paths; use path helpers in code and temporary directories in tests.

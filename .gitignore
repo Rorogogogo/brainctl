@@ -3,3 +3,7 @@ dist/
 .DS_Store
 coverage/
 *.log
+*.bak.*
+.brainctl/
+ohmyclaude
+

@@ -22,6 +22,7 @@ describe('profiles view helpers', () => {
             args: ['-y', '@modelcontextprotocol/server-github'],
           },
         },
+        remoteMcpServers: {},
         skills: [],
       },
       {
@@ -34,6 +35,7 @@ describe('profiles view helpers', () => {
             args: ['-y', '@modelcontextprotocol/server-github'],
           },
         },
+        remoteMcpServers: {},
         skills: [],
       },
     ];
@@ -61,6 +63,7 @@ describe('profiles view helpers', () => {
         configPath: '/tmp/claude.json',
         exists: true,
         mcpServers: {},
+        remoteMcpServers: {},
         skills: [{ name: 'notes', source: 'local' }],
       },
       {
@@ -68,6 +71,7 @@ describe('profiles view helpers', () => {
         configPath: '/tmp/gemini.json',
         exists: true,
         mcpServers: {},
+        remoteMcpServers: {},
         skills: [{ name: 'notes', source: 'local' }],
       },
     ];
@@ -169,6 +173,7 @@ describe('profiles view helpers', () => {
         configPath: '/tmp/claude.json',
         exists: true,
         mcpServers: {},
+        remoteMcpServers: {},
         skills: [{ name: 'frontend-design', source: 'claude-plugins-official', kind: 'plugin' }],
       },
       {
@@ -176,6 +181,7 @@ describe('profiles view helpers', () => {
         configPath: '/tmp/config.toml',
         exists: true,
         mcpServers: {},
+        remoteMcpServers: {},
         skills: [{ name: 'frontend-design', source: 'claude-plugins-official', kind: 'plugin', managed: true }],
       },
     ];
@@ -191,5 +197,46 @@ describe('profiles view helpers', () => {
     });
 
     expect(error).toBe('Plugin "frontend-design" already exists in Codex. Remove it first before copying.');
+  });
+
+  it('allows staging a remote MCP without local command metadata', () => {
+    const configs: AgentLiveConfig[] = [
+      {
+        agent: 'claude',
+        configPath: '/tmp/claude.json',
+        exists: true,
+        mcpServers: {},
+        remoteMcpServers: {
+          docs: {
+            transport: 'http',
+            url: 'https://developers.openai.com/mcp',
+          },
+        },
+        skills: [],
+      },
+      {
+        agent: 'gemini',
+        configPath: '/tmp/gemini.json',
+        exists: true,
+        mcpServers: {},
+        remoteMcpServers: {},
+        skills: [],
+      },
+    ];
+
+    const error = canStagePendingAddition(configs, {
+      id: 'change-1',
+      type: 'add',
+      category: 'mcp',
+      agent: 'gemini',
+      key: 'docs',
+      remoteEntry: {
+        transport: 'http',
+        url: 'https://developers.openai.com/mcp',
+      },
+      sourceAgent: 'claude',
+    });
+
+    expect(error).toBeNull();
   });
 });

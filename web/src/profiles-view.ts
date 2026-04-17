@@ -4,12 +4,21 @@ export interface AgentMcpEntry {
   env?: Record<string, string>;
 }
 
+export interface AgentRemoteMcpEntry {
+  transport: 'http' | 'sse';
+  url: string;
+  headers?: Record<string, string>;
+  env?: Record<string, string>;
+}
+
 export interface AgentSkillEntry {
   name: string;
   source?: string;
   kind?: 'skill' | 'plugin';
   pluginSkills?: string[];
   pluginMcps?: string[];
+  pluginAgents?: string[];
+  pluginCommands?: string[];
   installPath?: string;
   managed?: boolean;
 }
@@ -19,6 +28,7 @@ export interface AgentLiveConfig {
   configPath: string;
   exists: boolean;
   mcpServers: Record<string, AgentMcpEntry>;
+  remoteMcpServers: Record<string, AgentRemoteMcpEntry>;
   skills: AgentSkillEntry[];
 }
 
@@ -29,6 +39,7 @@ export interface PendingChange {
   agent: string;
   key: string;
   entry?: AgentMcpEntry;
+  remoteEntry?: AgentRemoteMcpEntry;
   skillEntry?: AgentSkillEntry;
   pluginEntry?: AgentSkillEntry;
   sourceAgent?: string;
@@ -61,11 +72,11 @@ export function canStagePendingAddition(
   const targetLabel = AGENT_LABELS[change.agent] ?? change.agent;
 
   if (change.category === 'mcp') {
-    if (!change.entry) {
+    if (!change.entry && !change.remoteEntry) {
       return `MCP "${change.key}" is missing the command metadata needed to copy it.`;
     }
 
-    if (targetConfig.mcpServers[change.key]) {
+    if (targetConfig.mcpServers[change.key] || targetConfig.remoteMcpServers[change.key]) {
       return `MCP "${change.key}" already exists in ${targetLabel}. Remove it first before copying.`;
     }
 
@@ -114,13 +125,19 @@ export function splitAgentSkillEntries(
 
 export function formatPluginSubtitle(entry: AgentSkillEntry): string {
   const source = entry.source ?? 'managed';
-  const count = entry.pluginSkills?.length ?? 0;
+  const skillCount = entry.pluginSkills?.length ?? 0;
+  const mcpCount = entry.pluginMcps?.length ?? 0;
+  const agentCount = entry.pluginAgents?.length ?? 0;
+  const commandCount = entry.pluginCommands?.length ?? 0;
 
-  if (count === 0) {
-    return source;
-  }
+  const parts: string[] = [];
+  if (skillCount > 0) parts.push(`${skillCount} skill${skillCount > 1 ? 's' : ''}`);
+  if (mcpCount > 0) parts.push(`${mcpCount} MCP${mcpCount > 1 ? 's' : ''}`);
+  if (agentCount > 0) parts.push(`${agentCount} agent${agentCount > 1 ? 's' : ''}`);
+  if (commandCount > 0) parts.push(`${commandCount} command${commandCount > 1 ? 's' : ''}`);
 
-  return `${source} • ${count} skill${count > 1 ? 's' : ''}`;
+  if (parts.length === 0) return source;
+  return `${source} • ${parts.join(' + ')}`;
 }
 
 export async function applyPendingChangesWithApi(

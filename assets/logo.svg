@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 560 200" fill="none">
+  <style>
+    .word { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-weight: 700; font-size: 76px; letter-spacing: -2px; fill: #0a0a0a; }
+    .accent { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-weight: 500; font-size: 13px; letter-spacing: 4px; fill: #0a0a0a; opacity: 0.55; }
+  </style>
+
+  <g transform="translate(30,30)" stroke="#0a0a0a" stroke-width="7" stroke-linecap="round" stroke-linejoin="round" fill="none">
+    <line x1="70" y1="70" x2="30" y2="30"/>
+    <line x1="70" y1="70" x2="110" y2="30"/>
+    <line x1="70" y1="70" x2="70" y2="118"/>
+  </g>
+  <g transform="translate(30,30)" fill="#0a0a0a">
+    <circle cx="70" cy="70" r="11"/>
+    <circle cx="30" cy="30" r="8"/>
+    <circle cx="110" cy="30" r="8"/>
+    <circle cx="70" cy="118" r="8"/>
+  </g>
+
+  <text class="word" x="190" y="120">brainctl</text>
+  <text class="accent" x="192" y="148">CONTROL · YOUR · AGENTS</text>
+</svg>

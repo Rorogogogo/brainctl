@@ -6,7 +6,11 @@ import { parseConfigPayload } from '../config.js';
 import { BrainctlError, ConfigError, ProfileError, ProfileNotFoundError, ValidationError } from '../errors.js';
 import { loadMemory } from '../context/memory.js';
 import { createAgentConfigService } from '../services/agent-config-service.js';
-import type { AgentMcpEntry, AgentSkillEntry } from '../services/agent-config-service.js';
+import type {
+  AgentMcpEntry,
+  AgentSkillEntry,
+  PortableRemoteMcpMetadata,
+} from '../services/agent-config-service.js';
 import { createConfigWriteService } from '../services/config-write-service.js';
 import { createMcpPreflightService } from '../services/mcp-preflight-service.js';
 import { createPluginInstallService } from '../services/plugin-install-service.js';
@@ -298,9 +302,13 @@ export function createUiRouteHandler(
             return sendJson(response, 400, { error: 'Invalid JSON body' });
           }
 
-          const data = body.value as { key?: string; entry?: AgentMcpEntry };
-          if (!data.key || !data.entry?.command) {
-            return sendJson(response, 400, { error: 'Missing key or entry.command' });
+          const data = body.value as {
+            key?: string;
+            entry?: AgentMcpEntry;
+            remoteEntry?: PortableRemoteMcpMetadata;
+          };
+          if (!data.key || (!data.entry?.command && !data.remoteEntry?.url)) {
+            return sendJson(response, 400, { error: 'Missing key and MCP payload' });
           }
 
           const result = await mcpPreflightService.execute({
@@ -308,6 +316,7 @@ export function createUiRouteHandler(
             agent: agentName,
             key: data.key,
             entry: data.entry,
+            remoteEntry: data.remoteEntry,
           });
           return sendJson(response, 200, result);
         }
@@ -322,9 +331,13 @@ export function createUiRouteHandler(
             if (!body.ok) {
               return sendJson(response, 400, { error: 'Invalid JSON body' });
             }
-            const data = body.value as { key?: string; entry?: AgentMcpEntry };
-            if (!data.key || !data.entry?.command) {
-              return sendJson(response, 400, { error: 'Missing key or entry.command' });
+            const data = body.value as {
+              key?: string;
+              entry?: AgentMcpEntry;
+              remoteEntry?: PortableRemoteMcpMetadata;
+            };
+            if (!data.key || (!data.entry?.command && !data.remoteEntry?.url)) {
+              return sendJson(response, 400, { error: 'Missing key and MCP payload' });
             }
             try {
               await agentConfigService.addMcp({
@@ -332,6 +345,7 @@ export function createUiRouteHandler(
                 agent: agentName,
                 key: data.key,
                 entry: data.entry,
+                remoteEntry: data.remoteEntry,
               });
               return sendJson(response, 200, { ok: true });
             } catch (error) {

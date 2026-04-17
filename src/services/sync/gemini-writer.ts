@@ -36,12 +36,6 @@ export function createGeminiWriter(): AgentConfigWriter {
         mcpServers[name] = toGeminiFormat(config);
       }
 
-      // Always include brainctl itself
-      mcpServers['brainctl'] = {
-        command: 'npx',
-        args: ['-y', 'brainctl', 'mcp'],
-      };
-
       // Merge into existing config (preserve other settings)
       existing.mcpServers = mcpServers;
 

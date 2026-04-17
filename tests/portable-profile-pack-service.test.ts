@@ -81,7 +81,7 @@ describe('createPortableProfilePackService', () => {
     expect(manifest.profileName).toBe('starter');
     expect(manifest.createdBy).toEqual({
       tool: 'brainctl',
-      version: '0.1.6',
+      version: '0.1.7',
     });
     expect(manifest.credentials).toEqual([
       expect.objectContaining({
@@ -188,7 +188,7 @@ describe('createPortableProfilePackService', () => {
     });
     expect(manifest.createdBy).toEqual({
       tool: 'brainctl',
-      version: '0.1.6',
+      version: '0.1.7',
     });
     expect(profile.name).toBe(`workspace-${agent}`);
     if (agent === 'claude') {

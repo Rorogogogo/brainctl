@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 220" fill="none">
+  <style>
+    .fg { fill: #0a0a0a; }
+    .stroke { stroke: #0a0a0a; stroke-width: 6; fill: none; stroke-linecap: round; stroke-linejoin: round; }
+    .word { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-weight: 700; font-size: 76px; letter-spacing: -2px; fill: #0a0a0a; }
+    .caret { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-weight: 700; font-size: 76px; fill: #0a0a0a; }
+  </style>
+
+  <!-- Mark: a terminal prompt containing a tiny brain lobe swirl -->
+  <g transform="translate(40,50)">
+    <rect class="stroke" x="4" y="4" width="120" height="112" rx="18"/>
+    <!-- brain lobe as two interlocking arcs -->
+    <path class="stroke" d="M48 76 C 40 66 40 50 56 46 C 62 40 76 40 80 50 C 90 46 100 54 96 66 C 104 72 98 86 88 84 C 84 94 68 94 64 84 C 54 86 46 84 48 76 Z"/>
+    <!-- inner groove -->
+    <path class="stroke" d="M66 56 C 66 68 74 72 74 80" opacity="0.8"/>
+  </g>
+
+  <!-- Wordmark -->
+  <text class="caret" x="184" y="130">&gt;_</text>
+  <text class="word" x="270" y="130">brainctl</text>
+</svg>

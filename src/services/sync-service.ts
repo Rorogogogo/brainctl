@@ -67,7 +67,7 @@ export function createSyncService(
           agent,
           configPath: result.configPath,
           backedUpTo: result.backedUpTo,
-          mcpCount: Object.keys(profile.mcps).length + 1, // +1 for brainctl itself
+          mcpCount: Object.keys(profile.mcps).length,
         });
       }
 
