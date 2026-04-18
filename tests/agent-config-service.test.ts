@@ -86,11 +86,11 @@ describe('agent config service', () => {
     expect(saved).toContain('url = "https://developers.openai.com/mcp"');
   });
 
-  it('writes Gemini MCP changes to the project-local settings file', async () => {
+  it('writes Gemini MCP changes to the global settings file', async () => {
     const cwd = path.join(homeDir, 'workspace');
-    await mkdir(path.join(cwd, '.gemini'), { recursive: true });
+    await mkdir(path.join(homeDir, '.gemini'), { recursive: true });
     await writeFile(
-      path.join(cwd, '.gemini', 'settings.json'),
+      path.join(homeDir, '.gemini', 'settings.json'),
       JSON.stringify({ mcpServers: {} }, null, 2),
       'utf8'
     );
@@ -110,7 +110,7 @@ describe('agent config service', () => {
     });
 
     const saved = JSON.parse(
-      await readFile(path.join(cwd, '.gemini', 'settings.json'), 'utf8')
+      await readFile(path.join(homeDir, '.gemini', 'settings.json'), 'utf8')
     ) as {
       mcpServers: Record<string, unknown>;
     };

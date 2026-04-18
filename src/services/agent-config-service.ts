@@ -296,39 +296,25 @@ function tomlStr(value: string): string {
 /* ---- Gemini: JSON with mcpServers ---- */
 
 async function mutateGeminiConfig(
-  cwd: string,
+  _cwd: string,
   mutate: (servers: Record<string, unknown>) => void
 ): Promise<void> {
-  const globalConfigPath = path.join(homedir(), '.gemini', 'settings.json');
-  const projectConfigPath = path.join(cwd, '.gemini', 'settings.json');
+  const configPath = path.join(homedir(), '.gemini', 'settings.json');
 
-  // Mutate global config
+  let existing: Record<string, unknown> = {};
   try {
-    const globalExisting = JSON.parse(await readFile(globalConfigPath, 'utf8')) as Record<string, unknown>;
-    await backupFile(globalConfigPath);
-    const globalServers = (globalExisting.mcpServers ?? {}) as Record<string, unknown>;
-    mutate(globalServers);
-    globalExisting.mcpServers = globalServers;
-    await atomicWriteJson(globalConfigPath, globalExisting);
+    existing = JSON.parse(await readFile(configPath, 'utf8')) as Record<string, unknown>;
+    await backupFile(configPath);
   } catch {
-    // no global config — skip
+    // fresh config
   }
 
-  // Mutate project config
-  let projectExisting: Record<string, unknown> = {};
-  try {
-    projectExisting = JSON.parse(await readFile(projectConfigPath, 'utf8')) as Record<string, unknown>;
-    await backupFile(projectConfigPath);
-  } catch {
-    // fresh project config
-  }
-
-  const servers = (projectExisting.mcpServers ?? {}) as Record<string, unknown>;
+  const servers = (existing.mcpServers ?? {}) as Record<string, unknown>;
   mutate(servers);
-  projectExisting.mcpServers = servers;
+  existing.mcpServers = servers;
 
-  await mkdir(path.dirname(projectConfigPath), { recursive: true });
-  await atomicWriteJson(projectConfigPath, projectExisting);
+  await mkdir(path.dirname(configPath), { recursive: true });
+  await atomicWriteJson(configPath, existing);
 }
 
 function toGeminiEntry(entry: AgentMcpEntry): Record<string, unknown> {

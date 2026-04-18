@@ -578,7 +578,15 @@ function AgentColumn({
                 ...(plugin.pluginCommands ?? []).map((name) => ({ name, kind: 'command' as const })),
               ]}
               status={status}
-              onRemove={editable && plugin.managed ? () => onStagedRemove(config.agent, 'plugin', plugin.name) : undefined}
+              onRemove={
+                editable &&
+                (plugin.managed ||
+                  ((config.agent === 'codex' || config.agent === 'claude') &&
+                    typeof plugin.installPath === 'string' &&
+                    typeof plugin.source === 'string'))
+                  ? () => onStagedRemove(config.agent, 'plugin', plugin.name)
+                  : undefined
+              }
               editable={editable}
             />
           );

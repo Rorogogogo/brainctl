@@ -17,7 +17,7 @@ vi.mock('node:os', async () => {
 });
 
 import { createClaudeWriter } from '../src/services/sync/claude-writer.js';
-import { createCodexWriter } from '../src/services/sync/codex-writer.js';
+import { createCodexWriter, stripPluginSection } from '../src/services/sync/codex-writer.js';
 import { createGeminiWriter } from '../src/services/sync/gemini-writer.js';
 
 describe('sync writers', () => {
@@ -96,7 +96,7 @@ describe('sync writers', () => {
 
   it('writes Gemini MCP config without adding brainctl automatically', async () => {
     const cwd = path.join(tempDir, 'project');
-    const configDir = path.join(cwd, '.gemini');
+    const configDir = path.join(tempDir, '.gemini');
     const configPath = path.join(configDir, 'settings.json');
     await mkdir(configDir, { recursive: true });
     await writeFile(
@@ -124,5 +124,50 @@ describe('sync writers', () => {
 
     expect(saved.theme).toBe('dark');
     expect(saved.mcpServers).toEqual({});
+  });
+});
+
+describe('stripPluginSection', () => {
+  it('removes the matching plugin section and leaves other sections intact', () => {
+    const input = [
+      'model = "gpt-5"',
+      '',
+      '[plugins."gmail@openai-curated"]',
+      'enabled = true',
+      '',
+      '[plugins."github@openai-curated"]',
+      'enabled = true',
+      '',
+      '[mcp_servers.playwright]',
+      'command = "npx"',
+    ].join('\n');
+
+    const output = stripPluginSection(input, 'gmail@openai-curated');
+
+    expect(output).not.toContain('gmail@openai-curated');
+    expect(output).toContain('[plugins."github@openai-curated"]');
+    expect(output).toContain('[mcp_servers.playwright]');
+    expect(output).toContain('model = "gpt-5"');
+  });
+
+  it('handles the target being the final section in the file', () => {
+    const input = [
+      '[features]',
+      'unified_exec = true',
+      '',
+      '[plugins."gmail@openai-curated"]',
+      'enabled = true',
+    ].join('\n');
+
+    const output = stripPluginSection(input, 'gmail@openai-curated');
+
+    expect(output).not.toContain('gmail@openai-curated');
+    expect(output).toContain('[features]');
+    expect(output).toContain('unified_exec = true');
+  });
+
+  it('returns content unchanged when the plugin key is not present', () => {
+    const input = '[plugins."github@openai-curated"]\nenabled = true\n';
+    expect(stripPluginSection(input, 'gmail@openai-curated')).toBe(input);
   });
 });

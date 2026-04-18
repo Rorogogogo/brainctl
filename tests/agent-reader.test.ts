@@ -116,11 +116,11 @@ describe('agent readers', () => {
     });
   });
 
-  it('reads project-local Gemini MCPs into separate maps', async () => {
+  it('reads global Gemini MCPs into separate maps', async () => {
     const cwd = path.join(homeDir, 'workspace');
-    await mkdir(path.join(cwd, '.gemini'), { recursive: true });
+    await mkdir(path.join(homeDir, '.gemini'), { recursive: true });
     await writeFile(
-      path.join(cwd, '.gemini', 'settings.json'),
+      path.join(homeDir, '.gemini', 'settings.json'),
       JSON.stringify(
         {
           mcpServers: {
