@@ -1,182 +1,231 @@
+<div align="center">
+
 # 🧠 brainctl
 
-> One AI setup. Multiple agents. Zero reconfiguration.
+**One AI setup. Three agents. Zero reconfiguration.**
 
-**brainctl** is a cross-agent AI workflow manager that unifies your environment across Claude Code, Codex, and Gemini CLI — with a web dashboard, MCP server, and portable profiles.
+*A cross-agent command centre for Claude Code, Codex, and Gemini CLI — CLI + MCP server + drag-and-drop web dashboard.*
 
 [![npm version](https://img.shields.io/npm/v/brainctl)](https://www.npmjs.com/package/brainctl)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 [![Build](https://img.shields.io/github/actions/workflow/status/Rorogogogo/brainctl/deploy.yml?branch=main)](https://github.com/Rorogogogo/brainctl/actions)
+[![Stars](https://img.shields.io/github/stars/Rorogogogo/brainctl?style=social)](https://github.com/Rorogogogo/brainctl)
+
+</div>
+
+---
+
+## 📦 Install & Set Up
+
+> **Install once, wire into each agent.** The CLI is the same for everyone — only the MCP registration differs per agent.
+
+### 1. Install the CLI
+
+```bash
+npm install -g brainctl
+```
+
+Verify:
+
+```bash
+brainctl --version
+brainctl doctor   # checks which agents are on your PATH
+```
+
+> **Prerequisite:** at least one of `claude`, `codex`, or `gemini` installed and on your `PATH`.
+
+---
+
+### 2. Register `brainctl` as an MCP server (pick your agents)
+
+Each agent has its own config file. Brainctl exposes **22 MCP tools** (profiles, sync, skills, run, web UI launch, etc.) — once you register it, any of them can call those tools.
+
+<details open>
+<summary><b>🟣 Claude Code</b> — <code>~/.claude.json</code></summary>
+
+Easiest: use the `claude` CLI.
+
+```bash
+claude mcp add brainctl -s user -- npx -y brainctl mcp
+```
+
+Or edit `~/.claude.json` directly:
+
+```jsonc
+{
+  "mcpServers": {
+    "brainctl": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "brainctl", "mcp"]
+    }
+  }
+}
+```
+
+Reload the MCP in Claude Code: `/mcp` → `brainctl` → **Reconnect**.
+
+</details>
+
+<details open>
+<summary><b>🟢 Codex</b> — <code>~/.codex/config.toml</code></summary>
+
+Append this block:
+
+```toml
+[mcp_servers.brainctl]
+command = "npx"
+args = ["-y", "brainctl", "mcp"]
+```
+
+Restart your Codex session to pick it up.
+
+</details>
+
+<details open>
+<summary><b>🔵 Gemini CLI</b> — <code>~/.gemini/settings.json</code></summary>
+
+Merge into the top-level `mcpServers` object:
+
+```json
+{
+  "mcpServers": {
+    "brainctl": {
+      "command": "npx",
+      "args": ["-y", "brainctl", "mcp"]
+    }
+  }
+}
+```
+
+Restart your Gemini session.
+
+</details>
+
+---
+
+### 3. Launch the dashboard
+
+```bash
+brainctl ui
+# → http://127.0.0.1:3333
+```
+
+Or from any MCP-connected agent: _"Open the brainctl UI"_ — it'll start the server **and** open your browser automatically.
 
 ---
 
 ## ✨ Features
 
-- 🔀 **Multi-agent support** — Claude Code, Codex, and Gemini CLI from one config
-- 🖥️ **Web dashboard** — Visual drag-and-drop MCP management across agents
-- 🔌 **MCP server** — 22 tools exposable to any MCP-compatible agent
-- 📦 **Portable profiles** — Pack and share skill + MCP bundles as self-contained tarballs
-- 🌐 **Multi-runtime packing** — Auto-detects and bundles Node, Python, Java, Go, Rust, and binary MCP servers
-- 🧠 **Shared memory** — Markdown-based context files shared across agents
-- 🧩 **Reusable skills** — Prompt templates stored in `ai-stack.yaml`
-- 🔄 **Profile sync** — Push configs to all agents in one command
-- 🩺 **Health checks** — `status` and `doctor` commands for visibility
-- 🔁 **Fallback agents** — Automatic failover if primary agent is unavailable
+- 🔀 **Multi-agent** — Claude Code, Codex, Gemini CLI from one config
+- 🖱️ **Drag-and-drop dashboard** — shuffle MCPs and skills between agents, staged + previewed before save
+- 🔌 **MCP server** — 22 tools any compatible agent can call
+- 📦 **Portable profiles** _(preview)_ — pack an entire agent setup (plugins + skills + MCPs) into a self-contained tarball
+- 🌐 **Multi-runtime packing** — Node, Python, Java, Go, Rust, or plain binaries — auto-detected
+- 🧠 **Shared memory** — markdown files injected into every run
+- 🧩 **Reusable skills** — prompt templates in `ai-stack.yaml`
+- 🔄 **One-shot sync** — push the active profile to all agents in one command
+- 🩺 **Health checks** — `status` and `doctor` surface drift and broken config
+- 🔁 **Fallback agents** — automatic failover if the primary agent is unavailable
 
 ---
 
-## 📸 Demo
-
-### Web Dashboard — Drag MCPs between agents
+## 📸 Dashboard at a glance
 
 ```
 ┌──────────────┐  ┌──────────────┐  ┌──────────────┐
-│    Claude     │  │    Codex     │  │    Gemini    │
+│    Claude    │  │    Codex     │  │    Gemini    │
 │ ┌──────────┐ │  │ ┌──────────┐ │  │              │
-│ │ github   │◄├──┤►│ github   │ │  │  Drop here   │
+│ │ github   │◄├──┤►│ github   │ │  │  drop here   │
 │ │ brainctl │ │  │ │ brainctl │ │  │  to copy     │
 │ └──────────┘ │  │ └──────────┘ │  │              │
 │ Skills: 11   │  │ Skills: 3    │  │ Skills: 0    │
 └──────────────┘  └──────────────┘  └──────────────┘
 ```
 
-The dashboard reads **live config files** from each agent (`~/.claude.json`, `~/.codex/config.toml`, `~/.gemini/settings.json`) and lets you drag MCPs between them. Changes are staged and only applied on confirm.
-
----
-
-## 📦 Installation
-
-```bash
-npm install -g brainctl
-```
-
-Or from source:
-
-```bash
-git clone https://github.com/Rorogogogo/brainctl.git
-cd brainctl
-npm install && npm run build && npm link
-```
-
-> **Prerequisite:** At least one supported agent CLI must be installed and on your `PATH` (`claude`, `codex`, or `gemini`).
+The dashboard reads **live config files** (`~/.claude.json`, `~/.codex/config.toml`, `~/.gemini/settings.json`) and writes back atomically with timestamped backups.
 
 ---
 
 ## 🚀 Quick Start
 
 ```bash
-# 1. Initialize a project
+# Scaffold a project
 brainctl init
 
-# 2. Check your setup
+# See what's wired up
 brainctl status
 brainctl doctor
 
-# 3. Run a skill
+# Run a skill through an agent
 brainctl run summarize ./memory/notes.md --with claude
 
-# 4. Launch the web dashboard
+# Open the dashboard
 brainctl ui
-# → http://127.0.0.1:3333
 ```
 
 ---
 
-## 📖 Usage
+## 📖 CLI reference
 
-### CLI Commands
-
-| Command | Description |
-|---------|-------------|
-| `brainctl init` | Scaffold `ai-stack.yaml` and `memory/` directory |
-| `brainctl status` | Show memory, skills, MCPs, and agent availability |
-| `brainctl doctor` | Validate config, paths, and installed agents |
-| `brainctl run <skill> <file> --with <agent>` | Execute a skill through an agent |
-| `brainctl profile list` | List available profiles |
-| `brainctl profile create <name>` | Create a new profile |
-| `brainctl profile use <name>` | Switch active profile |
-| `brainctl profile export [name] [--agent <agent>]` | Pack a profile or live agent config as a portable tarball |
-| `brainctl profile import <archive> [--credential key=value]` | Import portable tarball and install bundled MCPs |
-| `brainctl sync` | Sync active profile to all agent configs |
+| Command | What it does |
+|---|---|
+| `brainctl init` | Scaffold `ai-stack.yaml` and `memory/` |
+| `brainctl status` | Memory, skills, MCPs, and agent availability |
+| `brainctl doctor` | Validate config, paths, and agent CLIs |
+| `brainctl run <skill> <file> --with <agent>` | Execute a skill |
+| `brainctl profile list / create / use / delete` | Manage saved profiles |
+| `brainctl profile export [name] [--agent <agent>]` | Pack a profile or live agent as a portable tarball |
+| `brainctl profile import <archive> [--credential key=value]` | Restore a portable tarball |
+| `brainctl sync` | Push the active profile to every agent |
 | `brainctl ui` | Start the web dashboard |
+| `brainctl mcp` | Run as an MCP server over stdio |
 
-### Run Examples
+### Run examples
 
 ```bash
-# Basic execution
 brainctl run summarize ./notes.md --with claude
-
-# With fallback agent
-brainctl run analyze ./report.md --with codex --fallback claude
-
-# Using Gemini
-brainctl run review ./code.md --with gemini
+brainctl run analyze   ./report.md --with codex --fallback claude
+brainctl run review    ./code.md   --with gemini
 ```
 
-### Portable Profiles
+---
 
-Pack and share your MCP setup with teammates. brainctl auto-detects the runtime for each MCP server and creates a self-contained archive.
+## 📦 Portable profiles
 
-**Supported runtimes:**
-
-| Runtime | Detection | Install on unpack | Excluded from archive |
-|---------|-----------|------------------|-----------------------|
-| Node.js | `node`, `npx` | `npm install` | `node_modules/` |
-| Python | `python`, `python3` | `pip install` or `uv sync` | `.venv/`, `__pycache__/` |
-| Java | `java -jar` | — (self-contained) | — |
-| Java (project) | `pom.xml`, `build.gradle` | `mvn package` or `gradle build` | `target/`, `build/` |
-| Go | `go run` | `go build ./...` | — |
-| Rust | `cargo run` | `cargo build --release` | `target/` |
-| Binary | `./server` | — (self-contained) | — |
+Pack your complete agent setup — **plugins, user-authored skills, and MCPs** — into a single `.tar.gz`. The receiver imports it with one command; no marketplace, no network lookups.
 
 ```bash
-# Pack from a saved profile
+# Pack a saved profile
 brainctl profile export starter
 
-# Pack from a live agent config
+# Pack a live agent's state (plugins + skills + MCPs)
 brainctl profile export --agent claude
 
-# Import with credential resolution
-brainctl profile import ./starter.tar.gz \
-  --credential github_token=ghp_xxx \
-  --credential internal_api_key=sk_live_xxx
+# Restore on another machine
+brainctl profile import ./claude.tar.gz \
+  --credential github_token=ghp_xxx
 ```
 
-Archives contain:
-- `manifest.yaml` — schema version, pack source, required credentials
-- `profile.yaml` — normalized MCP definitions with explicit `runtime`, `install`, and `exclude`
-- Bundled MCP directories (source code, jars, binaries — minus build artifacts)
+**Supported MCP runtimes when packing bundled servers:**
 
-Credentials are automatically redacted to `${credentials.<key>}` placeholders on export.
+| Runtime | Detected via | Install on unpack | Excluded |
+|---|---|---|---|
+| Node.js | `node`, `npx` | `npm install` | `node_modules/` |
+| Python | `python`, `python3` | `pip install` / `uv sync` | `.venv/`, `__pycache__/` |
+| Java | `java -jar` | — | — |
+| Java (project) | `pom.xml`, `build.gradle` | `mvn package` / `gradle build` | `target/`, `build/` |
+| Go | `go run` | `go build ./...` | — |
+| Rust | `cargo run` | `cargo build --release` | `target/` |
+| Binary | `./server` | — | — |
 
-### Profile MCP Format
+Credentials are redacted to `${credentials.<key>}` placeholders on export and resolved on import.
 
-```yaml
-mcps:
-  github:
-    kind: local
-    source: npm
-    package: "@modelcontextprotocol/server-github"
-
-  my-python-mcp:
-    kind: local
-    source: bundled
-    runtime: python
-    path: ./mcps/my-python-mcp
-    command: python
-    args: ["server.py"]
-    install: "pip install -r requirements.txt"
-    exclude: [".venv", "__pycache__", "*.pyc"]
-
-  internal-docs:
-    kind: remote
-    transport: http
-    url: "https://mcp.example.com"
-```
+> ⚠️ Pack / Install via the web UI is currently disabled while we grind the last rough edges. The CLI commands above work today.
 
 ---
 
-## 🧠 Config: `ai-stack.yaml`
+## 🧠 `ai-stack.yaml`
 
 ```yaml
 memory:
@@ -197,15 +246,15 @@ skills:
 mcps: {}
 ```
 
-### How Context Assembly Works
+### How context is assembled
 
 ```
 ┌─────────────┐
-│   MEMORY    │  ← Markdown files from configured paths
+│   MEMORY    │  ← markdown files from configured paths
 ├─────────────┤
-│   SKILL     │  ← Prompt template from ai-stack.yaml
+│   SKILL     │  ← prompt template from ai-stack.yaml
 ├─────────────┤
-│   INPUT     │  ← Your file
+│   INPUT     │  ← your file
 └─────────────┘
         ↓
    Agent CLI (claude / codex / gemini)
@@ -213,54 +262,29 @@ mcps: {}
 
 ---
 
-## 🔌 MCP Server
-
-brainctl exposes **22 MCP tools** that any compatible agent can call:
-
-```bash
-# Add brainctl as an MCP server in your agent config
-# Claude (~/.claude.json):
-{
-  "mcpServers": {
-    "brainctl": {
-      "type": "stdio",
-      "command": "npx",
-      "args": ["-y", "brainctl", "mcp"]
-    }
-  }
-}
-```
-
-**Available tools:**
+## 🔌 MCP tools
 
 | Category | Tools |
-|----------|-------|
+|---|---|
 | **Skills** | `list_skills`, `get_skill`, `run` |
 | **Memory** | `read_memory`, `write_memory` |
 | **Profiles** | `list_profiles`, `get_profile`, `create_profile`, `update_profile`, `delete_profile`, `switch_profile`, `copy_profile_items`, `export_profile`, `import_profile` |
-| **Agent Configs** | `read_agent_configs`, `add_agent_mcp`, `remove_agent_mcp` |
+| **Agent configs** | `read_agent_configs`, `add_agent_mcp`, `remove_agent_mcp` |
 | **Sync** | `sync` |
 | **System** | `status`, `doctor` |
 | **UI** | `open_ui`, `close_ui` |
 
 ---
 
-## 🖥️ Web Dashboard
+## 🗂️ Agent config map
 
-```bash
-brainctl ui
-```
+| Agent | Config file | MCP location | Skills / plugins |
+|---|---|---|---|
+| Claude | `~/.claude.json` | `mcpServers` + `projects[cwd].mcpServers` | `~/.claude/plugins/` + `~/.claude/skills/` |
+| Codex | `~/.codex/config.toml` | `[mcp_servers.*]` | `~/.codex/plugins/` + `~/.codex/skills/` |
+| Gemini | `~/.gemini/settings.json` | `mcpServers` | `~/.gemini/skills/` |
 
-Opens a local dashboard at `http://127.0.0.1:3333` with:
-
-- **Agent Profiles** — See live MCPs and skills for Claude, Codex, and Gemini side-by-side
-- **Drag & Drop** — Copy MCPs between agents by dragging cards
-- **Staged Changes** — Preview adds/removes before applying, with undo support
-- **Skills Editor** — Edit skill prompts with live preview
-- **MCP Manager** — View and edit MCP configurations
-- **Memory Viewer** — Browse shared markdown memory files
-- **Run Console** — Execute skills with real-time streaming output
-- **Portable Pack / Install** — Pack profiles or live agent configs, and install archives with credential resolution
+Writes are atomic (temp file → rename) and always leave a timestamped `.bak.*` behind.
 
 ---
 
@@ -269,63 +293,53 @@ Opens a local dashboard at `http://127.0.0.1:3333` with:
 ```
 brainctl/
 ├── src/
-│   ├── cli.ts              # CLI entry point (Commander)
-│   ├── commands/            # 8 command handlers
-│   ├── services/            # Business logic services
-│   │   └── sync/            # Agent config readers/writers
-│   ├── context/             # Memory loader, skill resolver, context builder
-│   ├── executor/            # Agent spawning (Claude, Codex, Gemini)
-│   ├── mcp/                 # FastMCP server (22 tools)
-│   └── ui/                  # HTTP server with SSE streaming
-├── web/src/                 # React dashboard (Vite + dnd-kit)
-├── tests/                   # Vitest test suite
-└── ai-stack.yaml            # Project config
-```
-
-### Agent Config Locations
-
-| Agent | Config Path | MCP Location |
-|-------|-------------|-------------|
-| Claude | `~/.claude.json` | `projects[cwd].mcpServers` |
-| Codex | `~/.codex/config.toml` | `[mcp_servers.*]` |
-| Gemini | `~/.gemini/settings.json` | `mcpServers` |
-
----
-
-## 🧪 Development
-
-```bash
-npm install
-npm test              # Run all tests (Vitest)
-npm run build         # Build server (tsc) + web (Vite)
-npm run dev -- <args> # Run CLI via tsx
+│   ├── cli.ts              # Commander entry
+│   ├── commands/           # CLI handlers
+│   ├── services/           # Business logic (factory pattern)
+│   │   └── sync/           # Per-agent readers + writers
+│   ├── context/            # Memory + skill + context builder
+│   ├── executor/           # Agent subprocess spawning
+│   ├── mcp/                # FastMCP server
+│   └── ui/                 # HTTP server (SSE streaming)
+├── web/src/                # React dashboard (Vite + dnd-kit)
+└── tests/                  # Vitest suite
 ```
 
 ---
 
-## 🤝 Contributing
-
-Contributions are welcome! Please open an issue or submit a pull request.
+## 🧪 Develop locally
 
 ```bash
 git clone https://github.com/Rorogogogo/brainctl.git
 cd brainctl
 npm install
-npm test
+
+npm test                  # vitest
+npm run build             # server (tsc) + web (vite)
+npm run dev -- status     # run CLI via tsx
+npx tsx src/cli.ts ui     # dashboard from source
 ```
+
+Point your agent's MCP config at `node <repo>/dist/cli.js mcp` to iterate without publishing.
 
 ---
 
 ## 💡 Philosophy
 
-brainctl doesn't replace your AI tools. It sits between you and them as a thin orchestration layer:
+brainctl doesn't replace your AI tools — it sits **between you and them** as a thin orchestration layer:
 
-- **You keep using** Claude Code, Codex, and Gemini CLI directly
-- **brainctl keeps** the environment consistent across all of them
-- **Profiles make it portable** — share your setup with your team
+- You keep using Claude Code, Codex, and Gemini CLI directly.
+- brainctl keeps the environment consistent across all of them.
+- Portable profiles make your setup shareable in one file.
+
+---
+
+## 🤝 Contributing
+
+Issues and PRs welcome. See [`CLAUDE.md`](CLAUDE.md) for the codebase map an agent-friendly contribution flow.
 
 ---
 
 ## 📄 License
 
-[MIT](https://opensource.org/licenses/MIT) — use it however you want.
+[MIT](https://opensource.org/licenses/MIT) — do whatever you want.

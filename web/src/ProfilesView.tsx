@@ -5,16 +5,19 @@ import {
   DragOverlay,
   PointerSensor,
   pointerWithin,
+  useDndContext,
   useDraggable,
   useDroppable,
   useSensor,
   useSensors,
+  type CollisionDetection,
   type DragEndEvent,
   type DragStartEvent,
   type Modifier,
 } from '@dnd-kit/core';
 import {
   ArrowRightLeft,
+  Bot,
   Boxes,
   Check,
   ChevronDown,
@@ -26,6 +29,7 @@ import {
   RefreshCw,
   Save,
   Server,
+  Terminal,
   Trash2,
   Undo2,
   X,
@@ -87,12 +91,12 @@ function parseDragId(id: string): { agent: string; category: 'mcp' | 'skill' | '
   return { agent: parts[0], category, key: parts.slice(2).join(':') };
 }
 
-function parseDropId(id: string): { agent: string; category: 'mcp' | 'skill' | 'plugin' } | null {
-  const m = id.match(/^(\w+):(mcps|skills|plugins)$/);
+function parseDropId(id: string): { agent: string; category: 'mcp' | 'skill' | 'plugin' | 'column' } | null {
+  const m = id.match(/^(\w+):(mcps|skills|plugins|column)(?::anchor)?$/);
   if (!m) return null;
   return {
     agent: m[1],
-    category: m[2] === 'mcps' ? 'mcp' : m[2] === 'skills' ? 'skill' : 'plugin',
+    category: m[2] === 'mcps' ? 'mcp' : m[2] === 'skills' ? 'skill' : m[2] === 'plugins' ? 'plugin' : 'column',
   };
 }
 
@@ -101,6 +105,34 @@ const AGENT_LABELS: Record<string, string> = {
   codex: 'Codex',
   gemini: 'Gemini',
 };
+
+const customCollisionDetection: CollisionDetection = (args) => {
+  const pointerCollisions = pointerWithin(args);
+  if (pointerCollisions.length === 0) return pointerCollisions;
+
+  const { active, droppableContainers } = args;
+  const source = parseDragId(active.id as string);
+  if (!source) return pointerCollisions;
+
+  const firstOver = pointerCollisions[0].id as string;
+  const target = parseDropId(firstOver);
+
+  if (target && target.agent !== source.agent) {
+    const correctCategory = source.category === 'mcp' ? 'mcps' : source.category === 'skill' ? 'skills' : 'plugins';
+    const correctZoneId = `${target.agent}:${correctCategory}:anchor`;
+    const correctDroppable = droppableContainers.find(d => d.id === correctZoneId);
+    if (correctDroppable) {
+      return [{ id: correctZoneId, data: correctDroppable.data, value: 100 }];
+    }
+  }
+
+  return pointerCollisions;
+};
+
+function DropAnchorWrapper({ id, children }: { id: string; children?: ReactNode }) {
+  const { setNodeRef } = useDroppable({ id });
+  return <div ref={setNodeRef} className={children ? "w-full" : "h-0 w-full"}>{children}</div>;
+}
 
 /** Snap the drag overlay so its top-left follows the pointer */
 const snapToPointer: Modifier = ({ activatorEvent, draggingNodeRect, transform }) => {
@@ -224,13 +256,13 @@ function DraggableCard({
 
   const statusClass =
     status === 'added'
-      ? ' border-emerald-200/80 bg-emerald-50/50'
+      ? ' border-emerald-200 bg-emerald-50/50 shadow-[0_0_12px_rgba(16,185,129,0.15)] ring-1 ring-emerald-400/20'
       : status === 'removed'
-      ? ' border-red-200/80 bg-red-50/50 opacity-75 line-through'
-      : ' border-zinc-200/80 bg-white';
+      ? ' border-red-200 bg-red-50 opacity-50 line-through'
+      : ' border-zinc-200 bg-white hover:border-zinc-300';
       
   const editableClass = editable
-    ? ' cursor-grab hover:border-zinc-400 hover:shadow-md active:cursor-grabbing'
+    ? ' cursor-grab active:cursor-grabbing hover:shadow-sm'
     : '';
 
   const dragProps = editable ? { ...listeners, ...attributes } : {};
@@ -238,29 +270,29 @@ function DraggableCard({
   return (
     <div
       ref={setNodeRef}
-      className={`flex items-start gap-2 rounded-xl border p-2.5 shadow-sm transition-all ${isDragging ? 'opacity-45' : ''}${statusClass}${editableClass}`}
+      className={`flex items-start gap-3 rounded-xl border p-3 transition-all duration-200 group ${isDragging ? 'opacity-50' : ''}${statusClass}${editableClass}`}
       {...dragProps}
     >
-      <div className="flex w-full items-start gap-2">
-        {icon ? <span className="grid size-6 shrink-0 place-items-center rounded-lg border border-zinc-200/80 bg-white text-zinc-900 shadow-sm">{icon}</span> : null}
+      <div className="flex w-full items-start gap-3">
+        {icon ? <span className="grid size-8 shrink-0 place-items-center rounded-lg border border-zinc-200 bg-zinc-50 text-zinc-600 transition-colors group-hover:text-zinc-900">{icon}</span> : null}
         <div className="grid min-w-0 flex-1 gap-0.5">
-          <strong className="truncate text-[13px] font-semibold text-zinc-900">{label}</strong>
-          <span className="truncate text-[11px] text-zinc-500">{sublabel}</span>
+          <strong className="truncate text-sm font-semibold text-zinc-900">{label}</strong>
+          <span className="truncate text-xs text-zinc-500">{sublabel}</span>
         </div>
         {status && (
-          <span className={`inline-flex shrink-0 items-center justify-center rounded-[6px] px-1.5 py-0.5 text-[11px] font-bold leading-none ${status === 'added' ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>
-            {status === 'added' ? '+' : '-'}
+          <span className={`inline-flex shrink-0 items-center justify-center rounded-md px-2 py-0.5 text-xs font-medium leading-none ${status === 'added' ? 'bg-zinc-100 text-zinc-700' : 'bg-red-100 text-red-700'}`}>
+            {status === 'added' ? 'Added' : 'Removed'}
           </span>
         )}
         {onRemove && !status && (
           <button
-            className="grid size-6 shrink-0 place-items-center rounded-lg text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-zinc-900"
+            className="grid size-8 shrink-0 place-items-center rounded-lg border border-transparent text-zinc-400 transition-colors hover:bg-red-50 hover:text-red-600"
             type="button"
             onPointerDown={(event) => event.stopPropagation()}
             onClick={onRemove}
-            title={`Stage removal of ${label}`}
+            title={`Remove ${label}`}
           >
-            <Trash2 size={13} />
+            <Trash2 size={16} />
           </button>
         )}
       </div>
@@ -270,14 +302,14 @@ function DraggableCard({
 
 function OverlayCard({ label, sublabel }: { label: string; sublabel: string }) {
   return (
-    <div className="flex items-start gap-2 rounded-xl border border-zinc-300 bg-white p-2.5 shadow-2xl shadow-zinc-900/10">
-      <div className="flex w-full items-start gap-2">
-        <span className="grid size-6 shrink-0 place-items-center rounded-lg border border-zinc-200/80 bg-white text-zinc-900 shadow-sm">
-          <ArrowRightLeft size={14} />
+    <div className="flex items-start gap-3 rounded-xl border border-zinc-200 bg-white p-3 shadow-lg rotate-2">
+      <div className="flex w-full items-start gap-3 text-zinc-900">
+        <span className="grid size-8 shrink-0 place-items-center rounded-lg border border-zinc-200 bg-zinc-50 text-zinc-600">
+          <ArrowRightLeft size={16} />
         </span>
         <div className="grid min-w-0 flex-1 gap-0.5">
-          <strong className="truncate text-[13px] font-semibold text-zinc-900">{label}</strong>
-          <span className="truncate text-[11px] text-zinc-500">{sublabel}</span>
+          <strong className="truncate text-sm font-semibold text-zinc-900">{label}</strong>
+          <span className="truncate text-xs text-zinc-500">{sublabel}</span>
         </div>
       </div>
     </div>
@@ -306,13 +338,13 @@ function StaticCard({
 
   const statusClass =
     status === 'added'
-      ? ' border-emerald-200/80 bg-emerald-50/50'
+      ? ' border-emerald-200 bg-emerald-50/50 shadow-[0_0_12px_rgba(16,185,129,0.15)] ring-1 ring-emerald-400/20'
       : status === 'removed'
-      ? ' border-red-200/80 bg-red-50/50 opacity-75 line-through'
-      : ' border-zinc-200/80 bg-white';
+      ? ' border-red-200 bg-red-50 opacity-50 line-through'
+      : ' border-zinc-200 bg-white hover:border-zinc-300';
 
   const editableClass = editable
-    ? ' cursor-grab hover:border-zinc-400 hover:shadow-md active:cursor-grabbing'
+    ? ' cursor-grab active:cursor-grabbing hover:shadow-sm'
     : '';
 
   const detailCount = details?.length ?? 0;
@@ -322,62 +354,63 @@ function StaticCard({
   return (
     <div
       ref={setNodeRef}
-      className={`flex flex-col items-start gap-1 rounded-xl border p-2.5 shadow-sm transition-all ${isDragging ? 'opacity-45' : ''}${statusClass}${editableClass}`}
+      className={`flex flex-col items-start gap-2 rounded-xl border p-3 transition-all duration-200 group ${isDragging ? 'opacity-50' : ''}${statusClass}${editableClass}`}
       {...dragProps}
     >
-      <div className="flex w-full items-start gap-2">
+      <div className="flex w-full items-start gap-3">
         <div className="grid min-w-0 flex-1 gap-0.5">
-          <strong className="truncate text-[13px] font-semibold text-zinc-900">{label}</strong>
-          <span className="truncate text-[11px] text-zinc-500">{sublabel}</span>
+          <strong className="truncate text-sm font-semibold text-zinc-900">{label}</strong>
+          <span className="truncate text-xs text-zinc-500">{sublabel}</span>
         </div>
         {status ? (
-          <span className={`inline-flex shrink-0 items-center justify-center rounded-[6px] px-1.5 py-0.5 text-[11px] font-bold leading-none ${status === 'added' ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>
-            {status === 'added' ? '+' : '-'}
+          <span className={`inline-flex shrink-0 items-center justify-center rounded-md px-2 py-0.5 text-xs font-medium leading-none ${status === 'added' ? 'bg-zinc-100 text-zinc-700' : 'bg-red-100 text-red-700'}`}>
+            {status === 'added' ? 'Added' : 'Removed'}
           </span>
         ) : (
-          <span className="inline-flex shrink-0 items-center justify-center rounded-[6px] bg-zinc-100 px-1.5 py-0.5 text-[11px] font-bold leading-none text-zinc-500">plugin</span>
+          <span className="inline-flex shrink-0 items-center justify-center rounded-md border border-zinc-200 bg-zinc-50 px-2 py-0.5 text-xs font-medium leading-none text-zinc-600">Plugin</span>
         )}
         {hasDetails ? (
           <button
-            className="grid size-6 shrink-0 place-items-center rounded-lg text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-zinc-900"
+            className="grid size-8 shrink-0 place-items-center rounded-lg border border-transparent text-zinc-400 transition-colors hover:bg-zinc-50 hover:text-zinc-900"
             type="button"
             onPointerDown={(event) => event.stopPropagation()}
             onClick={() => setExpanded((value) => !value)}
             title={expanded ? `Collapse ${label}` : `Expand ${label}`}
             aria-expanded={expanded}
           >
-            {expanded ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
+            {expanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
           </button>
         ) : null}
         {onRemove && !status ? (
           <button
-            className="grid size-6 shrink-0 place-items-center rounded-lg text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-zinc-900"
+            className="grid size-8 shrink-0 place-items-center rounded-lg border border-transparent text-zinc-400 transition-colors hover:bg-red-50 hover:text-red-600"
             type="button"
             onPointerDown={(event) => event.stopPropagation()}
             onClick={onRemove}
-            title={`Stage removal of ${label}`}
+            title={`Remove ${label}`}
           >
-            <Trash2 size={13} />
+            <Trash2 size={16} />
           </button>
         ) : null}
       </div>
       {hasDetails && expanded ? (
-        <div className="flex flex-wrap gap-1 pl-1 pt-1">
+        <div className="flex flex-wrap gap-2 pt-2 w-full border-t border-zinc-100 mt-1">
           {details!.map((item) => (
             <span
               key={`${item.kind}:${item.name}`}
-              className={`inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-medium ${
-                item.kind === 'mcp'
-                  ? 'bg-indigo-50 text-indigo-700'
-                  : item.kind === 'agent'
-                  ? 'bg-amber-50 text-amber-700'
-                  : item.kind === 'command'
-                  ? 'bg-sky-50 text-sky-700'
-                  : 'bg-zinc-100 text-zinc-600'
+              className={`inline-flex items-center gap-1.5 rounded-md border bg-white px-2 py-0.5 text-[11px] font-medium shadow-sm ${
+                item.kind === 'mcp' ? 'border-indigo-200 text-indigo-700' :
+                item.kind === 'agent' ? 'border-amber-200 text-amber-700' :
+                item.kind === 'command' ? 'border-sky-200 text-sky-700' :
+                'border-violet-200 text-violet-700'
               }`}
             >
-              <span className="text-[9px] uppercase tracking-wide opacity-60">{item.kind}</span>
-              {item.name}
+              {item.kind === 'mcp' && <Server size={10} className="opacity-70" />}
+              {item.kind === 'agent' && <Bot size={10} className="opacity-70" />}
+              {item.kind === 'command' && <Terminal size={10} className="opacity-70" />}
+              {item.kind === 'skill' && <FileText size={10} className="opacity-70" />}
+              <span className="opacity-80 text-[10px] uppercase tracking-wider">{item.kind}</span>
+              <span className="text-zinc-800">{item.name}</span>
             </span>
           ))}
         </div>
@@ -400,20 +433,46 @@ function DroppableZone({
   children: ReactNode;
 }) {
   const { isOver, setNodeRef } = useDroppable({ id });
+  const [expanded, setExpanded] = useState(true);
+  const { active, over } = useDndContext();
+
+  const isHighlighted = () => {
+    if (!active || !over) return false;
+    const source = parseDragId(active.id as string);
+    const target = parseDropId(over.id as string);
+    const thisZone = parseDropId(id);
+    if (!source || !target || !thisZone) return false;
+
+    return source.category === thisZone.category && target.agent === thisZone.agent;
+  };
+
+  const highlight = isHighlighted() || (isOver && !active);
 
   return (
     <div
       ref={setNodeRef}
-      className={`grid min-h-[88px] gap-2 rounded-xl p-2 transition-all ${isOver ? 'bg-slate-50 shadow-inner ring-1 ring-zinc-200' : 'bg-transparent'}`}
+      className={`flex flex-col gap-3 rounded-2xl p-4 transition-all duration-300 ${highlight ? 'bg-zinc-100 border-2 border-zinc-300 border-dashed shadow-inner' : 'bg-zinc-50/50 border border-zinc-200 border-dashed'} ${!expanded ? 'min-h-0 pb-4' : 'min-h-[120px]'}`}
     >
-      <div className="flex items-center justify-between gap-3">
-        <div className="flex items-center gap-2.5">
-          <span className="grid size-6 shrink-0 place-items-center rounded-lg border border-zinc-200/80 bg-white text-zinc-900 shadow-sm">{icon}</span>
-          <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-400 m-0">{label}</p>
+      <div 
+        className={`flex items-center justify-between gap-4 cursor-pointer select-none transition-colors hover:opacity-80 ${expanded ? 'border-b border-zinc-200/60 pb-2' : ''}`}
+        onClick={() => setExpanded(!expanded)}
+      >
+        <div className="flex items-center gap-2">
+          <span className="grid size-7 shrink-0 place-items-center rounded-lg border border-zinc-200 bg-white text-zinc-600">{icon}</span>
+          <p className="text-xs font-semibold text-zinc-600 m-0">{label}</p>
         </div>
-        <span className="inline-flex min-w-[32px] items-center justify-center rounded-full border border-zinc-200/80 bg-white px-2 py-0.5 text-[11px] font-bold text-zinc-900 shadow-sm">{count}</span>
+        <div className="flex items-center gap-2">
+          <span className="inline-flex min-w-[28px] items-center justify-center rounded-full border border-zinc-200 bg-white px-2 py-0.5 text-xs font-medium text-zinc-600 shadow-sm">{count}</span>
+          <span className="text-zinc-400">
+            {expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+          </span>
+        </div>
       </div>
-      {children}
+      {expanded && (
+        <div className="grid gap-2 relative">
+          {children}
+        </div>
+      )}
     </div>
   );
 }
@@ -443,6 +502,19 @@ function AgentColumn({
   onStagedRemove: (agent: string, category: 'mcp' | 'skill' | 'plugin', key: string) => void;
   editable: boolean;
 }) {
+  const { setNodeRef } = useDroppable({ id: `${config.agent}:column` });
+  const { active, over } = useDndContext();
+
+  const isHighlighted = () => {
+    if (!active || !over) return false;
+    const source = parseDragId(active.id as string);
+    const target = parseDropId(over.id as string);
+    if (!source || !target) return false;
+    return target.agent === config.agent && source.agent !== config.agent;
+  };
+
+  const highlight = isHighlighted();
+
   const mcpEntries = [
     ...Object.entries(config.mcpServers).map(([key, entry]) => ({
       key,
@@ -458,114 +530,131 @@ function AgentColumn({
   const { skills: localSkills, plugins } = splitAgentSkillEntries(config.skills);
 
   return (
-    <div className={`flex flex-col gap-4 rounded-2xl border border-zinc-200/80 bg-white p-5 shadow-sm profile-column-${config.agent}`}>
-      <div className="flex items-start justify-between gap-4">
+    <div 
+      ref={setNodeRef}
+      className={`flex flex-col gap-4 profile-column-${config.agent} transition-all duration-300 rounded-2xl ${highlight ? 'bg-zinc-50 ring-4 ring-zinc-200/50 shadow-inner p-4 -m-4' : ''}`}
+    >
+      <div className="flex items-start justify-between gap-4 border-b border-zinc-100 pb-4">
         <div className="flex min-w-0 items-center gap-3">
-          <span className="grid size-10 place-items-center rounded-xl border border-zinc-200/80 bg-gradient-to-b from-white to-zinc-50 text-sm font-bold shadow-sm">
-            <AgentLogo agent={config.agent} className="size-5 overflow-hidden" />
+          <span className="grid size-12 place-items-center rounded-xl border border-zinc-200 bg-white text-zinc-900 shadow-sm">
+            <AgentLogo agent={config.agent} className="size-6 overflow-hidden" />
           </span>
           <div className="space-y-0.5 overflow-hidden">
-            <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-400 m-0">{AGENT_LABELS[config.agent] ?? config.agent}</p>
-            <p className="font-mono text-[11px] text-zinc-500 m-0 break-all">{config.configPath}</p>
+            <p className="text-lg font-semibold text-zinc-900 m-0">{AGENT_LABELS[config.agent] ?? config.agent}</p>
+            <p className="font-mono text-[10px] text-zinc-400 m-0 break-all">{config.configPath}</p>
           </div>
         </div>
         <span
-          className={`inline-flex items-center gap-1.5 rounded-full border border-zinc-200/80 px-2.5 py-1 text-[11px] font-semibold shadow-sm ${config.exists ? 'bg-zinc-900 text-white border-zinc-900' : 'bg-white text-zinc-500'}`}
+          className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium shadow-sm ${config.exists ? 'border-zinc-200 bg-zinc-50 text-zinc-700' : 'border-zinc-200 bg-zinc-50 text-zinc-400'}`}
         >
-          {config.exists ? 'Found' : 'No config'}
+          {config.exists ? 'Active' : 'Offline'}
         </span>
       </div>
 
-      <div className="flex flex-wrap gap-1.5">
-        <span className="inline-flex items-center gap-1.5 rounded-full border border-zinc-200/80 bg-white px-2.5 py-1 text-[11px] font-semibold text-zinc-500 shadow-sm">
-          <Server size={12} /> {mcpEntries.length} MCPs
+      <div className="flex flex-wrap gap-2">
+        <span className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-1.5 text-xs font-medium text-zinc-600">
+          <Server size={14} /> {mcpEntries.length} MCPs
         </span>
-        <span className="inline-flex items-center gap-1.5 rounded-full border border-zinc-200/80 bg-white px-2.5 py-1 text-[11px] font-semibold text-zinc-500 shadow-sm">
-          <FileText size={12} /> {localSkills.length} Skills
+        <span className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-1.5 text-xs font-medium text-zinc-600">
+          <FileText size={14} /> {localSkills.length} Skills
         </span>
-        <span className="inline-flex items-center gap-1.5 rounded-full border border-zinc-200/80 bg-white px-2.5 py-1 text-[11px] font-semibold text-zinc-500 shadow-sm">
-          <Boxes size={12} /> {plugins.length} Plugins
+        <span className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-1.5 text-xs font-medium text-zinc-600">
+          <Boxes size={14} /> {plugins.length} Plugins
         </span>
       </div>
-
-      {/* MCP Servers */}
-      <DroppableZone
-        id={`${config.agent}:mcps`}
-        label="MCP Servers"
-        icon={<Server size={14} />}
-        count={mcpEntries.length}
-      >
-        {mcpEntries.map(({ key, sublabel, type }) => {
-          const status = pendingAdded.has(key)
-            ? ('added' as const)
-            : pendingRemoved.has(key)
-            ? ('removed' as const)
-            : undefined;
-
-          return (
-            <DraggableCard
-              key={key}
-              id={`${config.agent}:mcp:${key}`}
-              label={key}
-              sublabel={type === 'remote' ? `[remote] ${sublabel}` : sublabel}
-              icon={<Server size={14} />}
-              status={status}
-              onRemove={editable ? () => onStagedRemove(config.agent, 'mcp', key) : undefined}
-              editable={editable}
-            />
-          );
-        })}
-        {mcpEntries.length === 0 && (
-          <p className="text-sm text-zinc-500 m-0">No MCPs configured.</p>
-        )}
-      </DroppableZone>
 
       {/* Skills */}
       <DroppableZone
         id={`${config.agent}:skills`}
         label="Skills"
-        icon={<FileText size={14} />}
+        icon={<FileText size={16} />}
         count={localSkills.length}
       >
-        {localSkills.map((skill) => {
+        {localSkills.map((skill, index) => {
           const status = pendingSkillAdded.has(skill.name)
             ? ('added' as const)
             : pendingSkillRemoved.has(skill.name)
             ? ('removed' as const)
             : undefined;
 
-          return (
+          const card = (
             <DraggableCard
               key={skill.name}
               id={`${config.agent}:skill:${skill.name}`}
               label={skill.name}
               sublabel={skill.source ?? 'local'}
-              icon={<FileText size={14} />}
+              icon={<FileText size={16} />}
               status={status}
               onRemove={editable ? () => onStagedRemove(config.agent, 'skill', skill.name) : undefined}
               editable={editable}
             />
           );
+
+          if (index === localSkills.length - 1) {
+            return <DropAnchorWrapper key={skill.name} id={`${config.agent}:skills:anchor`}>{card}</DropAnchorWrapper>;
+          }
+          return card;
         })}
         {localSkills.length === 0 && (
-          <p className="text-sm text-zinc-500 m-0">No skills installed.</p>
+          <DropAnchorWrapper id={`${config.agent}:skills:anchor`}>
+            <p className="text-sm font-medium text-zinc-400 m-3">No skills installed.</p>
+          </DropAnchorWrapper>
+        )}
+      </DroppableZone>
+
+      {/* MCP Servers */}
+      <DroppableZone
+        id={`${config.agent}:mcps`}
+        label="MCP Servers"
+        icon={<Server size={16} />}
+        count={mcpEntries.length}
+      >
+        {mcpEntries.map(({ key, sublabel, type }, index) => {
+          const status = pendingAdded.has(key)
+            ? ('added' as const)
+            : pendingRemoved.has(key)
+            ? ('removed' as const)
+            : undefined;
+
+          const card = (
+            <DraggableCard
+              key={key}
+              id={`${config.agent}:mcp:${key}`}
+              label={key}
+              sublabel={type === 'remote' ? `[remote] ${sublabel}` : sublabel}
+              icon={<Server size={16} />}
+              status={status}
+              onRemove={editable ? () => onStagedRemove(config.agent, 'mcp', key) : undefined}
+              editable={editable}
+            />
+          );
+
+          if (index === mcpEntries.length - 1) {
+            return <DropAnchorWrapper key={key} id={`${config.agent}:mcps:anchor`}>{card}</DropAnchorWrapper>;
+          }
+          return card;
+        })}
+        {mcpEntries.length === 0 && (
+          <DropAnchorWrapper id={`${config.agent}:mcps:anchor`}>
+            <p className="text-sm font-medium text-zinc-400 m-3">No MCPs configured.</p>
+          </DropAnchorWrapper>
         )}
       </DroppableZone>
 
       <DroppableZone
         id={`${config.agent}:plugins`}
         label="Plugins"
-        icon={<Boxes size={14} />}
+        icon={<Boxes size={16} />}
         count={plugins.length}
       >
-        {plugins.map((plugin) => {
+        {plugins.map((plugin, index) => {
           const status = pendingPluginAdded.has(plugin.name)
             ? ('added' as const)
             : pendingPluginRemoved.has(plugin.name)
             ? ('removed' as const)
             : undefined;
 
-          return (
+          const card = (
             <StaticCard
               key={plugin.name}
               id={`${config.agent}:plugin:${plugin.name}`}
@@ -590,9 +679,16 @@ function AgentColumn({
               editable={editable}
             />
           );
+
+          if (index === plugins.length - 1) {
+            return <DropAnchorWrapper key={plugin.name} id={`${config.agent}:plugins:anchor`}>{card}</DropAnchorWrapper>;
+          }
+          return card;
         })}
         {plugins.length === 0 && (
-          <p className="text-sm text-zinc-500 m-0">No plugins discovered.</p>
+          <DropAnchorWrapper id={`${config.agent}:plugins:anchor`}>
+            <p className="text-sm font-medium text-zinc-400 m-3">No plugins discovered.</p>
+          </DropAnchorWrapper>
         )}
       </DroppableZone>
     </div>
@@ -619,17 +715,17 @@ function PendingChangesBar({
   if (changes.length === 0) return null;
 
   return (
-    <div className="sticky top-3 z-10 grid gap-3 rounded-2xl border border-zinc-200/80 bg-white p-5 shadow-xl shadow-zinc-200/40">
+    <div className="sticky top-6 z-20 grid gap-4 rounded-2xl border border-zinc-200 bg-white p-5 shadow-lg mb-8">
       <div className="flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-center">
-        <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-400 m-0">
+        <p className="text-sm font-semibold text-zinc-900 m-0">
           {changes.length} pending change{changes.length > 1 ? 's' : ''}
         </p>
-        <div className="flex flex-wrap gap-2">
-          <button className="inline-flex min-h-[36px] items-center gap-2 rounded-lg border border-zinc-200/80 bg-white px-3.5 text-sm font-medium text-zinc-600 shadow-sm transition-all hover:bg-zinc-50 hover:text-zinc-900 disabled:opacity-50" onClick={onDiscardAll} disabled={saving}>
-            <Undo2 size={14} /> Discard all
+        <div className="flex flex-wrap gap-3">
+          <button className="inline-flex h-9 items-center gap-2 rounded-xl border border-zinc-200 bg-white px-4 text-sm font-medium text-zinc-700 transition-colors hover:bg-zinc-50 disabled:opacity-50" onClick={onDiscardAll} disabled={saving}>
+            <Undo2 size={16} /> Discard all
           </button>
-          <button className="inline-flex min-h-[36px] items-center gap-2 rounded-lg border border-zinc-900 bg-zinc-900 px-3.5 text-sm font-medium text-white shadow-md transition-all hover:bg-zinc-800 disabled:opacity-50" onClick={onSave} disabled={saving}>
-            {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}{' '}
+          <button className="inline-flex h-9 items-center gap-2 rounded-xl bg-zinc-900 px-5 text-sm font-medium text-white transition-colors hover:bg-zinc-800 disabled:opacity-50 shadow-sm" onClick={onSave} disabled={saving}>
+            {saving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}{' '}
             Save & apply
           </button>
         </div>
@@ -638,16 +734,16 @@ function PendingChangesBar({
         {changes.map((change) => (
           <div
             key={change.id}
-            className={`flex items-center gap-3 rounded-xl border p-3 text-[13px] ${change.type === 'add' ? 'border-emerald-200/80 bg-emerald-50/50' : 'border-red-200/80 bg-red-50/50'}`}
+            className={`flex items-center gap-3 rounded-xl border p-3 text-sm font-medium ${change.type === 'add' ? 'border-zinc-200 bg-zinc-50 text-zinc-900' : 'border-red-200 bg-red-50 text-red-900'}`}
           >
-            <span className={`grid place-items-center shrink-0 ${change.type === 'add' ? 'text-emerald-600' : 'text-red-600'}`}>
-              {change.type === 'add' ? <Plus size={14} /> : <X size={14} />}
+            <span className={`grid size-8 place-items-center shrink-0 rounded-lg ${change.type === 'add' ? 'bg-white border border-zinc-200 text-zinc-600' : 'bg-white border border-red-200 text-red-600'}`}>
+              {change.type === 'add' ? <Plus size={16} /> : <X size={16} />}
             </span>
             <span className="flex-1 min-w-0 truncate">
-              <strong className="font-semibold text-zinc-900">[{change.category}] {change.key}</strong>
+              <strong className="text-zinc-900">[{change.category}] {change.key}</strong>
               {change.type === 'add' ? (
                 <>
-                  {' '}&rarr; {AGENT_LABELS[change.agent]}
+                  {' '}→ {AGENT_LABELS[change.agent]}
                   {change.sourceAgent ? ` (from ${AGENT_LABELS[change.sourceAgent]})` : ''}
                 </>
               ) : (
@@ -655,7 +751,7 @@ function PendingChangesBar({
               )}
             </span>
             <button
-              className="grid size-[26px] shrink-0 place-items-center rounded-lg text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-zinc-900"
+              className="grid size-8 shrink-0 place-items-center rounded-lg border border-transparent text-zinc-400 transition-colors hover:bg-white hover:border-zinc-200 hover:text-zinc-900 hover:shadow-sm"
               onClick={() => onUndoChange(change.id)}
               title="Undo this change"
               disabled={saving}
@@ -681,6 +777,7 @@ export default function ProfilesView() {
   const [saving, setSaving] = useState(false);
   const [isEditMode, setIsEditMode] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [refreshState, setRefreshState] = useState<'idle' | 'loading' | 'success'>('idle');
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } })
@@ -705,6 +802,27 @@ export default function ProfilesView() {
       showFeedback('error', `Failed to load agent configs: ${(err as Error).message}`);
     }
   }, [showFeedback]);
+
+  const handleRefresh = useCallback(async () => {
+    if (refreshState === 'loading') return;
+    setRefreshState('loading');
+    setPendingChanges([]);
+    const startedAt = Date.now();
+    try {
+      await fetchLiveConfigs();
+      const elapsed = Date.now() - startedAt;
+      if (elapsed < 400) {
+        await new Promise((resolve) => setTimeout(resolve, 400 - elapsed));
+      }
+      setRefreshState('success');
+      toast.success('Agent configs refreshed');
+      setTimeout(() => {
+        setRefreshState((current) => (current === 'success' ? 'idle' : current));
+      }, 1200);
+    } catch {
+      setRefreshState('idle');
+    }
+  }, [fetchLiveConfigs, refreshState]);
 
   useEffect(() => {
     (async () => {
@@ -834,14 +952,14 @@ export default function ProfilesView() {
   }, [pendingChanges, fetchLiveConfigs, showFeedback]);
 
   const changeSummaryLines = pendingChanges.map((c) => {
-    const prefix = c.category === 'skill' ? '[skill] ' : '[mcp] ';
+    const prefix = c.category === 'skill' ? '[Skill] ' : '[MCP] ';
     if (c.category === 'plugin') {
       return c.type === 'add'
-        ? `+ [plugin] ${c.key} -> ${AGENT_LABELS[c.agent]}`
-        : `- [plugin] ${c.key} from ${AGENT_LABELS[c.agent]}`;
+        ? `+ [Plugin] ${c.key} → ${AGENT_LABELS[c.agent]}`
+        : `- [Plugin] ${c.key} from ${AGENT_LABELS[c.agent]}`;
     }
     return c.type === 'add'
-      ? `+ ${prefix}${c.key} -> ${AGENT_LABELS[c.agent]}`
+      ? `+ ${prefix}${c.key} → ${AGENT_LABELS[c.agent]}`
       : `- ${prefix}${c.key} from ${AGENT_LABELS[c.agent]}`;
   });
 
@@ -861,7 +979,6 @@ export default function ProfilesView() {
       const target = parseDropId(over.id as string);
       if (!source || !target) return;
       if (source.agent === target.agent) return;
-      if (source.category !== target.category) return;
 
       const sourceConfig = previewConfigs.find((c) => c.agent === source.agent);
       if (!sourceConfig) return;
@@ -1068,9 +1185,9 @@ export default function ProfilesView() {
 
   if (loading) {
     return (
-      <div className="grid gap-4">
-        <div className="flex items-center gap-2.5 py-3 text-zinc-500">
-          <Loader2 size={20} className="animate-spin" /> Loading agent configs...
+      <div className="grid gap-4 w-full">
+        <div className="flex items-center gap-3 py-8 text-zinc-500 font-medium">
+          <Loader2 size={20} className="animate-spin text-zinc-400" /> Loading agent configs...
         </div>
       </div>
     );
@@ -1088,25 +1205,25 @@ export default function ProfilesView() {
   );
 
   return (
-    <div className="grid gap-6">
-      <div className="flex flex-col items-stretch gap-4 border-b border-zinc-100 pb-4 lg:flex-row lg:items-center lg:justify-between lg:pb-1">
+    <div className="grid gap-4 w-full">
+      <div className="flex flex-col items-stretch gap-4 pb-4 border-b border-zinc-200/60 lg:flex-row lg:items-end lg:justify-between">
         <div className="grid gap-1">
-          <h3 className="text-lg font-semibold tracking-tight text-zinc-900 m-0">Local agents</h3>
-          <span className="text-sm text-zinc-500">Drag skills, MCPs, and plugins across columns.</span>
+          <h3 className="text-xl font-semibold tracking-tight text-zinc-900 m-0">Local agents</h3>
+          <span className="text-[13px] font-medium text-zinc-500">Drag skills, MCPs, and plugins across columns.</span>
         </div>
 
-        <div className="flex flex-wrap items-center justify-end gap-2">
-          <span className="inline-flex items-center gap-1.5 rounded-full border border-zinc-200/80 bg-white px-2.5 py-1 text-[11px] font-semibold text-zinc-500 shadow-sm">
-            <ArrowRightLeft size={13} /> {liveAgentCount} agents
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-2.5 py-1 text-[11px] font-medium text-zinc-700 shadow-sm">
+            <ArrowRightLeft size={12} className="text-zinc-400" /> {liveAgentCount} agents
           </span>
-          <span className="inline-flex items-center gap-1.5 rounded-full border border-zinc-200/80 bg-white px-2.5 py-1 text-[11px] font-semibold text-zinc-500 shadow-sm">
-            <Boxes size={13} /> {totalPortableItems} items
+          <span className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-2.5 py-1 text-[11px] font-medium text-zinc-700 shadow-sm">
+            <Boxes size={12} className="text-zinc-400" /> {totalPortableItems} items
           </span>
-          <span className="inline-flex items-center gap-1.5 rounded-full border border-zinc-200/80 bg-white px-2.5 py-1 text-[11px] font-semibold text-zinc-500 shadow-sm">
-            <Save size={13} /> {pendingChanges.length} staged
+          <span className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-2.5 py-1 text-[11px] font-medium text-zinc-700 shadow-sm">
+            <Save size={12} className="text-zinc-400" /> {pendingChanges.length} staged
           </span>
           <button
-            className={`inline-flex min-h-[36px] items-center gap-2 rounded-lg border px-3.5 text-sm font-medium shadow-sm transition-all disabled:opacity-50 ${isEditMode ? 'border-zinc-900 bg-zinc-900 text-white' : 'border-zinc-200/80 bg-white text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900'}`}
+            className={`inline-flex h-8 items-center gap-2 rounded-lg px-3 text-[13px] font-medium transition-all disabled:opacity-50 ${isEditMode ? 'bg-zinc-900 text-white shadow-sm' : 'border border-zinc-200 bg-white text-zinc-700 shadow-sm hover:bg-zinc-50'}`}
             type="button"
             onClick={() => setIsEditMode((value) => !value)}
             disabled={saving}
@@ -1115,14 +1232,30 @@ export default function ProfilesView() {
             {isEditMode ? 'Done editing' : 'Edit items'}
           </button>
           <button
-            className="inline-flex min-h-[36px] items-center gap-2 rounded-lg border border-zinc-200/80 bg-white px-3.5 text-sm font-medium text-zinc-600 shadow-sm transition-all hover:bg-zinc-50 hover:text-zinc-900 disabled:opacity-50"
-            onClick={() => {
-              setPendingChanges([]);
-              void fetchLiveConfigs();
-            }}
-            disabled={saving}
+            className={[
+              'inline-flex h-8 items-center gap-2 rounded-lg border px-3 text-[13px] font-medium shadow-sm transition-all duration-200 disabled:opacity-50',
+              refreshState === 'success'
+                ? 'border-emerald-300 bg-emerald-50 text-emerald-700'
+                : refreshState === 'loading'
+                  ? 'border-zinc-300 bg-zinc-100 text-zinc-700'
+                  : 'border-zinc-200 bg-white text-zinc-700 hover:bg-zinc-50',
+            ].join(' ')}
+            onClick={() => void handleRefresh()}
+            disabled={saving || refreshState === 'loading'}
           >
-            <RefreshCw size={14} /> Refresh
+            {refreshState === 'loading' ? (
+              <>
+                <Loader2 size={12} className="animate-spin" /> Refreshing
+              </>
+            ) : refreshState === 'success' ? (
+              <>
+                <Check size={12} className="animate-[ping_400ms_ease-out_1]" /> Up to date
+              </>
+            ) : (
+              <>
+                <RefreshCw size={12} /> Refresh
+              </>
+            )}
           </button>
         </div>
       </div>
@@ -1137,24 +1270,28 @@ export default function ProfilesView() {
 
       <DndContext
         sensors={sensors}
-        collisionDetection={pointerWithin}
+        collisionDetection={customCollisionDetection}
         onDragStart={handleDragStart}
         onDragEnd={handleDragEnd}
       >
-        <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-3">
-          {previewConfigs.map((config) => (
-            <AgentColumn
-              key={config.agent}
-              config={config}
-              pendingAdded={pendingAddedMap.get(config.agent) ?? new Set()}
-              pendingRemoved={pendingRemovedMap.get(config.agent) ?? new Set()}
-              pendingSkillAdded={pendingSkillAddedMap.get(config.agent) ?? new Set()}
-              pendingSkillRemoved={pendingSkillRemovedMap.get(config.agent) ?? new Set()}
-              pendingPluginAdded={pendingPluginAddedMap.get(config.agent) ?? new Set()}
-              pendingPluginRemoved={pendingPluginRemovedMap.get(config.agent) ?? new Set()}
-              onStagedRemove={handleStagedRemove}
-              editable={isEditMode}
-            />
+        <div className="grid grid-cols-1 items-start lg:grid-cols-3 w-full">
+          {previewConfigs.map((config, index) => (
+            <div 
+              key={config.agent} 
+              className={`py-10 lg:py-0 lg:px-10 ${index !== 0 ? 'border-t border-zinc-200 lg:border-t-0 lg:border-l' : ''} ${index === 0 ? 'lg:pl-0 lg:pr-10 pt-0' : ''} ${index === previewConfigs.length - 1 ? 'lg:pr-0 lg:pl-10 pb-0' : ''}`}
+            >
+              <AgentColumn
+                config={config}
+                pendingAdded={pendingAddedMap.get(config.agent) ?? new Set()}
+                pendingRemoved={pendingRemovedMap.get(config.agent) ?? new Set()}
+                pendingSkillAdded={pendingSkillAddedMap.get(config.agent) ?? new Set()}
+                pendingSkillRemoved={pendingSkillRemovedMap.get(config.agent) ?? new Set()}
+                pendingPluginAdded={pendingPluginAddedMap.get(config.agent) ?? new Set()}
+                pendingPluginRemoved={pendingPluginRemovedMap.get(config.agent) ?? new Set()}
+                onStagedRemove={handleStagedRemove}
+                editable={isEditMode}
+              />
+            </div>
           ))}
         </div>
 
@@ -1175,10 +1312,10 @@ export default function ProfilesView() {
         variant="default"
         onConfirm={() => void handleConfirmSave()}
       >
-        <div className="mt-2 max-h-48 overflow-y-auto rounded-lg border border-zinc-200 bg-zinc-50 p-3">
-          <ul className="space-y-1 font-mono text-xs text-zinc-700">
+        <div className="mt-4 rounded-xl border border-zinc-200 bg-zinc-50 p-4 max-h-64 overflow-y-auto">
+          <ul className="space-y-2 font-mono text-xs font-medium text-zinc-700">
             {changeSummaryLines.map((line, i) => (
-              <li key={i} className={line.startsWith('+') ? 'text-emerald-700' : 'text-red-700'}>
+              <li key={i} className={line.startsWith('+') ? 'text-zinc-900' : 'text-zinc-500 line-through'}>
                 {line}
               </li>
             ))}

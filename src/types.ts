@@ -91,8 +91,28 @@ export type PortableProfileSource =
       agent: AgentName;
     };
 
+export interface PortablePluginSnapshot {
+  agent: AgentName;
+  name: string;
+  source: string;
+  marketplace?: string;
+  version?: string;
+  archivePath: string;
+  managed?: boolean;
+  pluginSkills?: string[];
+  pluginMcps?: string[];
+  pluginAgents?: string[];
+  pluginCommands?: string[];
+}
+
+export interface PortableUserSkillSnapshot {
+  agent: AgentName;
+  name: string;
+  archivePath: string;
+}
+
 export interface PortableProfileManifest {
-  schemaVersion: 1;
+  schemaVersion: 1 | 2;
   profileName: string;
   createdBy?: {
     tool: string;
@@ -100,6 +120,8 @@ export interface PortableProfileManifest {
   };
   source?: PortableProfileSource;
   credentials?: PortableCredentialSpec[];
+  plugins?: PortablePluginSnapshot[];
+  userSkills?: PortableUserSkillSnapshot[];
 }
 
 export interface LocalNpmMcpServerConfig {

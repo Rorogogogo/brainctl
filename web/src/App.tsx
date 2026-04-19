@@ -48,26 +48,41 @@ function ActionButton({
   label,
   active,
   onClick,
+  disabled,
+  tooltip,
 }: {
   icon: ReactNode;
   label: string;
   active: boolean;
   onClick: () => void;
+  disabled?: boolean;
+  tooltip?: string;
 }) {
   return (
-    <button
-      className={[
-        'inline-flex min-h-[36px] items-center gap-2 rounded-lg border px-3.5 text-sm font-medium transition-all duration-200',
-        active
-          ? 'border-zinc-900 bg-zinc-900 text-white shadow-sm'
-          : 'border-zinc-200/80 bg-white text-zinc-600 shadow-sm hover:border-zinc-300 hover:bg-zinc-50 hover:text-zinc-900',
-      ].join(' ')}
-      type="button"
-      onClick={onClick}
-    >
-      {icon}
-      <span>{label}</span>
-    </button>
+    <div className="relative group">
+      <button
+        className={[
+          'inline-flex h-9 items-center gap-2 rounded-xl px-4 text-sm font-medium transition-all duration-200',
+          disabled
+            ? 'cursor-not-allowed border border-zinc-200 bg-white/60 text-zinc-400'
+            : active
+              ? 'bg-zinc-900 text-white shadow-sm'
+              : 'border border-zinc-200 bg-white text-zinc-700 shadow-sm hover:bg-zinc-50 hover:text-zinc-900',
+        ].join(' ')}
+        type="button"
+        onClick={disabled ? undefined : onClick}
+        disabled={disabled}
+        aria-disabled={disabled}
+      >
+        {icon}
+        <span>{label}</span>
+      </button>
+      {disabled && tooltip ? (
+        <span className="pointer-events-none absolute left-1/2 top-full z-20 mt-2 -translate-x-1/2 whitespace-nowrap rounded-md bg-zinc-900 px-2.5 py-1.5 text-[11px] font-medium text-white opacity-0 shadow-lg transition-opacity duration-150 group-hover:opacity-100">
+          {tooltip}
+        </span>
+      ) : null}
+    </div>
   );
 }
 
@@ -83,15 +98,15 @@ function StatusNote({
       className={[
         'flex items-start gap-3 rounded-xl border px-4 py-3 text-sm transition-all',
         tone === 'success'
-          ? 'border-emerald-200/80 bg-emerald-50/50 text-emerald-800'
-          : 'border-red-200/80 bg-red-50/50 text-red-800',
+          ? 'border-zinc-200 bg-zinc-50 text-zinc-800'
+          : 'border-red-200 bg-red-50 text-red-800',
       ].join(' ')}
     >
-      <div className="mt-[3px]">
+      <div className="mt-1">
         {tone === 'success' ? (
-          <div className="size-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.4)]" />
+          <div className="size-2 rounded-full bg-zinc-500" />
         ) : (
-          <div className="size-2 rounded-full bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.4)]" />
+          <div className="size-2 rounded-full bg-red-500" />
         )}
       </div>
       <div className="leading-relaxed">{children}</div>
@@ -111,18 +126,14 @@ function PanelShell({
   children: ReactNode;
 }) {
   return (
-    <div className="relative overflow-hidden rounded-2xl border border-zinc-200/80 bg-white p-6 shadow-xl shadow-zinc-200/40 lg:p-8">
+    <div className="relative overflow-hidden rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm lg:p-8 mb-8">
       <div className="mb-8 flex items-start justify-between gap-4">
         <div className="space-y-2">
-          <div className="flex items-center gap-2">
-            <span className="h-px w-4 bg-zinc-300"></span>
-            <span className="text-[10px] font-bold uppercase tracking-widest text-zinc-400">Action Panel</span>
-          </div>
           <h2 className="text-xl font-semibold tracking-tight text-zinc-900">{title}</h2>
           <p className="max-w-xl text-sm leading-relaxed text-zinc-500">{description}</p>
         </div>
         <button
-          className="inline-flex size-8 items-center justify-center rounded-full text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-zinc-700 focus:outline-none focus:ring-2 focus:ring-zinc-200"
+          className="inline-flex size-8 items-center justify-center rounded-full text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-zinc-700"
           type="button"
           onClick={onClose}
         >
@@ -300,8 +311,7 @@ export default function App() {
     }
   }
 
-  const packPanelTitle =
-    packSource === 'profile' ? 'Pack profile' : 'Pack agent config';
+  const packPanelTitle = packSource === 'profile' ? 'Pack profile' : 'Pack agent config';
   const packPanelDescription =
     packSource === 'profile'
       ? 'Export a saved Brainctl profile into a portable tarball.'
@@ -341,36 +351,36 @@ export default function App() {
       : [];
 
   return (
-    <main className="min-h-screen bg-slate-50 px-4 py-6 text-zinc-950 sm:px-6 lg:px-8">
-      <div className="mx-auto grid w-full max-w-[1400px] gap-6">
-        <header className="flex flex-col gap-4 rounded-2xl border border-zinc-200/80 bg-white px-5 py-4 shadow-sm lg:flex-row lg:items-center lg:justify-between lg:px-6 lg:py-5">
-          <div className="flex min-w-0 items-center gap-4">
-            <div className="grid size-11 place-items-center rounded-xl bg-gradient-to-b from-zinc-800 to-zinc-950 text-white shadow-md">
-              <Bot size={20} className="drop-shadow-sm" />
+    <main className="min-h-screen bg-[#fcfcfc] p-4 lg:p-6 text-zinc-900">
+      <div className="mx-auto grid w-full gap-4">
+        <header className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex items-center gap-3">
+            <div className="grid size-7 place-items-center rounded-lg bg-zinc-900 text-white shadow-sm">
+              <img src="/favicon-light.svg" alt="Brainctl Logo" className="size-3.5" />
             </div>
-            <div className="space-y-0.5">
-              <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-400">Brainctl</p>
-              <h1 className="text-[1.15rem] font-semibold tracking-tight text-zinc-900">Transfer Board</h1>
+            <div>
+              <h1 className="text-sm font-semibold tracking-tight leading-none">Brainctl</h1>
+              <p className="text-[9px] font-medium text-zinc-500 leading-tight">Transfer Board</p>
             </div>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2 lg:justify-center">
+          <div className="hidden lg:flex items-center gap-1.5">
             {(['claude', 'codex', 'gemini'] as const).map((agent) => (
               <span
                 key={agent}
-                className="inline-flex items-center gap-2 rounded-lg border border-zinc-200/80 bg-zinc-50 px-2.5 py-1.5 text-[13px] font-medium text-zinc-700 shadow-sm transition-colors hover:bg-white"
+                className="inline-flex h-8 items-center gap-1.5 rounded-xl flex-none border border-zinc-200 bg-white px-3 text-[10px] font-medium text-zinc-600 shadow-sm"
               >
-                <span className="grid size-[16px] place-items-center overflow-hidden text-zinc-900">
+                <span className="grid size-3.5 place-items-center overflow-hidden text-zinc-900">
                   <AgentLogo agent={agent} className="size-full object-contain" />
                 </span>
-                {agent === 'claude' ? 'Claude' : agent === 'codex' ? 'Codex' : 'Gemini'}
+                {agent.charAt(0).toUpperCase() + agent.slice(1)}
               </span>
             ))}
           </div>
 
-          <div className="flex flex-wrap items-center gap-2.5">
+          <div className="flex flex-wrap items-center gap-2">
             <ActionButton
-              icon={<Boxes size={16} />}
+              icon={<Boxes size={12} />}
               label="Pack"
               active={activePanel === 'pack'}
               onClick={() => {
@@ -378,6 +388,8 @@ export default function App() {
                 setPackError(null);
                 setPackResult(null);
               }}
+              disabled
+              tooltip="Coming soon — still grinding on portable packs"
             />
             <ActionButton
               icon={<Download size={16} />}
@@ -388,372 +400,279 @@ export default function App() {
                 setInstallError(null);
                 setInstallResult(null);
               }}
+              disabled
+              tooltip="Coming soon — portable install flow under construction"
             />
           </div>
         </header>
 
-        {activePanel === 'pack' ? (
-          <PanelShell
-            title={packPanelTitle}
-            description={packPanelDescription}
-            onClose={() => setActivePanel(null)}
-          >
-            <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
-              <div className="space-y-5">
-                <label className="grid gap-2 text-sm">
-                  <span className="font-semibold text-zinc-800">Pack source</span>
-                  <div className="relative">
-                    <select
-                      className="min-h-[44px] w-full appearance-none rounded-xl border border-zinc-200 bg-white px-4 pr-10 text-sm font-medium text-zinc-900 shadow-sm outline-none transition-all focus:border-zinc-400 focus:ring-4 focus:ring-zinc-100 disabled:opacity-50"
-                      value={packSource}
-                      onChange={(event) => setPackSource(event.target.value as 'profile' | 'agent')}
-                      disabled={packBusy}
-                    >
-                      <option value="profile">Saved Brainctl profile</option>
-                      <option value="agent">Live agent config</option>
-                    </select>
-                    <div className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-zinc-400">
-                      <ChevronDown size={16} />
-                    </div>
-                  </div>
-                </label>
-
-                {packSource === 'profile' ? (
-                  <label className="grid gap-2 text-sm">
-                    <span className="font-semibold text-zinc-800">Profile to export</span>
+        <div className="w-full">
+          {activePanel === 'pack' ? (
+            <PanelShell
+              title={packPanelTitle}
+              description={packPanelDescription}
+              onClose={() => setActivePanel(null)}
+            >
+              <div className="grid gap-10 lg:grid-cols-[1fr_1.2fr]">
+                <div className="space-y-6">
+                  <label className="grid gap-2">
+                    <span className="text-sm font-medium text-zinc-700">Pack source</span>
                     <div className="relative">
                       <select
-                        className="min-h-[44px] w-full appearance-none rounded-xl border border-zinc-200 bg-white px-4 pr-10 text-sm font-medium text-zinc-900 shadow-sm outline-none transition-all focus:border-zinc-400 focus:ring-4 focus:ring-zinc-100 disabled:opacity-50"
-                        value={packProfileName}
-                        onChange={(event) => setPackProfileName(event.target.value)}
-                        disabled={profilesLoading || profiles.length === 0 || packBusy}
-                      >
-                        {profiles.length === 0 ? (
-                          <option value="">No profiles found</option>
-                        ) : null}
-                        {profiles.map((profile) => (
-                          <option key={profile} value={profile}>
-                            {profile}{profile === activeProfile ? ' (active)' : ''}
-                          </option>
-                        ))}
-                      </select>
-                      <div className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-zinc-400">
-                        <ChevronDown size={16} />
-                      </div>
-                    </div>
-                  </label>
-                ) : (
-                  <label className="grid gap-2 text-sm">
-                    <span className="font-semibold text-zinc-800">Agent to pack</span>
-                    <div className="relative">
-                      <select
-                        className="min-h-[44px] w-full appearance-none rounded-xl border border-zinc-200 bg-white px-4 pr-10 text-sm font-medium text-zinc-900 shadow-sm outline-none transition-all focus:border-zinc-400 focus:ring-4 focus:ring-zinc-100 disabled:opacity-50"
-                        value={packAgentName}
-                        onChange={(event) =>
-                          setPackAgentName(event.target.value as (typeof packableAgents)[number])
-                        }
+                        className="h-10 w-full appearance-none rounded-xl border border-zinc-200 bg-white px-3 pr-10 text-sm outline-none transition-colors focus:border-zinc-400 disabled:opacity-50"
+                        value={packSource}
+                        onChange={(event) => setPackSource(event.target.value as 'profile' | 'agent')}
                         disabled={packBusy}
                       >
-                        {packableAgents.map((agent) => (
-                          <option key={agent} value={agent}>
-                            {agent}
-                          </option>
-                        ))}
+                        <option value="profile">Saved profile</option>
+                        <option value="agent">Live agent config</option>
                       </select>
                       <div className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-zinc-400">
                         <ChevronDown size={16} />
                       </div>
                     </div>
                   </label>
-                )}
 
-                <label className="grid gap-2 text-sm">
-                  <span className="font-semibold text-zinc-800">Output path <span className="font-normal text-zinc-400">(optional)</span></span>
-                  <input
-                    className="min-h-[44px] w-full rounded-xl border border-zinc-200 bg-white px-4 text-sm font-medium text-zinc-900 shadow-sm outline-none transition-all placeholder:font-normal placeholder:text-zinc-400 focus:border-zinc-400 focus:ring-4 focus:ring-zinc-100 disabled:opacity-50"
-                    placeholder="./my-profile.tar.gz"
-                    value={packOutputPath}
-                    onChange={(event) => setPackOutputPath(event.target.value)}
-                    disabled={packBusy}
-                  />
-                </label>
-
-                <div className="flex flex-wrap items-center gap-3 pt-2">
-                  <button
-                    className="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-xl bg-zinc-950 px-6 text-sm font-medium text-white shadow-md transition-all hover:bg-zinc-800 hover:shadow-lg active:scale-[0.98] disabled:pointer-events-none disabled:opacity-50"
-                    type="button"
-                    onClick={() => void handlePack()}
-                    disabled={packBusy || (packSource === 'profile' && profiles.length === 0)}
-                  >
-                    {packBusy ? <Loader2 size={16} className="animate-spin" /> : <Boxes size={16} />}
-                    Pack tarball
-                  </button>
-                  <button
-                    className="inline-flex min-h-[44px] items-center justify-center rounded-xl border border-zinc-200 bg-white px-5 text-sm font-medium text-zinc-700 shadow-sm transition-all hover:bg-zinc-50 hover:text-zinc-900 active:scale-[0.98] disabled:pointer-events-none disabled:opacity-50"
-                    type="button"
-                    onClick={() => void loadProfiles()}
-                    disabled={packBusy}
-                  >
-                    Refresh profiles
-                  </button>
-                </div>
-              </div>
-
-              <div className="rounded-xl border border-zinc-200/60 bg-zinc-50/50 p-5">
-                <p className="mb-4 flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-zinc-400">
-                  <span className="h-px w-3 bg-zinc-300"></span>
-                  {packSource === 'profile' ? 'Pack Preview' : 'Pack Preview'}
-                </p>
-                <div className="grid gap-4">
-                  <div className="flex flex-wrap gap-2.5">
-                    {packSource === 'profile' && profiles.length === 0 ? (
-                      <span className="text-sm text-zinc-500">No profiles in this workspace yet.</span>
-                    ) : packSource === 'profile' ? (
-                      profiles.map((profile) => (
-                        <button
-                          key={profile}
-                          className={[
-                            'rounded-lg border px-3 py-1.5 text-[13px] font-medium transition-all duration-200',
-                            packProfileName === profile
-                              ? 'border-zinc-900 bg-zinc-900 text-white shadow-md'
-                              : 'border-zinc-200 bg-white text-zinc-600 shadow-sm hover:border-zinc-300 hover:text-zinc-900',
-                          ].join(' ')}
-                          type="button"
-                          onClick={() => setPackProfileName(profile)}
+                  {packSource === 'profile' ? (
+                    <label className="grid gap-2">
+                      <span className="text-sm font-medium text-zinc-700">Profile to export</span>
+                      <div className="relative">
+                        <select
+                          className="h-10 w-full appearance-none rounded-xl border border-zinc-200 bg-white px-3 pr-10 text-sm outline-none transition-colors focus:border-zinc-400 disabled:opacity-50"
+                          value={packProfileName}
+                          onChange={(event) => setPackProfileName(event.target.value)}
+                          disabled={profilesLoading || profiles.length === 0 || packBusy}
                         >
-                          {profile}{profile === activeProfile ? ' (active)' : ''}
-                        </button>
-                      ))
-                    ) : (
-                      packableAgents.map((agent) => (
-                        <button
-                          key={agent}
-                          className={[
-                            'rounded-lg border px-3 py-1.5 text-[13px] font-medium transition-all duration-200',
-                            packAgentName === agent
-                              ? 'border-zinc-900 bg-zinc-900 text-white shadow-md'
-                              : 'border-zinc-200 bg-white text-zinc-600 shadow-sm hover:border-zinc-300 hover:text-zinc-900',
-                          ].join(' ')}
-                          type="button"
-                          onClick={() => setPackAgentName(agent)}
+                          {profiles.length === 0 ? (
+                            <option value="">No profiles found</option>
+                          ) : null}
+                          {profiles.map((profile) => (
+                            <option key={profile} value={profile}>
+                              {profile}{profile === activeProfile ? ' (active)' : ''}
+                            </option>
+                          ))}
+                        </select>
+                        <div className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-zinc-400">
+                          <ChevronDown size={16} />
+                        </div>
+                      </div>
+                    </label>
+                  ) : (
+                    <label className="grid gap-2">
+                      <span className="text-sm font-medium text-zinc-700">Agent to pack</span>
+                      <div className="relative">
+                        <select
+                          className="h-10 w-full appearance-none rounded-xl border border-zinc-200 bg-white px-3 pr-10 text-sm outline-none transition-colors focus:border-zinc-400 disabled:opacity-50"
+                          value={packAgentName}
+                          onChange={(event) =>
+                            setPackAgentName(event.target.value as (typeof packableAgents)[number])
+                          }
+                          disabled={packBusy}
                         >
-                          {agent}
-                        </button>
-                      ))
-                    )}
-                  </div>
-
-                  {packPreviewLoading ? (
-                    <span className="text-sm text-zinc-500">Loading preview…</span>
-                  ) : null}
-
-                  {packPreviewError ? (
-                    <span className="text-sm text-red-700">{packPreviewError}</span>
-                  ) : null}
-
-                  {!packPreviewLoading && !packPreviewError ? (
-                    <div className="grid gap-4 text-sm text-zinc-700">
-                      <div className="grid gap-1 rounded-lg border border-zinc-200 bg-white p-3">
-                        <span className="text-[11px] font-bold uppercase tracking-widest text-zinc-400">Summary</span>
-                        {packSource === 'profile' && packProfilePreview ? (
-                          <>
-                            <span className="font-semibold text-zinc-900">{packProfilePreview.name}</span>
-                            <span>{Object.keys(packProfilePreview.skills).length} skills</span>
-                            <span>{Object.keys(packProfilePreview.mcps).length} MCPs</span>
-                            <span>{packProfilePreview.memory.paths.length} memory paths</span>
-                          </>
-                        ) : packSource === 'agent' && selectedAgentPreview ? (
-                          <>
-                            <span className="font-semibold text-zinc-900">{selectedAgentPreview.agent}</span>
-                            <span>{selectedAgentPreview.exists ? 'Live config found' : 'Live config not found'}</span>
-                            <span>{Object.keys(selectedAgentPreview.mcpServers).length + Object.keys(selectedAgentPreview.remoteMcpServers).length} MCPs</span>
-                            <span>{selectedAgentSkillEntries.length} skills</span>
-                            <span>{selectedAgentPluginEntries.length} plugins</span>
-                          </>
-                        ) : (
-                          <span>No preview available.</span>
-                        )}
-                      </div>
-
-                      <div className="grid gap-2 rounded-lg border border-zinc-200 bg-white p-3">
-                        <span className="text-[11px] font-bold uppercase tracking-widest text-zinc-400">MCPs</span>
-                        {previewMcpEntries.length === 0 ? (
-                          <span className="text-zinc-500">No MCPs will be packed.</span>
-                        ) : (
-                          previewMcpEntries.map(([key, value]) => (
-                            <div key={key} className="rounded-md border border-zinc-100 bg-zinc-50 px-3 py-2">
-                              <div className="flex items-center justify-between gap-3">
-                                <span className="font-medium text-zinc-900">{key}</span>
-                                <span className="text-[11px] uppercase tracking-widest text-zinc-500">
-                                  {'source' in value
-                                    ? value.kind === 'local'
-                                      ? value.source
-                                      : value.transport
-                                    : value.kind}
-                                </span>
-                              </div>
-                              {'label' in value ? (
-                                <div className="mt-1 text-[13px] text-zinc-500">{value.label}</div>
-                              ) : null}
-                            </div>
-                          ))
-                        )}
-                      </div>
-
-                      <div className="grid gap-2 rounded-lg border border-zinc-200 bg-white p-3">
-                        <span className="text-[11px] font-bold uppercase tracking-widest text-zinc-400">Skills</span>
-                        {previewSkillEntries.length === 0 ? (
-                          <span className="text-zinc-500">No skills will be packed.</span>
-                        ) : (
-                          previewSkillEntries.map((skill) => (
-                            <div key={skill.key} className="rounded-md border border-zinc-100 bg-zinc-50 px-3 py-2">
-                              <div className="font-medium text-zinc-900">{skill.key}</div>
-                              <div className="mt-1 text-[13px] text-zinc-500">{skill.label}</div>
-                            </div>
-                          ))
-                        )}
-                      </div>
-
-                      {packSource === 'agent' ? (
-                        <div className="grid gap-2 rounded-lg border border-zinc-200 bg-white p-3">
-                          <span className="text-[11px] font-bold uppercase tracking-widest text-zinc-400">Plugins</span>
-                          {previewPluginEntries.length === 0 ? (
-                            <span className="text-zinc-500">No plugins discovered.</span>
-                          ) : (
-                            previewPluginEntries.map((plugin) => (
-                              <div key={plugin.key} className="rounded-md border border-zinc-100 bg-zinc-50 px-3 py-2">
-                                <div className="font-medium text-zinc-900">{plugin.key}</div>
-                                <div className="mt-1 text-[13px] text-zinc-500">{plugin.label}</div>
-                              </div>
-                            ))
-                          )}
+                          {packableAgents.map((agent) => (
+                            <option key={agent} value={agent}>
+                              {agent}
+                            </option>
+                          ))}
+                        </select>
+                        <div className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-zinc-400">
+                          <ChevronDown size={16} />
                         </div>
-                      ) : null}
+                      </div>
+                    </label>
+                  )}
 
-                      {packSource === 'profile' && packProfilePreview ? (
-                        <div className="grid gap-2 rounded-lg border border-zinc-200 bg-white p-3">
-                          <span className="text-[11px] font-bold uppercase tracking-widest text-zinc-400">Memory Paths</span>
-                          {packProfilePreview.memory.paths.length === 0 ? (
-                            <span className="text-zinc-500">No memory paths.</span>
-                          ) : (
-                            packProfilePreview.memory.paths.map((memoryPath) => (
-                              <div key={memoryPath} className="rounded-md border border-zinc-100 bg-zinc-50 px-3 py-2 text-[13px] text-zinc-600">
-                                {memoryPath}
-                              </div>
-                            ))
-                          )}
-                        </div>
-                      ) : null}
-                    </div>
-                  ) : null}
-                </div>
-              </div>
-            </div>
-
-            {(packResult || packError) && (
-              <div className="mt-6 grid gap-3">
-                {packResult ? <StatusNote tone="success">{packResult}</StatusNote> : null}
-                {packError ? <StatusNote tone="error">{packError}</StatusNote> : null}
-              </div>
-            )}
-          </PanelShell>
-        ) : null}
-
-        {activePanel === 'install' ? (
-          <PanelShell
-            title="Install profile"
-            description="Import a packed profile archive and unpack bundled MCPs into the local Brainctl store."
-            onClose={() => setActivePanel(null)}
-          >
-            <div className="grid gap-6 lg:grid-cols-[minmax(0,1.15fr)_minmax(280px,0.85fr)]">
-              <div className="space-y-5">
-                <label className="grid gap-2 text-sm">
-                  <span className="font-semibold text-zinc-800">Archive path</span>
-                  <input
-                    className="min-h-[44px] w-full rounded-xl border border-zinc-200 bg-white px-4 text-sm font-medium text-zinc-900 shadow-sm outline-none transition-all placeholder:font-normal placeholder:text-zinc-400 focus:border-zinc-400 focus:ring-4 focus:ring-zinc-100 disabled:opacity-50"
-                    placeholder="/path/to/profile.tar.gz"
-                    value={installArchivePath}
-                    onChange={(event) => setInstallArchivePath(event.target.value)}
-                    disabled={installBusy}
-                  />
-                </label>
-
-                <label className="grid gap-2 text-sm">
-                  <span className="font-semibold text-zinc-800">Credentials JSON</span>
-                  <textarea
-                    className="min-h-[112px] w-full rounded-xl border border-zinc-200 bg-white px-4 py-3 text-sm font-medium text-zinc-900 shadow-sm outline-none transition-all placeholder:font-normal placeholder:text-zinc-400 focus:border-zinc-400 focus:ring-4 focus:ring-zinc-100 disabled:opacity-50"
-                    placeholder={`{\n  "github_token": "ghp_...",\n  "internal_api_key": "sk_..."\n}`}
-                    value={installCredentialsJson}
-                    onChange={(event) => setInstallCredentialsJson(event.target.value)}
-                    disabled={installBusy}
-                  />
-                </label>
-
-                <label className="inline-flex cursor-pointer items-start gap-3 rounded-xl border border-zinc-200/80 bg-zinc-50/50 p-4 transition-colors hover:bg-zinc-50">
-                  <div className="flex h-5 items-center">
+                  <label className="grid gap-2">
+                    <span className="text-sm font-medium text-zinc-700">Output path <span className="text-zinc-400">(optional)</span></span>
                     <input
-                      className="size-[18px] rounded-[4px] border-zinc-300 text-zinc-900 shadow-sm transition focus:ring-zinc-900"
+                      className="h-10 w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm outline-none transition-colors placeholder:text-zinc-400 focus:border-zinc-400 disabled:opacity-50"
+                      placeholder="./my-profile.tar.gz"
+                      value={packOutputPath}
+                      onChange={(event) => setPackOutputPath(event.target.value)}
+                      disabled={packBusy}
+                    />
+                  </label>
+
+                  <div className="flex gap-3 pt-2">
+                    <button
+                      className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-zinc-900 px-6 text-sm font-medium text-white transition-colors hover:bg-zinc-800 disabled:opacity-50"
+                      type="button"
+                      onClick={() => void handlePack()}
+                      disabled={packBusy || (packSource === 'profile' && profiles.length === 0)}
+                    >
+                      {packBusy ? <Loader2 size={16} className="animate-spin" /> : <Boxes size={16} />}
+                      Pack tarball
+                    </button>
+                    <button
+                      className="inline-flex h-10 items-center justify-center rounded-xl border border-zinc-200 bg-white px-4 text-sm font-medium text-zinc-700 transition-colors hover:bg-zinc-50 disabled:opacity-50"
+                      type="button"
+                      onClick={() => void loadProfiles()}
+                      disabled={packBusy}
+                    >
+                      Refresh
+                    </button>
+                  </div>
+                </div>
+
+                <div className="rounded-2xl border border-zinc-200 bg-zinc-50/50 p-6">
+                  <p className="mb-4 text-xs font-medium text-zinc-500">Preview</p>
+                  <div className="grid gap-4">
+                    {packPreviewLoading ? (
+                      <span className="text-sm text-zinc-500">Loading...</span>
+                    ) : null}
+
+                    {packPreviewError ? (
+                      <span className="text-sm text-red-600">{packPreviewError}</span>
+                    ) : null}
+
+                    {!packPreviewLoading && !packPreviewError ? (
+                      <div className="grid gap-4 text-sm text-zinc-900">
+                        <div className="grid gap-1 rounded-xl border border-zinc-200 bg-white p-4">
+                          {packSource === 'profile' && packProfilePreview ? (
+                            <>
+                              <span className="font-semibold">{packProfilePreview.name}</span>
+                              <span className="text-zinc-600">{Object.keys(packProfilePreview.skills).length} skills</span>
+                              <span className="text-zinc-600">{Object.keys(packProfilePreview.mcps).length} MCPs</span>
+                            </>
+                          ) : packSource === 'agent' && selectedAgentPreview ? (
+                            <>
+                              <span className="font-semibold">{selectedAgentPreview.agent}</span>
+                              <span className="text-zinc-600">{Object.keys(selectedAgentPreview.mcpServers).length + Object.keys(selectedAgentPreview.remoteMcpServers).length} MCPs</span>
+                              <span className="text-zinc-600">{selectedAgentSkillEntries.length} skills</span>
+                            </>
+                          ) : (
+                            <span className="text-zinc-500">No preview available</span>
+                          )}
+                        </div>
+
+                        {previewMcpEntries.length > 0 && (
+                          <div className="grid gap-2 rounded-xl border border-zinc-200 bg-white p-4">
+                            <span className="text-xs font-medium text-zinc-500">MCPs</span>
+                            {previewMcpEntries.map(([key, value]) => (
+                              <div key={key} className="flex flex-col gap-1 py-1">
+                                <span className="font-medium text-zinc-900">{key}</span>
+                                {'label' in value ? (
+                                  <span className="text-xs text-zinc-500 truncate">{value.label}</span>
+                                ) : null}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+
+                        {previewSkillEntries.length > 0 && (
+                          <div className="grid gap-2 rounded-xl border border-zinc-200 bg-white p-4">
+                            <span className="text-xs font-medium text-zinc-500">Skills</span>
+                            {previewSkillEntries.map((skill) => (
+                              <div key={skill.key} className="flex flex-col gap-1 py-1">
+                                <span className="font-medium text-zinc-900">{skill.key}</span>
+                                <span className="text-xs text-zinc-500 truncate">{skill.label}</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    ) : null}
+                  </div>
+                </div>
+              </div>
+
+              {(packResult || packError) && (
+                <div className="mt-8 grid gap-3">
+                  {packResult ? <StatusNote tone="success">{packResult}</StatusNote> : null}
+                  {packError ? <StatusNote tone="error">{packError}</StatusNote> : null}
+                </div>
+              )}
+            </PanelShell>
+          ) : null}
+
+          {activePanel === 'install' ? (
+            <PanelShell
+              title="Install profile"
+              description="Import a packed archive and unpack bundled MCPs into the local store."
+              onClose={() => setActivePanel(null)}
+            >
+              <div className="grid gap-10 lg:grid-cols-[1fr_1.2fr]">
+                <div className="space-y-6">
+                  <label className="grid gap-2">
+                    <span className="text-sm font-medium text-zinc-700">Archive path</span>
+                    <input
+                      className="h-10 w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm outline-none transition-colors placeholder:text-zinc-400 focus:border-zinc-400 disabled:opacity-50"
+                      placeholder="/path/to/profile.tar.gz"
+                      value={installArchivePath}
+                      onChange={(event) => setInstallArchivePath(event.target.value)}
+                      disabled={installBusy}
+                    />
+                  </label>
+
+                  <label className="grid gap-2">
+                    <span className="text-sm font-medium text-zinc-700">Credentials JSON</span>
+                    <textarea
+                      className="min-h-[120px] w-full rounded-xl border border-zinc-200 bg-white p-3 text-sm outline-none transition-colors focus:border-zinc-400 disabled:opacity-50 font-mono text-zinc-700"
+                      placeholder={`{\n  "token": "..."\n}`}
+                      value={installCredentialsJson}
+                      onChange={(event) => setInstallCredentialsJson(event.target.value)}
+                      disabled={installBusy}
+                    />
+                  </label>
+
+                  <label className="flex items-center gap-3">
+                    <input
+                      className="size-4 rounded border-zinc-300 text-zinc-900 focus:ring-zinc-900"
                       type="checkbox"
                       checked={installForce}
                       onChange={(event) => setInstallForce(event.target.checked)}
                       disabled={installBusy}
                     />
-                  </div>
-                  <div className="grid gap-1">
-                    <span className="text-sm font-semibold text-zinc-900">Force overwrite</span>
-                    <span className="text-[13px] leading-relaxed text-zinc-500">Replace an existing profile if it shares the same name.</span>
-                  </div>
-                </label>
+                    <span className="text-sm font-medium text-zinc-700">Force overwrite existing profile</span>
+                  </label>
 
-                <div className="pt-2">
-                  <button
-                    className="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-xl bg-zinc-950 px-6 text-sm font-medium text-white shadow-md transition-all hover:bg-zinc-800 hover:shadow-lg active:scale-[0.98] disabled:pointer-events-none disabled:opacity-50"
-                    type="button"
-                    onClick={() => void handleInstall()}
-                    disabled={installBusy}
-                  >
-                    {installBusy ? <Loader2 size={16} className="animate-spin" /> : <Download size={16} />}
-                    Import archive
-                  </button>
+                  <div className="pt-2">
+                    <button
+                      className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-zinc-900 px-6 text-sm font-medium text-white transition-colors hover:bg-zinc-800 disabled:opacity-50 w-full md:w-auto"
+                      type="button"
+                      onClick={() => void handleInstall()}
+                      disabled={installBusy}
+                    >
+                      {installBusy ? <Loader2 size={16} className="animate-spin" /> : <Download size={16} />}
+                      Import Archive
+                    </button>
+                  </div>
+                </div>
+
+                <div className="rounded-2xl border border-zinc-200 bg-zinc-50/50 p-6">
+                  <p className="mb-4 text-xs font-medium text-zinc-500">Execution Path</p>
+                  <ul className="grid gap-3 text-sm text-zinc-600">
+                    <li className="flex items-center gap-2">
+                      <span className="size-1.5 rounded-full bg-zinc-400"></span>
+                      Unpacks archive to local store
+                    </li>
+                    <li className="flex items-center gap-2">
+                      <span className="size-1.5 rounded-full bg-zinc-400"></span>
+                      Installs bundled dependencies
+                    </li>
+                    <li className="flex items-center gap-2">
+                      <span className="size-1.5 rounded-full bg-zinc-400"></span>
+                      Prepares board for live sync
+                    </li>
+                  </ul>
                 </div>
               </div>
 
-              <div className="rounded-xl border border-zinc-200/60 bg-zinc-50/50 p-5">
-                <p className="mb-4 flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-zinc-400">
-                  <span className="h-px w-3 bg-zinc-300"></span>
-                  What happens
-                </p>
-                <ul className="grid gap-3 text-[13px] leading-relaxed text-zinc-600">
-                  <li className="flex gap-2">
-                    <span className="mt-1.5 size-1.5 shrink-0 rounded-full bg-zinc-400"></span>
-                    Unpacks the tarball into the Brainctl profile store.
-                  </li>
-                  <li className="flex gap-2">
-                    <span className="mt-1.5 size-1.5 shrink-0 rounded-full bg-zinc-400"></span>
-                    Installs bundled MCP dependencies when the package includes them.
-                  </li>
-                  <li className="flex gap-2">
-                    <span className="mt-1.5 size-1.5 shrink-0 rounded-full bg-zinc-400"></span>
-                    Keeps the transfer board focused on local agent sync after import.
-                  </li>
-                </ul>
-              </div>
-            </div>
+              {(installResult || installError) && (
+                <div className="mt-8 grid gap-3">
+                  {installResult ? <StatusNote tone="success">{installResult}</StatusNote> : null}
+                  {installError ? <StatusNote tone="error">{installError}</StatusNote> : null}
+                </div>
+              )}
+            </PanelShell>
+          ) : null}
 
-            {(installResult || installError) && (
-              <div className="mt-6 grid gap-3">
-                {installResult ? <StatusNote tone="success">{installResult}</StatusNote> : null}
-                {installError ? <StatusNote tone="error">{installError}</StatusNote> : null}
-              </div>
-            )}
-          </PanelShell>
-        ) : null}
-
-        {activePanel === null ? (
-          <section className="rounded-2xl border border-zinc-200/80 bg-white p-4 shadow-sm sm:p-6 lg:p-8">
-            <ProfilesView />
-          </section>
-        ) : null}
+          {activePanel === null ? (
+            <section className="w-full pt-4">
+              <ProfilesView />
+            </section>
+          ) : null}
+        </div>
       </div>
     </main>
   );
