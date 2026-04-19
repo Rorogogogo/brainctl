@@ -1,6 +1,6 @@
 {
   "name": "brainctl",
-  "version": "0.1.8",
+  "version": "0.1.9",
   "description": "CLI environment manager for consistent AI workflows",
   "type": "module",
   "repository": {
