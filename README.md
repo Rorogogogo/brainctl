@@ -17,26 +17,11 @@
 
 ## 📦 Install & Set Up
 
-> **Install once, wire into each agent.** The CLI is the same for everyone — only the MCP registration differs per agent.
-
-### 1. Install the CLI
-
-```bash
-npm install -g brainctl
-```
-
-Verify:
-
-```bash
-brainctl --version
-brainctl doctor   # checks which agents are on your PATH
-```
+> **Zero install required.** Brainctl runs straight from npx — register it as an MCP server in your agent and you're done. No global install, no bin to manage.
 
 > **Prerequisite:** at least one of `claude`, `codex`, or `gemini` installed and on your `PATH`.
 
----
-
-### 2. Register `brainctl` as an MCP server (pick your agents)
+### 1. Register `brainctl` as an MCP server (pick your agents)
 
 Each agent has its own config file. Brainctl exposes **22 MCP tools** (profiles, sync, skills, run, web UI launch, etc.) — once you register it, any of them can call those tools.
 
@@ -104,14 +89,28 @@ Restart your Gemini session.
 
 ---
 
-### 3. Launch the dashboard
+### 2. Open the dashboard
+
+From any MCP-connected agent, just ask:
+
+> _"Open the brainctl UI"_
+
+It'll start the server **and** open your browser automatically at http://127.0.0.1:3333.
+
+---
+
+### Optional: install the CLI globally
+
+Prefer a shell command? Install globally:
 
 ```bash
-brainctl ui
-# → http://127.0.0.1:3333
+npm install -g brainctl
+brainctl --version
+brainctl doctor     # checks which agents are on your PATH
+brainctl ui         # launch the dashboard from your terminal
 ```
 
-Or from any MCP-connected agent: _"Open the brainctl UI"_ — it'll start the server **and** open your browser automatically.
+The CLI is entirely optional — everything it does is also available through the MCP tools and the dashboard.
 
 ---
 
