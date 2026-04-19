@@ -1,12 +1,20 @@
 import { execSync } from 'node:child_process';
-import { cp, mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { copyFile, cp, mkdir, mkdtemp, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
+import { homedir, tmpdir } from 'node:os';
 import path from 'node:path';
 
 import YAML from 'yaml';
 
 import { ProfileError } from '../errors.js';
-import type { McpServerConfig, PortableProfileManifest, ProfileConfig, RemoteMcpServerConfig } from '../types.js';
+import type {
+  McpServerConfig,
+  PortablePluginSnapshot,
+  PortableProfileManifest,
+  PortableUserSkillSnapshot,
+  ProfileConfig,
+  RemoteMcpServerConfig,
+} from '../types.js';
+import { formatTimestamp } from './sync/agent-writer.js';
 import { resolvePortableMcpCredentials } from './credential-resolution-service.js';
 import { createMcpPreflightService, type McpPreflightService } from './mcp-preflight-service.js';
 import { parseProfile } from './profile-service.js';
@@ -19,7 +27,12 @@ export interface ProfileImportService {
     archivePath: string;
     force?: boolean;
     credentials?: Record<string, string>;
-  }): Promise<{ profileName: string; installedMcps: string[] }>;
+  }): Promise<{
+    profileName: string;
+    installedMcps: string[];
+    installedPlugins: string[];
+    installedUserSkills: string[];
+  }>;
 }
 
 interface ProfileImportServiceDependencies {
@@ -146,6 +159,18 @@ export function createProfileImportService(
 
         await validateImportedMcps(profile, cwd, mcpPreflightService);
 
+        const installedPlugins: string[] = [];
+        for (const plugin of manifest.plugins ?? []) {
+          await restorePlugin(extractDir, plugin);
+          installedPlugins.push(`${plugin.agent}:${plugin.name}`);
+        }
+
+        const installedUserSkills: string[] = [];
+        for (const skill of manifest.userSkills ?? []) {
+          await restoreUserSkill(extractDir, skill);
+          installedUserSkills.push(`${skill.agent}:${skill.name}`);
+        }
+
         const outputYaml: Record<string, unknown> = {
           name: profile.name,
           ...(profile.description ? { description: profile.description } : {}),
@@ -157,7 +182,7 @@ export function createProfileImportService(
         await mkdir(path.dirname(profilePath), { recursive: true });
         await writeFile(profilePath, YAML.stringify(outputYaml), 'utf8');
 
-        return { profileName, installedMcps };
+        return { profileName, installedMcps, installedPlugins, installedUserSkills };
       } finally {
         await rm(extractDir, { recursive: true, force: true });
       }
@@ -261,7 +286,7 @@ async function readPortableManifest(extractDir: string): Promise<PortableProfile
   }
 
   const manifest = parsed as Record<string, unknown>;
-  if (manifest.schemaVersion !== 1) {
+  if (manifest.schemaVersion !== 1 && manifest.schemaVersion !== 2) {
     throw new ProfileError(
       `Unsupported portable profile schema version: ${String(manifest.schemaVersion)}.`
     );
@@ -290,4 +315,136 @@ function resolveBundledArchivePath(extractDir: string, bundlePath: string): stri
   }
 
   return resolved;
+}
+
+async function restorePlugin(
+  extractDir: string,
+  plugin: PortablePluginSnapshot
+): Promise<void> {
+  const sourceDir = resolveBundledArchivePath(extractDir, plugin.archivePath);
+  try {
+    await stat(sourceDir);
+  } catch {
+    throw new ProfileError(
+      `Bundled plugin "${plugin.name}" source missing in archive at ${plugin.archivePath}.`
+    );
+  }
+
+  if (plugin.agent === 'gemini') {
+    // Gemini has no plugin cache concept. Treat as user-skill-equivalent no-op.
+    return;
+  }
+
+  const marketplace = plugin.marketplace ?? plugin.source;
+  const version = plugin.version ?? 'unknown';
+  const cacheRoot = path.join(homedir(), `.${plugin.agent}`, 'plugins', 'cache');
+  const targetDir = path.join(cacheRoot, marketplace, plugin.name, version);
+
+  await rm(targetDir, { recursive: true, force: true });
+  await mkdir(path.dirname(targetDir), { recursive: true });
+  await cp(sourceDir, targetDir, { recursive: true });
+
+  if (plugin.agent === 'claude') {
+    await registerClaudePlugin({
+      pluginKey: `${plugin.name}@${marketplace}`,
+      installPath: targetDir,
+      version,
+    });
+    return;
+  }
+
+  if (plugin.agent === 'codex') {
+    await registerCodexPlugin({
+      pluginKey: `${plugin.name}@${marketplace}`,
+    });
+  }
+}
+
+async function restoreUserSkill(
+  extractDir: string,
+  skill: PortableUserSkillSnapshot
+): Promise<void> {
+  const sourceDir = resolveBundledArchivePath(extractDir, skill.archivePath);
+  try {
+    await stat(sourceDir);
+  } catch {
+    throw new ProfileError(
+      `Bundled user skill "${skill.name}" source missing in archive at ${skill.archivePath}.`
+    );
+  }
+
+  const targetDir = path.join(homedir(), `.${skill.agent}`, 'skills', skill.name);
+  await rm(targetDir, { recursive: true, force: true });
+  await mkdir(path.dirname(targetDir), { recursive: true });
+  await cp(sourceDir, targetDir, { recursive: true });
+}
+
+async function registerClaudePlugin(options: {
+  pluginKey: string;
+  installPath: string;
+  version: string;
+}): Promise<void> {
+  const filePath = path.join(homedir(), '.claude', 'plugins', 'installed_plugins.json');
+  let existing: Record<string, unknown> = { version: 2, plugins: {} };
+
+  try {
+    const source = await readFile(filePath, 'utf8');
+    existing = JSON.parse(source) as Record<string, unknown>;
+    await backupFile(filePath);
+  } catch {
+    // fresh file
+  }
+
+  const plugins = (existing.plugins ?? {}) as Record<string, Array<Record<string, unknown>>>;
+  const now = new Date().toISOString();
+  const entry = {
+    scope: 'user',
+    installPath: options.installPath,
+    version: options.version,
+    installedAt: now,
+    lastUpdated: now,
+  };
+  plugins[options.pluginKey] = [entry];
+  existing.plugins = plugins;
+  if (typeof existing.version !== 'number') existing.version = 2;
+
+  await mkdir(path.dirname(filePath), { recursive: true });
+  await atomicWrite(filePath, JSON.stringify(existing, null, 2) + '\n');
+}
+
+async function registerCodexPlugin(options: { pluginKey: string }): Promise<void> {
+  const filePath = path.join(homedir(), '.codex', 'config.toml');
+  let existing = '';
+  try {
+    existing = await readFile(filePath, 'utf8');
+    await backupFile(filePath);
+  } catch {
+    existing = '';
+  }
+
+  const header = `[plugins."${options.pluginKey}"]`;
+  if (existing.includes(header)) return;
+
+  const prefix = existing.length > 0 && !existing.endsWith('\n') ? '\n' : '';
+  const separator = existing.length > 0 ? '\n' : '';
+  const block = `${header}\nenabled = true\n`;
+  const next = existing + prefix + separator + block;
+
+  await mkdir(path.dirname(filePath), { recursive: true });
+  await atomicWrite(filePath, next);
+}
+
+async function backupFile(filePath: string): Promise<void> {
+  const backupPath = `${filePath}.bak.${formatTimestamp()}`;
+  try {
+    await copyFile(filePath, backupPath);
+  } catch {
+    // file may not exist
+  }
+}
+
+async function atomicWrite(filePath: string, content: string): Promise<void> {
+  const tmpPath = `${filePath}.tmp.${Date.now()}`;
+  await writeFile(tmpPath, content, 'utf8');
+  await rename(tmpPath, filePath);
 }

@@ -114,6 +114,31 @@ function tomlString(value: string): string {
   return `"${value.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
 }
 
+export function stripPluginSection(content: string, pluginKey: string): string {
+  const target = `[plugins."${pluginKey}"]`;
+  const lines = content.split('\n');
+  const result: string[] = [];
+  let inTarget = false;
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (trimmed === target) {
+      inTarget = true;
+      continue;
+    }
+
+    if (inTarget && /^\[/.test(trimmed)) {
+      inTarget = false;
+    }
+
+    if (!inTarget) {
+      result.push(line);
+    }
+  }
+
+  return result.join('\n');
+}
+
 function stripMcpSections(content: string): string {
   const lines = content.split('\n');
   const result: string[] = [];

@@ -1,3 +1,4 @@
+import { spawn } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 
@@ -363,17 +364,31 @@ export function createMcpServer(options: { cwd?: string } = {}): FastMCP {
 
   server.addTool({
     name: 'brainctl_open_ui',
-    description: 'Start the brainctl web dashboard. Returns the URL to open in a browser. If already running, returns the existing URL.',
+    description: 'Start the brainctl web dashboard and open it in the default browser. Returns the URL. If already running, reopens the existing URL in the browser.',
     parameters: z.object({
       port: z.number().default(3333).describe('Port number for the UI server'),
+      openBrowser: z
+        .boolean()
+        .default(true)
+        .describe('Whether to launch the default browser at the UI URL'),
     }),
     execute: async (args) => {
       if (uiServerInstance) {
-        return JSON.stringify({ url: uiServerInstance.url, status: 'already_running' });
+        if (args.openBrowser) openInBrowser(uiServerInstance.url);
+        return JSON.stringify({
+          url: uiServerInstance.url,
+          status: 'already_running',
+          browserOpened: args.openBrowser,
+        });
       }
       try {
         uiServerInstance = await startUiServer({ cwd, port: args.port });
-        return JSON.stringify({ url: uiServerInstance.url, status: 'started' });
+        if (args.openBrowser) openInBrowser(uiServerInstance.url);
+        return JSON.stringify({
+          url: uiServerInstance.url,
+          status: 'started',
+          browserOpened: args.openBrowser,
+        });
       } catch (err) {
         return JSON.stringify({ error: (err as Error).message, status: 'failed' });
       }
@@ -446,4 +461,27 @@ export function createMcpServer(options: { cwd?: string } = {}): FastMCP {
 export async function startMcpServer(options: { cwd?: string } = {}): Promise<void> {
   const server = createMcpServer(options);
   await server.start({ transportType: 'stdio' });
+}
+
+function openInBrowser(url: string): void {
+  const platform = process.platform;
+  const { command, args } =
+    platform === 'darwin'
+      ? { command: 'open', args: [url] }
+      : platform === 'win32'
+        ? { command: 'cmd', args: ['/c', 'start', '""', url] }
+        : { command: 'xdg-open', args: [url] };
+
+  try {
+    const child = spawn(command, args, {
+      detached: true,
+      stdio: 'ignore',
+    });
+    child.on('error', () => {
+      // Browser open is best-effort; swallow errors so the MCP call still succeeds.
+    });
+    child.unref();
+  } catch {
+    // ignore
+  }
 }

@@ -73,6 +73,8 @@ describe('createProfileImportService portable unpack', () => {
     expect(result).toEqual({
       profileName: 'imported',
       installedMcps: ['demo'],
+      installedPlugins: [],
+      installedUserSkills: [],
     });
 
     const installedProfile = YAML.parse(
@@ -99,7 +101,7 @@ describe('createProfileImportService portable unpack', () => {
     await mkdir(archiveStageDir, { recursive: true });
     await writeFile(
       path.join(archiveStageDir, 'manifest.yaml'),
-      ['schemaVersion: 2', 'profileName: unsupported'].join('\n'),
+      ['schemaVersion: 3', 'profileName: unsupported'].join('\n'),
       'utf8'
     );
     await writeFile(
@@ -119,7 +121,7 @@ describe('createProfileImportService portable unpack', () => {
         archivePath,
       })
     ).rejects.toThrowError(
-      new ProfileError('Unsupported portable profile schema version: 2.')
+      new ProfileError('Unsupported portable profile schema version: 3.')
     );
   });
 

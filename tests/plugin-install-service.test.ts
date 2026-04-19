@@ -204,7 +204,7 @@ describe('plugin install service', () => {
     expect(removedPlugins).toEqual(['frontend-design']);
   });
 
-  it('rejects uninstalling plugins that are not managed by Brainctl', async () => {
+  it('rejects uninstalling plugins that are not managed by Brainctl and lack an installPath', async () => {
     const service = createPluginInstallService({
       readInstalledPluginBundle: async () => ({
         skills: ['frontend-design'],
@@ -227,8 +227,96 @@ describe('plugin install service', () => {
           name: 'frontend-design',
           source: 'claude-plugins-official',
           kind: 'plugin',
-          installPath: '/tmp/frontend-design',
           pluginSkills: ['frontend-design'],
+        },
+      })
+    ).rejects.toBeInstanceOf(ValidationError);
+  });
+
+  it('removes an unmanaged Codex plugin by stripping its section and deleting its cache dir', async () => {
+    const uninstallCalls: Array<{ pluginKey: string; installPath: string }> = [];
+    const service = createPluginInstallService({
+      readInstalledPluginBundle: async () => ({ skills: [], mcps: {} }),
+      readTargetState: async () => ({ skills: [], mcpServers: {} }),
+      copySkillDirectory: async () => {},
+      addMcpEntry: async () => {},
+      recordManagedPluginInstall: async () => {},
+      uninstallCodexPlugin: async ({ pluginKey, installPath }) => {
+        uninstallCalls.push({ pluginKey, installPath });
+      },
+    });
+
+    const result = await service.remove({
+      cwd: '/tmp/project',
+      targetAgent: 'codex',
+      plugin: {
+        name: 'gmail',
+        source: 'openai-curated',
+        kind: 'plugin',
+        installPath: '/tmp/cache/openai-curated/gmail/1.0.0',
+        pluginSkills: ['gmail-search'],
+        pluginMcps: ['gmail'],
+      },
+    });
+
+    expect(uninstallCalls).toEqual([
+      { pluginKey: 'gmail@openai-curated', installPath: '/tmp/cache/openai-curated/gmail/1.0.0' },
+    ]);
+    expect(result.removedSkills).toEqual(['gmail-search']);
+    expect(result.removedMcps).toEqual(['gmail']);
+  });
+
+  it('removes an unmanaged Claude plugin by delegating to the claude CLI uninstall', async () => {
+    const uninstallCalls: Array<{ pluginKey: string; installPath: string }> = [];
+    const service = createPluginInstallService({
+      readInstalledPluginBundle: async () => ({ skills: [], mcps: {} }),
+      readTargetState: async () => ({ skills: [], mcpServers: {} }),
+      copySkillDirectory: async () => {},
+      addMcpEntry: async () => {},
+      recordManagedPluginInstall: async () => {},
+      uninstallClaudePlugin: async ({ pluginKey, installPath }) => {
+        uninstallCalls.push({ pluginKey, installPath });
+      },
+    });
+
+    const result = await service.remove({
+      cwd: '/tmp/project',
+      targetAgent: 'claude',
+      plugin: {
+        name: 'frontend-design',
+        source: 'claude-plugins-official',
+        kind: 'plugin',
+        installPath: '/tmp/cache/claude-plugins-official/frontend-design/1.0.0',
+        pluginSkills: ['frontend-design'],
+      },
+    });
+
+    expect(uninstallCalls).toEqual([
+      {
+        pluginKey: 'frontend-design@claude-plugins-official',
+        installPath: '/tmp/cache/claude-plugins-official/frontend-design/1.0.0',
+      },
+    ]);
+    expect(result.removedSkills).toEqual(['frontend-design']);
+  });
+
+  it('still rejects unmanaged Codex plugins that lack an installPath', async () => {
+    const service = createPluginInstallService({
+      readInstalledPluginBundle: async () => ({ skills: [], mcps: {} }),
+      readTargetState: async () => ({ skills: [], mcpServers: {} }),
+      copySkillDirectory: async () => {},
+      addMcpEntry: async () => {},
+      recordManagedPluginInstall: async () => {},
+    });
+
+    await expect(
+      service.remove({
+        cwd: '/tmp/project',
+        targetAgent: 'codex',
+        plugin: {
+          name: 'gmail',
+          source: 'openai-curated',
+          kind: 'plugin',
         },
       })
     ).rejects.toBeInstanceOf(ValidationError);

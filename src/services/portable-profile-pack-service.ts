@@ -1,7 +1,7 @@
 import { execSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
-import { cp, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { cp, mkdir, mkdtemp, rm, stat, writeFile } from 'node:fs/promises';
+import { homedir, tmpdir } from 'node:os';
 import path from 'node:path';
 
 import YAML from 'yaml';
@@ -12,10 +12,13 @@ import type {
   LocalBundledMcpServerConfig,
   McpServerConfig,
   PortableCredentialSpec,
+  PortablePluginSnapshot,
   PortableProfileManifest,
+  PortableUserSkillSnapshot,
   ProfileConfig,
 } from '../types.js';
 import { createAgentConfigService, type AgentConfigService } from './agent-config-service.js';
+import type { AgentLiveConfig, AgentSkillEntry } from './sync/agent-reader.js';
 import { redactPortableMcpCredentials } from './credential-redaction-service.js';
 import { createProfileService, type ProfileService } from './profile-service.js';
 import { classifyPortableMcp } from './portable-mcp-classifier.js';
@@ -74,6 +77,24 @@ export function createPortableProfilePackService(
           });
         }
 
+        for (const [archivePath, sourcePath] of packed.bundledPlugins) {
+          const destPath = path.join(stagingDir, archivePath);
+          await mkdir(path.dirname(destPath), { recursive: true });
+          await cp(sourcePath, destPath, {
+            recursive: true,
+            filter: (src) => !matchesPluginExclude(src),
+          });
+        }
+
+        for (const [archivePath, sourcePath] of packed.bundledUserSkills) {
+          const destPath = path.join(stagingDir, archivePath);
+          await mkdir(path.dirname(destPath), { recursive: true });
+          await cp(sourcePath, destPath, {
+            recursive: true,
+            filter: (src) => !matchesPluginExclude(src),
+          });
+        }
+
         const outputPath = options.outputPath ?? path.join(cwd, `${packed.profile.name}.tar.gz`);
         execSync(`tar -czf "${outputPath}" -C "${stagingDir}" .`, {
           stdio: 'pipe',
@@ -96,6 +117,8 @@ async function buildPackedProfile(options: {
   manifest: PortableProfileManifest;
   profile: ProfileConfig;
   bundledSources: Map<string, string>;
+  bundledPlugins: Map<string, string>;
+  bundledUserSkills: Map<string, string>;
 }> {
   if (options.source.source === 'profile') {
     const profile = await options.profileService.get({
@@ -153,6 +176,7 @@ async function buildPackedProfile(options: {
   );
 
   const profileName = `${sanitizePackName(path.basename(options.cwd) || 'workspace')}-${agentSource.agent}`;
+  const extras = collectAgentExtras(agentConfig);
   return redactAndNormalizeProfile(
     {
       name: profileName,
@@ -164,18 +188,96 @@ async function buildPackedProfile(options: {
     {
       kind: 'agent',
       agent: agentSource.agent,
-    }
+    },
+    extras
   );
+}
+
+function collectAgentExtras(agentConfig: AgentLiveConfig): {
+  plugins: PortablePluginSnapshot[];
+  bundledPlugins: Map<string, string>;
+  userSkills: PortableUserSkillSnapshot[];
+  bundledUserSkills: Map<string, string>;
+} {
+  const plugins: PortablePluginSnapshot[] = [];
+  const bundledPlugins = new Map<string, string>();
+  const userSkills: PortableUserSkillSnapshot[] = [];
+  const bundledUserSkills = new Map<string, string>();
+
+  for (const skill of agentConfig.skills) {
+    if (skill.kind === 'plugin') {
+      const installPath = skill.installPath;
+      const source = skill.source;
+      if (!installPath || !source) continue;
+      const safeName = sanitizePackName(`${skill.name}--${source}`);
+      const archivePath = `plugins/${agentConfig.agent}/${safeName}`;
+      bundledPlugins.set(archivePath, installPath);
+      plugins.push({
+        agent: agentConfig.agent,
+        name: skill.name,
+        source,
+        marketplace: inferMarketplace(agentConfig.agent, installPath, source),
+        version: inferPluginVersion(agentConfig.agent, installPath),
+        archivePath,
+        ...(skill.managed ? { managed: true } : {}),
+        ...(skill.pluginSkills && skill.pluginSkills.length > 0 ? { pluginSkills: skill.pluginSkills } : {}),
+        ...(skill.pluginMcps && skill.pluginMcps.length > 0 ? { pluginMcps: skill.pluginMcps } : {}),
+        ...(skill.pluginAgents && skill.pluginAgents.length > 0 ? { pluginAgents: skill.pluginAgents } : {}),
+        ...(skill.pluginCommands && skill.pluginCommands.length > 0 ? { pluginCommands: skill.pluginCommands } : {}),
+      });
+      continue;
+    }
+
+    if (skill.kind === 'skill' && skill.source === 'local') {
+      const localSkillDir = path.join(homedir(), `.${agentConfig.agent}`, 'skills', skill.name);
+      const archivePath = `skills/${agentConfig.agent}/${skill.name}`;
+      bundledUserSkills.set(archivePath, localSkillDir);
+      userSkills.push({
+        agent: agentConfig.agent,
+        name: skill.name,
+        archivePath,
+      });
+    }
+  }
+
+  return { plugins, bundledPlugins, userSkills, bundledUserSkills };
+}
+
+function inferMarketplace(agent: AgentName, installPath: string, source: string): string {
+  const cacheSegment = path.join(homedir(), `.${agent}`, 'plugins', 'cache') + path.sep;
+  if (installPath.startsWith(cacheSegment)) {
+    const tail = installPath.slice(cacheSegment.length).split(path.sep);
+    if (tail.length > 0 && tail[0].length > 0) return tail[0];
+  }
+  return source;
+}
+
+function inferPluginVersion(agent: AgentName, installPath: string): string | undefined {
+  const cacheSegment = path.join(homedir(), `.${agent}`, 'plugins', 'cache') + path.sep;
+  if (installPath.startsWith(cacheSegment)) {
+    const tail = installPath.slice(cacheSegment.length).split(path.sep);
+    if (tail.length >= 3) return tail[2];
+  }
+  const base = path.basename(installPath);
+  return base.length > 0 ? base : undefined;
 }
 
 function redactAndNormalizeProfile(
   profile: ProfileConfig,
   cwd: string,
-  source: PortableProfileManifest['source']
+  source: PortableProfileManifest['source'],
+  extras?: {
+    plugins: PortablePluginSnapshot[];
+    bundledPlugins: Map<string, string>;
+    userSkills: PortableUserSkillSnapshot[];
+    bundledUserSkills: Map<string, string>;
+  }
 ): {
   manifest: PortableProfileManifest;
   profile: ProfileConfig;
   bundledSources: Map<string, string>;
+  bundledPlugins: Map<string, string>;
+  bundledUserSkills: Map<string, string>;
 } {
   const bundledSources = new Map<string, string>();
   const credentials = new Map<string, PortableCredentialSpec>();
@@ -204,9 +306,12 @@ function redactAndNormalizeProfile(
     })
   );
 
+  const hasExtras =
+    extras !== undefined && (extras.plugins.length > 0 || extras.userSkills.length > 0);
+
   return {
     manifest: {
-      schemaVersion: 1,
+      schemaVersion: hasExtras ? 2 : 1,
       profileName: profile.name,
       createdBy: {
         tool: 'brainctl',
@@ -214,12 +319,16 @@ function redactAndNormalizeProfile(
       },
       ...(source ? { source } : {}),
       ...(credentials.size > 0 ? { credentials: Array.from(credentials.values()) } : {}),
+      ...(extras && extras.plugins.length > 0 ? { plugins: extras.plugins } : {}),
+      ...(extras && extras.userSkills.length > 0 ? { userSkills: extras.userSkills } : {}),
     },
     profile: {
       ...profile,
       mcps,
     },
     bundledSources,
+    bundledPlugins: extras?.bundledPlugins ?? new Map(),
+    bundledUserSkills: extras?.bundledUserSkills ?? new Map(),
   };
 }
 
@@ -236,6 +345,11 @@ function getExcludePatternsForMcp(mcp: McpServerConfig): string[] {
     return mcp.exclude;
   }
   return ['node_modules'];
+}
+
+function matchesPluginExclude(filePath: string): boolean {
+  const basename = path.basename(filePath);
+  return basename === '.git' || basename === '.DS_Store';
 }
 
 function matchesExcludePattern(filePath: string, patterns: string[]): boolean {

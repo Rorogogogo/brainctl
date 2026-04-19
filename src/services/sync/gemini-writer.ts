@@ -1,4 +1,5 @@
 import { copyFile, mkdir, readdir, readFile, rename, writeFile } from 'node:fs/promises';
+import { homedir } from 'node:os';
 import path from 'node:path';
 
 import { SyncError } from '../../errors.js';
@@ -9,7 +10,8 @@ import { formatTimestamp } from './agent-writer.js';
 export function createGeminiWriter(): AgentConfigWriter {
   return {
     async write(options: AgentWriteOptions): Promise<AgentWriteResult> {
-      const geminiDir = path.join(options.cwd, '.gemini');
+      void options.cwd;
+      const geminiDir = path.join(homedir(), '.gemini');
       const configPath = path.join(geminiDir, 'settings.json');
       let existing: Record<string, unknown> = {};
       let backedUpTo: string | null = null;
@@ -49,7 +51,8 @@ export function createGeminiWriter(): AgentConfigWriter {
     },
 
     async restore(options: { cwd: string }): Promise<{ restoredFrom: string }> {
-      const configPath = path.join(options.cwd, '.gemini', 'settings.json');
+      void options.cwd;
+      const configPath = path.join(homedir(), '.gemini', 'settings.json');
       const dir = path.dirname(configPath);
       const base = path.basename(configPath);
 

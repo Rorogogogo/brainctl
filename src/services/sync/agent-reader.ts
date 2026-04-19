@@ -144,36 +144,19 @@ export function createCodexReader(): AgentConfigReader {
 
 export function createGeminiReader(): AgentConfigReader {
   return {
-    async read(options) {
-      const globalConfigPath = path.join(homedir(), '.gemini', 'settings.json');
-      const projectConfigPath = path.join(options.cwd, '.gemini', 'settings.json');
+    async read() {
+      const configPath = path.join(homedir(), '.gemini', 'settings.json');
 
-      // Read global MCPs
-      let globalServers: Record<string, Record<string, unknown>> = {};
+      let rawServers: Record<string, Record<string, unknown>> = {};
+      let exists = false;
       try {
-        const globalSource = await readFile(globalConfigPath, 'utf8');
-        const globalData = JSON.parse(globalSource) as Record<string, unknown>;
-        globalServers = (globalData.mcpServers ?? {}) as Record<string, Record<string, unknown>>;
+        const source = await readFile(configPath, 'utf8');
+        const data = JSON.parse(source) as Record<string, unknown>;
+        rawServers = (data.mcpServers ?? {}) as Record<string, Record<string, unknown>>;
+        exists = true;
       } catch {
         // no global config
       }
-
-      // Read project MCPs
-      let projectServers: Record<string, Record<string, unknown>> = {};
-      let projectExists = false;
-      try {
-        const projectSource = await readFile(projectConfigPath, 'utf8');
-        const projectData = JSON.parse(projectSource) as Record<string, unknown>;
-        projectServers = (projectData.mcpServers ?? {}) as Record<string, Record<string, unknown>>;
-        projectExists = true;
-      } catch {
-        // no project config
-      }
-
-      // Merge: project overrides global
-      const rawServers = { ...globalServers, ...projectServers };
-      const configPath = projectExists ? projectConfigPath : globalConfigPath;
-      const exists = projectExists || Object.keys(globalServers).length > 0;
 
       const mcpServers: Record<string, AgentMcpEntry> = {};
       const remoteMcpServers: Record<string, PortableRemoteMcpMetadata> = {};

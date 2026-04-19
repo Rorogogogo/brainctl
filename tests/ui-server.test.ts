@@ -891,6 +891,8 @@ describe('ui server', () => {
       await expect(response.json()).resolves.toEqual({
         profileName: 'imported',
         installedMcps: [],
+        installedPlugins: [],
+        installedUserSkills: [],
       });
 
       const profileSource = await readFile(
@@ -975,6 +977,8 @@ describe('ui server', () => {
       await expect(response.json()).resolves.toEqual({
         profileName: 'imported',
         installedMcps: [],
+        installedPlugins: [],
+        installedUserSkills: [],
       });
 
       const profileSource = await readFile(

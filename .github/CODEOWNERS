@@ -1,0 +1,8 @@
+# Default reviewer for everything
+*       @Rorogogogo
+
+# Sensitive areas — always require owner review
+/.github/            @Rorogogogo
+/src/mcp/            @Rorogogogo
+/src/services/sync/  @Rorogogogo
+/package.json        @Rorogogogo

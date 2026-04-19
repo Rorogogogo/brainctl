@@ -1,12 +1,17 @@
 import { execSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import YAML from 'yaml';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { createPortableProfilePackService } from '../src/services/portable-profile-pack-service.js';
+
+const packageJsonPath = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'package.json');
+const CURRENT_VERSION = (JSON.parse(readFileSync(packageJsonPath, 'utf8')) as { version: string }).version;
 
 describe('createPortableProfilePackService', () => {
   const tempDirs: string[] = [];
@@ -81,7 +86,7 @@ describe('createPortableProfilePackService', () => {
     expect(manifest.profileName).toBe('starter');
     expect(manifest.createdBy).toEqual({
       tool: 'brainctl',
-      version: '0.1.7',
+      version: CURRENT_VERSION,
     });
     expect(manifest.credentials).toEqual([
       expect.objectContaining({
@@ -188,7 +193,7 @@ describe('createPortableProfilePackService', () => {
     });
     expect(manifest.createdBy).toEqual({
       tool: 'brainctl',
-      version: '0.1.7',
+      version: CURRENT_VERSION,
     });
     expect(profile.name).toBe(`workspace-${agent}`);
     if (agent === 'claude') {
@@ -392,5 +397,130 @@ describe('createPortableProfilePackService', () => {
     ) as Record<string, any>;
 
     expect(profile.mcps.pyserver.runtime).toBe('python');
+  });
+
+  it('bundles installed plugins and user-authored skills into the archive', async () => {
+    const originalHome = process.env.HOME;
+    const fakeHome = await mkdtemp(path.join(os.tmpdir(), 'brainctl-pack-home-'));
+    tempDirs.push(fakeHome);
+    process.env.HOME = fakeHome;
+
+    try {
+      const cwd = path.join(fakeHome, 'workspace');
+      await mkdir(cwd, { recursive: true });
+
+      const pluginInstallPath = path.join(
+        fakeHome,
+        '.claude',
+        'plugins',
+        'cache',
+        'claude-plugins-official',
+        'demo-plugin',
+        '1.2.3'
+      );
+      await mkdir(path.join(pluginInstallPath, 'skills', 'inner'), { recursive: true });
+      await writeFile(path.join(pluginInstallPath, 'skills', 'inner', 'SKILL.md'), '# inner', 'utf8');
+      await writeFile(path.join(pluginInstallPath, 'plugin.json'), '{"name":"demo"}', 'utf8');
+
+      const userSkillDir = path.join(fakeHome, '.claude', 'skills', 'personal');
+      await mkdir(userSkillDir, { recursive: true });
+      await writeFile(path.join(userSkillDir, 'SKILL.md'), '# personal', 'utf8');
+
+      const service = createPortableProfilePackService({
+        agentConfigService: {
+          async readAll() {
+            return [
+              {
+                agent: 'claude',
+                configPath: path.join(fakeHome, '.claude.json'),
+                exists: true,
+                mcpServers: {},
+                remoteMcpServers: {},
+                skills: [
+                  {
+                    name: 'demo-plugin',
+                    source: 'claude-plugins-official',
+                    kind: 'plugin',
+                    installPath: pluginInstallPath,
+                    pluginSkills: ['inner'],
+                  },
+                  {
+                    name: 'personal',
+                    source: 'local',
+                    kind: 'skill',
+                  },
+                ],
+              },
+              {
+                agent: 'codex',
+                configPath: path.join(fakeHome, '.codex', 'config.toml'),
+                exists: false,
+                mcpServers: {},
+                remoteMcpServers: {},
+                skills: [],
+              },
+              {
+                agent: 'gemini',
+                configPath: path.join(fakeHome, '.gemini', 'settings.json'),
+                exists: false,
+                mcpServers: {},
+                remoteMcpServers: {},
+                skills: [],
+              },
+            ];
+          },
+        },
+      });
+
+      const archivePath = path.join(cwd, 'workspace-claude.tar.gz');
+      await service.execute({
+        cwd,
+        source: { source: 'agent', agent: 'claude', cwd },
+        outputPath: archivePath,
+      });
+
+      const extractDir = await mkdtemp(path.join(os.tmpdir(), 'brainctl-plugin-pack-extract-'));
+      tempDirs.push(extractDir);
+      execSync(`tar -xzf "${archivePath}" -C "${extractDir}"`);
+
+      const manifest = YAML.parse(
+        await readFile(path.join(extractDir, 'manifest.yaml'), 'utf8')
+      ) as Record<string, any>;
+
+      expect(manifest.schemaVersion).toBe(2);
+      expect(manifest.plugins).toHaveLength(1);
+      expect(manifest.plugins[0]).toMatchObject({
+        agent: 'claude',
+        name: 'demo-plugin',
+        source: 'claude-plugins-official',
+        marketplace: 'claude-plugins-official',
+        version: '1.2.3',
+        pluginSkills: ['inner'],
+      });
+      expect(manifest.userSkills).toEqual([
+        {
+          agent: 'claude',
+          name: 'personal',
+          archivePath: 'skills/claude/personal',
+        },
+      ]);
+
+      const pluginArchivePath = manifest.plugins[0].archivePath as string;
+      await expect(
+        readFile(path.join(extractDir, pluginArchivePath, 'plugin.json'), 'utf8')
+      ).resolves.toContain('demo');
+      await expect(
+        readFile(path.join(extractDir, pluginArchivePath, 'skills', 'inner', 'SKILL.md'), 'utf8')
+      ).resolves.toContain('inner');
+      await expect(
+        readFile(path.join(extractDir, 'skills', 'claude', 'personal', 'SKILL.md'), 'utf8')
+      ).resolves.toContain('personal');
+    } finally {
+      if (originalHome === undefined) {
+        delete process.env.HOME;
+      } else {
+        process.env.HOME = originalHome;
+      }
+    }
   });
 });
