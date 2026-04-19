@@ -55,7 +55,13 @@ Reload the MCP in Claude Code: `/mcp` → `brainctl` → **Reconnect**.
 <details open>
 <summary><b>🟢 Codex</b> — <code>~/.codex/config.toml</code></summary>
 
-Append this block:
+Easiest: use the `codex` CLI.
+
+```bash
+codex mcp add brainctl -- npx -y brainctl mcp
+```
+
+Or edit `~/.codex/config.toml` directly:
 
 ```toml
 [mcp_servers.brainctl]
@@ -70,7 +76,13 @@ Restart your Codex session to pick it up.
 <details open>
 <summary><b>🔵 Gemini CLI</b> — <code>~/.gemini/settings.json</code></summary>
 
-Merge into the top-level `mcpServers` object:
+Easiest: use the `gemini` CLI.
+
+```bash
+gemini mcp add -s user brainctl npx -y brainctl mcp
+```
+
+Or edit `~/.gemini/settings.json` directly (merge into the top-level `mcpServers` object):
 
 ```json
 {
