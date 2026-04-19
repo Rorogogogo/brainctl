@@ -1,12 +1,17 @@
 import { execSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import YAML from 'yaml';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { createPortableProfilePackService } from '../src/services/portable-profile-pack-service.js';
+
+const packageJsonPath = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'package.json');
+const CURRENT_VERSION = (JSON.parse(readFileSync(packageJsonPath, 'utf8')) as { version: string }).version;
 
 describe('createPortableProfilePackService', () => {
   const tempDirs: string[] = [];
@@ -81,7 +86,7 @@ describe('createPortableProfilePackService', () => {
     expect(manifest.profileName).toBe('starter');
     expect(manifest.createdBy).toEqual({
       tool: 'brainctl',
-      version: '0.1.7',
+      version: CURRENT_VERSION,
     });
     expect(manifest.credentials).toEqual([
       expect.objectContaining({
@@ -188,7 +193,7 @@ describe('createPortableProfilePackService', () => {
     });
     expect(manifest.createdBy).toEqual({
       tool: 'brainctl',
-      version: '0.1.7',
+      version: CURRENT_VERSION,
     });
     expect(profile.name).toBe(`workspace-${agent}`);
     if (agent === 'claude') {
