@@ -941,9 +941,16 @@ export default function ProfilesView() {
         );
       } else {
         setIsEditMode(false);
-        showFeedback(
-          'success',
-          `Applied ${result.applied.length} change${result.applied.length > 1 ? 's' : ''}`
+        const affectedAgents = Array.from(new Set(result.applied.map((c) => c.agent)))
+          .map((a) => AGENT_LABELS[a] ?? a);
+        toast.success(
+          `Applied ${result.applied.length} change${result.applied.length > 1 ? 's' : ''}`,
+          {
+            description: affectedAgents.length > 0
+              ? `Restart ${affectedAgents.join(' & ')} to pick up the changes.`
+              : undefined,
+            duration: 8000,
+          }
         );
       }
     } finally {
