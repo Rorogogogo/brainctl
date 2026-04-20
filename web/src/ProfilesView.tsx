@@ -943,11 +943,17 @@ export default function ProfilesView() {
         setIsEditMode(false);
         const affectedAgents = Array.from(new Set(result.applied.map((c) => c.agent)))
           .map((a) => AGENT_LABELS[a] ?? a);
+        const agentList =
+          affectedAgents.length <= 1
+            ? affectedAgents[0]
+            : affectedAgents.length === 2
+              ? `${affectedAgents[0]} & ${affectedAgents[1]}`
+              : `${affectedAgents.slice(0, -1).join(', ')} & ${affectedAgents[affectedAgents.length - 1]}`;
         toast.success(
           `Applied ${result.applied.length} change${result.applied.length > 1 ? 's' : ''}`,
           {
-            description: affectedAgents.length > 0
-              ? `Restart ${affectedAgents.join(' & ')} to pick up the changes.`
+            description: agentList
+              ? `Restart ${agentList} to pick up the changes.`
               : undefined,
             duration: 8000,
           }
