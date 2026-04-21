@@ -785,9 +785,7 @@ export function useProfilesBoard() {
   }, [isEditMode]);
 
   return {
-    agentConfigs,
     pendingChanges,
-    activeId,
     loading,
     saving,
     confirmOpen,
