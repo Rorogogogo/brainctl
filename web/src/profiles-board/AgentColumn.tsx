@@ -4,6 +4,7 @@ import type { ReactNode } from 'react';
 
 import { AgentLogo } from '../agent-brand.js';
 import {
+  AGENT_LABELS,
   formatPluginSubtitle,
   splitAgentSkillEntries,
   type AgentLiveConfig,
@@ -12,12 +13,6 @@ import { parseDragId, parseDropId } from './dnd.js';
 import { DraggableCard } from './DraggableCard.js';
 import { DroppableZone } from './DroppableZone.js';
 import { StaticCard } from './StaticCard.js';
-
-const AGENT_LABELS: Record<string, string> = {
-  claude: 'Claude',
-  codex: 'Codex',
-  gemini: 'Gemini',
-};
 
 function DropAnchorWrapper({ id, children }: { id: string; children?: ReactNode }) {
   const { setNodeRef } = useDroppable({ id });

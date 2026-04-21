@@ -4,6 +4,7 @@ import { toast } from 'sonner';
 
 import { fetchJson } from '../lib/fetch-json.js';
 import {
+  AGENT_LABELS,
   applyPendingChangesWithApi,
   canStagePendingAddition,
   formatPluginSubtitle,
@@ -60,12 +61,6 @@ interface FinalizeResolvedPendingAdditionResult {
   error: string | null;
   reason: 'staged' | 'stale' | 'duplicate' | 'conflict';
 }
-
-const AGENT_LABELS: Record<string, string> = {
-  claude: 'Claude',
-  codex: 'Codex',
-  gemini: 'Gemini',
-};
 
 let changeIdCounter = 0;
 

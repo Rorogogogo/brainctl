@@ -1,12 +1,7 @@
 import { Loader2, Plus, Save, Undo2, X } from 'lucide-react';
 
+import { AGENT_LABELS } from '../profiles-view.js';
 import type { PendingChange } from '../profiles-view.js';
-
-const AGENT_LABELS: Record<string, string> = {
-  claude: 'Claude',
-  codex: 'Codex',
-  gemini: 'Gemini',
-};
 
 export function PendingChangesBar({
   changes,
