@@ -8,6 +8,12 @@ import {
   type AgentLiveConfig,
   type PendingChange,
 } from '../web/src/profiles-view.js';
+import {
+  applyPendingChanges,
+  buildChangeSummaryLines,
+  buildOverlayData,
+  finalizeResolvedPendingAddition,
+} from '../web/src/profiles-board/useProfilesBoard.js';
 
 describe('profiles view helpers', () => {
   it('rejects staging an MCP onto a target agent that already has the same key', () => {
@@ -238,5 +244,316 @@ describe('profiles view helpers', () => {
     });
 
     expect(error).toBeNull();
+  });
+
+  it('formats staged change summaries with category-specific labels', () => {
+    const changes: PendingChange[] = [
+      {
+        id: 'change-1',
+        type: 'add',
+        category: 'plugin',
+        agent: 'codex',
+        key: 'frontend-design',
+      },
+      {
+        id: 'change-2',
+        type: 'remove',
+        category: 'skill',
+        agent: 'gemini',
+        key: 'notes',
+      },
+      {
+        id: 'change-3',
+        type: 'add',
+        category: 'mcp',
+        agent: 'claude',
+        key: 'github',
+      },
+    ];
+
+    expect(buildChangeSummaryLines(changes)).toEqual([
+      '+ [Plugin] frontend-design → Codex',
+      '- [Skill] notes from Gemini',
+      '+ [MCP] github → Claude',
+    ]);
+  });
+
+  it('builds overlay data from the active draggable item', () => {
+    const configs: AgentLiveConfig[] = [
+      {
+        agent: 'claude',
+        configPath: '/tmp/claude.json',
+        exists: true,
+        mcpServers: {},
+        remoteMcpServers: {
+          docs: {
+            transport: 'http',
+            url: 'https://developers.openai.com/mcp',
+          },
+        },
+        skills: [
+          {
+            name: 'superpowers',
+            source: 'claude-plugins-official',
+            kind: 'plugin',
+            pluginSkills: ['systematic-debugging', 'test-driven-development'],
+          },
+        ],
+      },
+    ];
+
+    expect(buildOverlayData(configs, 'claude:mcp:docs')).toEqual({
+      label: 'docs',
+      sublabel: '[remote] HTTP https://developers.openai.com/mcp',
+    });
+    expect(buildOverlayData(configs, 'claude:plugin:superpowers')).toEqual({
+      label: 'superpowers',
+      sublabel: 'claude-plugins-official • 2 skills',
+    });
+  });
+
+  it('applies successful staged changes to the live config snapshot', () => {
+    const configs: AgentLiveConfig[] = [
+      {
+        agent: 'claude',
+        configPath: '/tmp/claude.json',
+        exists: true,
+        mcpServers: {
+          github: {
+            command: 'npx',
+            args: ['-y', '@modelcontextprotocol/server-github'],
+          },
+        },
+        remoteMcpServers: {},
+        skills: [{ name: 'notes', source: 'local', kind: 'skill' }],
+      },
+      {
+        agent: 'codex',
+        configPath: '/tmp/config.toml',
+        exists: true,
+        mcpServers: {},
+        remoteMcpServers: {},
+        skills: [],
+      },
+    ];
+    const appliedChanges: PendingChange[] = [
+      {
+        id: 'change-1',
+        type: 'add',
+        category: 'mcp',
+        agent: 'codex',
+        key: 'github',
+        entry: {
+          command: 'npx',
+          args: ['-y', '@modelcontextprotocol/server-github'],
+        },
+      },
+      {
+        id: 'change-2',
+        type: 'remove',
+        category: 'skill',
+        agent: 'claude',
+        key: 'notes',
+      },
+    ];
+
+    expect(applyPendingChanges(configs, appliedChanges)).toEqual([
+      {
+        agent: 'claude',
+        configPath: '/tmp/claude.json',
+        exists: true,
+        mcpServers: {
+          github: {
+            command: 'npx',
+            args: ['-y', '@modelcontextprotocol/server-github'],
+          },
+        },
+        remoteMcpServers: {},
+        skills: [],
+      },
+      {
+        agent: 'codex',
+        configPath: '/tmp/config.toml',
+        exists: true,
+        mcpServers: {
+          github: {
+            command: 'npx',
+            args: ['-y', '@modelcontextprotocol/server-github'],
+          },
+        },
+        remoteMcpServers: {},
+        skills: [],
+      },
+    ]);
+  });
+
+  it('ignores resolved preflights after the board state has been invalidated', () => {
+    const configs: AgentLiveConfig[] = [
+      {
+        agent: 'claude',
+        configPath: '/tmp/claude.json',
+        exists: true,
+        mcpServers: {
+          github: {
+            command: 'npx',
+            args: ['-y', '@modelcontextprotocol/server-github'],
+          },
+        },
+        remoteMcpServers: {},
+        skills: [],
+      },
+      {
+        agent: 'codex',
+        configPath: '/tmp/config.toml',
+        exists: true,
+        mcpServers: {},
+        remoteMcpServers: {},
+        skills: [],
+      },
+    ];
+
+    const nextChange: PendingChange = {
+      id: 'change-1',
+      type: 'add',
+      category: 'mcp',
+      agent: 'codex',
+      key: 'github',
+      entry: {
+        command: 'npx',
+        args: ['-y', '@modelcontextprotocol/server-github'],
+      },
+      sourceAgent: 'claude',
+    };
+
+    expect(
+      finalizeResolvedPendingAddition({
+        startedPreflightGeneration: 1,
+        currentPreflightGeneration: 2,
+        isEditMode: true,
+        agentConfigs: configs,
+        pendingChanges: [],
+        nextChange,
+      })
+    ).toEqual({
+      changes: [],
+      didStage: false,
+      error: null,
+      reason: 'stale',
+    });
+  });
+
+  it('deduplicates resolved preflight additions against the latest pending state', () => {
+    const configs: AgentLiveConfig[] = [
+      {
+        agent: 'claude',
+        configPath: '/tmp/claude.json',
+        exists: true,
+        mcpServers: {
+          github: {
+            command: 'npx',
+            args: ['-y', '@modelcontextprotocol/server-github'],
+          },
+        },
+        remoteMcpServers: {},
+        skills: [],
+      },
+      {
+        agent: 'codex',
+        configPath: '/tmp/config.toml',
+        exists: true,
+        mcpServers: {},
+        remoteMcpServers: {},
+        skills: [],
+      },
+    ];
+
+    const nextChange: PendingChange = {
+      id: 'change-1',
+      type: 'add',
+      category: 'mcp',
+      agent: 'codex',
+      key: 'github',
+      entry: {
+        command: 'npx',
+        args: ['-y', '@modelcontextprotocol/server-github'],
+      },
+      sourceAgent: 'claude',
+    };
+
+    expect(
+      finalizeResolvedPendingAddition({
+        startedPreflightGeneration: 3,
+        currentPreflightGeneration: 3,
+        isEditMode: true,
+        agentConfigs: configs,
+        pendingChanges: [nextChange],
+        nextChange,
+      })
+    ).toEqual({
+      changes: [nextChange],
+      didStage: false,
+      error: null,
+      reason: 'duplicate',
+    });
+  });
+
+  it('revalidates resolved preflights against the latest board state before staging', () => {
+    const configs: AgentLiveConfig[] = [
+      {
+        agent: 'claude',
+        configPath: '/tmp/claude.json',
+        exists: true,
+        mcpServers: {
+          github: {
+            command: 'npx',
+            args: ['-y', '@modelcontextprotocol/server-github'],
+          },
+        },
+        remoteMcpServers: {},
+        skills: [],
+      },
+      {
+        agent: 'codex',
+        configPath: '/tmp/config.toml',
+        exists: true,
+        mcpServers: {
+          github: {
+            command: 'npx',
+            args: ['-y', '@modelcontextprotocol/server-github'],
+          },
+        },
+        remoteMcpServers: {},
+        skills: [],
+      },
+    ];
+
+    const nextChange: PendingChange = {
+      id: 'change-1',
+      type: 'add',
+      category: 'mcp',
+      agent: 'codex',
+      key: 'github',
+      entry: {
+        command: 'npx',
+        args: ['-y', '@modelcontextprotocol/server-github'],
+      },
+      sourceAgent: 'claude',
+    };
+
+    expect(
+      finalizeResolvedPendingAddition({
+        startedPreflightGeneration: 4,
+        currentPreflightGeneration: 4,
+        isEditMode: true,
+        agentConfigs: configs,
+        pendingChanges: [],
+        nextChange,
+      })
+    ).toEqual({
+      changes: [],
+      didStage: false,
+      error: 'MCP "github" already exists in Codex. Remove it first before copying.',
+      reason: 'conflict',
+    });
   });
 });
