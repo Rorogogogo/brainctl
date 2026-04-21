@@ -4,7 +4,6 @@ import {
   PointerSensor,
   useSensor,
   useSensors,
-  type Modifier,
 } from '@dnd-kit/core';
 import {
   ArrowRightLeft,
@@ -18,40 +17,10 @@ import {
 
 import ConfirmDialog from './ConfirmDialog.js';
 import { AgentColumn } from './profiles-board/AgentColumn.js';
+import { DragOverlayCard, snapToPointer } from './profiles-board/DragOverlayCard.js';
 import { PendingChangesBar } from './profiles-board/PendingChangesBar.js';
 import { customCollisionDetection } from './profiles-board/dnd.js';
 import { useProfilesBoard } from './profiles-board/useProfilesBoard.js';
-
-function OverlayCard({ label, sublabel }: { label: string; sublabel: string }) {
-  return (
-    <div className="flex items-start gap-3 rounded-xl border border-zinc-200 bg-white p-3 shadow-lg rotate-2">
-      <div className="flex w-full items-start gap-3 text-zinc-900">
-        <span className="grid size-8 shrink-0 place-items-center rounded-lg border border-zinc-200 bg-zinc-50 text-zinc-600">
-          <ArrowRightLeft size={16} />
-        </span>
-        <div className="grid min-w-0 flex-1 gap-0.5">
-          <strong className="truncate text-sm font-semibold text-zinc-900">{label}</strong>
-          <span className="truncate text-xs text-zinc-500">{sublabel}</span>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-const snapToPointer: Modifier = ({ activatorEvent, draggingNodeRect, transform }) => {
-  if (activatorEvent && draggingNodeRect) {
-    const event = activatorEvent as PointerEvent;
-    const offsetX = event.clientX - draggingNodeRect.left;
-    const offsetY = event.clientY - draggingNodeRect.top;
-    return {
-      ...transform,
-      x: transform.x + offsetX - 20,
-      y: transform.y + offsetY - 20,
-    };
-  }
-
-  return transform;
-};
 
 export default function ProfilesView() {
   const {
@@ -195,7 +164,7 @@ export default function ProfilesView() {
 
         <DragOverlay modifiers={[snapToPointer]}>
           {overlayData ? (
-            <OverlayCard label={overlayData.label} sublabel={overlayData.sublabel} />
+            <DragOverlayCard label={overlayData.label} sublabel={overlayData.sublabel} />
           ) : null}
         </DragOverlay>
       </DndContext>
