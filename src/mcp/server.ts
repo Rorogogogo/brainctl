@@ -23,8 +23,15 @@ const packageVersion = JSON.parse(
   readFileSync(new URL('../../package.json', import.meta.url), 'utf8')
 ) as { version: string };
 
-export function createMcpServer(options: { cwd?: string } = {}): FastMCP {
+export interface UiServerState {
+  current: UiServer | null;
+}
+
+export function createMcpServer(
+  options: { cwd?: string; uiServerState?: UiServerState } = {}
+): FastMCP {
   const cwd = options.cwd ?? process.cwd();
+  const uiState: UiServerState = options.uiServerState ?? { current: null };
 
   const server = new FastMCP({
     name: 'brainctl',
@@ -360,32 +367,30 @@ export function createMcpServer(options: { cwd?: string } = {}): FastMCP {
     },
   });
 
-  let uiServerInstance: UiServer | null = null;
-
   server.addTool({
     name: 'brainctl_open_ui',
-    description: 'Start the brainctl web dashboard and open it in the default browser. Returns the URL. If already running, reopens the existing URL in the browser.',
+    description: 'Open the brainctl web dashboard in the default browser. The dashboard auto-starts with the MCP server; this tool just opens the URL. Starts the server on demand if auto-start was skipped or failed.',
     parameters: z.object({
-      port: z.number().default(3333).describe('Port number for the UI server'),
+      port: z.number().default(3333).describe('Port to use if the dashboard needs to be started'),
       openBrowser: z
         .boolean()
         .default(true)
         .describe('Whether to launch the default browser at the UI URL'),
     }),
     execute: async (args) => {
-      if (uiServerInstance) {
-        if (args.openBrowser) openInBrowser(uiServerInstance.url);
+      if (uiState.current) {
+        if (args.openBrowser) openInBrowser(uiState.current.url);
         return JSON.stringify({
-          url: uiServerInstance.url,
+          url: uiState.current.url,
           status: 'already_running',
           browserOpened: args.openBrowser,
         });
       }
       try {
-        uiServerInstance = await startUiServer({ cwd, port: args.port });
-        if (args.openBrowser) openInBrowser(uiServerInstance.url);
+        uiState.current = await startUiServer({ cwd, port: args.port });
+        if (args.openBrowser) openInBrowser(uiState.current.url);
         return JSON.stringify({
-          url: uiServerInstance.url,
+          url: uiState.current.url,
           status: 'started',
           browserOpened: args.openBrowser,
         });
@@ -400,11 +405,11 @@ export function createMcpServer(options: { cwd?: string } = {}): FastMCP {
     description: 'Stop the brainctl web dashboard if it is running.',
     parameters: z.object({}),
     execute: async () => {
-      if (!uiServerInstance) {
+      if (!uiState.current) {
         return JSON.stringify({ status: 'not_running' });
       }
-      await uiServerInstance.close();
-      uiServerInstance = null;
+      await uiState.current.close();
+      uiState.current = null;
       return JSON.stringify({ status: 'stopped' });
     },
   });
@@ -459,8 +464,36 @@ export function createMcpServer(options: { cwd?: string } = {}): FastMCP {
 }
 
 export async function startMcpServer(options: { cwd?: string } = {}): Promise<void> {
-  const server = createMcpServer(options);
+  const cwd = options.cwd ?? process.cwd();
+  const uiServerState: UiServerState = { current: null };
+
+  if (process.env.BRAINCTL_AUTO_UI !== '0') {
+    uiServerState.current = await tryAutoStartUi(cwd, 3333);
+  }
+
+  const server = createMcpServer({ cwd, uiServerState });
   await server.start({ transportType: 'stdio' });
+}
+
+async function tryAutoStartUi(cwd: string, port: number): Promise<UiServer | null> {
+  try {
+    return await startUiServer({ cwd, port });
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code === 'EADDRINUSE') {
+      const url = `http://127.0.0.1:${port}`;
+      process.stderr.write(
+        `brainctl: UI port ${port} already in use; assuming another brainctl instance owns ${url}\n`
+      );
+      return {
+        server: null as never,
+        url,
+        close: async () => {},
+      };
+    }
+    process.stderr.write(`brainctl: UI auto-start failed: ${(err as Error).message}\n`);
+    return null;
+  }
 }
 
 function openInBrowser(url: string): void {

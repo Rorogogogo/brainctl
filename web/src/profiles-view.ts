@@ -50,7 +50,7 @@ export interface PendingChangeFailure {
   error: string;
 }
 
-const AGENT_LABELS: Record<string, string> = {
+export const AGENT_LABELS: Record<string, string> = {
   claude: 'Claude',
   codex: 'Codex',
   gemini: 'Gemini',

@@ -21,7 +21,7 @@ button,
 input,
 select,
 textarea {
-  font-family: "Inter", "Avenir Next", "Helvetica Neue", "Segoe UI", sans-serif;
+  font-family: "Avenir Next", "Helvetica Neue", "Segoe UI", "SF Pro Text", Arial, sans-serif;
   letter-spacing: -0.01em;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
