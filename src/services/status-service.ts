@@ -1,15 +1,14 @@
-import { loadConfig } from '../config.js';
-import { loadMemory } from '../context/memory.js';
-import { createExecutorResolver } from '../executor/resolver.js';
-import type { AgentAvailability, ExecutorResolver } from '../executor/resolver.js';
-import type { AgentName, MemoryLoadResult } from '../types.js';
+import {
+  createAgentAvailabilityService,
+  type AgentAvailability,
+  type AgentAvailabilityService,
+} from './agent-availability-service.js';
+import { createProfileService, type ProfileService } from './profile-service.js';
+import type { AgentName } from '../types.js';
 
 export interface StatusResult {
-  configPath: string;
-  memory: MemoryLoadResult;
-  skills: string[];
-  mcpCount: number;
   agents: Record<AgentName, AgentAvailability>;
+  profiles: { count: number; names: string[] };
 }
 
 export interface StatusService {
@@ -17,24 +16,30 @@ export interface StatusService {
 }
 
 export function createStatusService(
-  dependencies: { resolver?: ExecutorResolver } = {}
+  dependencies: {
+    availabilityService?: AgentAvailabilityService;
+    profileService?: ProfileService;
+  } = {}
 ): StatusService {
-  const resolver = dependencies.resolver ?? createExecutorResolver();
+  const availabilityService =
+    dependencies.availabilityService ?? createAgentAvailabilityService();
+  const profileService = dependencies.profileService ?? createProfileService();
 
   return {
     async execute(options = {}): Promise<StatusResult> {
       const cwd = options.cwd ?? process.cwd();
-      const config = await loadConfig({ cwd });
-      const memory = await loadMemory({ paths: config.memory.paths });
-      const agents = await resolver.getAgentAvailability();
+      const [agents, profileList] = await Promise.all([
+        availabilityService.getAll(),
+        profileService.list({ cwd }),
+      ]);
 
       return {
-        configPath: config.configPath,
-        memory,
-        skills: Object.keys(config.skills).sort((left, right) => left.localeCompare(right)),
-        mcpCount: Object.keys(config.mcps).length,
-        agents
+        agents,
+        profiles: {
+          count: profileList.profiles.length,
+          names: profileList.profiles,
+        },
       };
-    }
+    },
   };
 }

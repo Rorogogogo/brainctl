@@ -8,38 +8,33 @@ import { fileURLToPath } from 'node:url';
 import { Command } from 'commander';
 
 import { registerDoctorCommand } from './commands/doctor.js';
-import { registerInitCommand } from './commands/init.js';
 import { registerMcpCommand } from './commands/mcp.js';
 import { registerProfileCommand } from './commands/profile.js';
-import { registerRunCommand } from './commands/run.js';
 import { registerStatusCommand } from './commands/status.js';
-import { registerSyncCommand } from './commands/sync.js';
 import { registerUiCommand } from './commands/ui.js';
 import { printError } from './output.js';
 import { createUpdateCheckService } from './services/update-check-service.js';
 import { createDoctorService, type DoctorService } from './services/doctor-service.js';
-import { createInitService, type InitService } from './services/init-service.js';
+import { createProfileApplyService, type ProfileApplyService } from './services/profile-apply-service.js';
 import { createProfileExportService, type ProfileExportService } from './services/profile-export-service.js';
 import { createProfileImportService, type ProfileImportService } from './services/profile-import-service.js';
 import { createProfileService, type ProfileService } from './services/profile-service.js';
-import { createRunService, type RunService } from './services/run-service.js';
+import { createProfileSnapshotService, type ProfileSnapshotService } from './services/profile-snapshot-service.js';
 import { createStatusService, type StatusService } from './services/status-service.js';
-import { createSyncService, type SyncService } from './services/sync-service.js';
-import { createExecutorResolver } from './executor/resolver.js';
+import { createAgentAvailabilityService } from './services/agent-availability-service.js';
 
 const packageVersion = JSON.parse(
   readFileSync(new URL('../package.json', import.meta.url), 'utf8')
 ) as { version: string };
 
 export interface CliServices {
-  initService: InitService;
-  runService: RunService;
   statusService: StatusService;
   doctorService: DoctorService;
   profileService: ProfileService;
   profileExportService: ProfileExportService;
   profileImportService: ProfileImportService;
-  syncService: SyncService;
+  profileApplyService: ProfileApplyService;
+  profileSnapshotService: ProfileSnapshotService;
 }
 
 export function createProgram(overrides: Partial<CliServices> = {}): Command {
@@ -51,16 +46,15 @@ export function createProgram(overrides: Partial<CliServices> = {}): Command {
     .description('Manage repeatable AI environments for local agent workflows')
     .version(packageVersion.version);
 
-  registerInitCommand(program, services.initService);
   registerStatusCommand(program, services.statusService);
-  registerRunCommand(program, services.runService);
   registerDoctorCommand(program, services.doctorService);
   registerProfileCommand(program, {
     profileService: services.profileService,
     profileExportService: services.profileExportService,
     profileImportService: services.profileImportService,
+    profileApplyService: services.profileApplyService,
+    profileSnapshotService: services.profileSnapshotService,
   });
-  registerSyncCommand(program, services.syncService);
   registerUiCommand(program);
   registerMcpCommand(program);
 
@@ -133,18 +127,18 @@ export function shouldRunMain(
 }
 
 function createDefaultServices(overrides: Partial<CliServices>): CliServices {
-  const resolver = createExecutorResolver();
+  const availabilityService = createAgentAvailabilityService();
   const profileService = createProfileService();
+  const profileSnapshotService = createProfileSnapshotService();
 
   return {
-    initService: createInitService(),
-    runService: createRunService({ resolver }),
-    statusService: createStatusService({ resolver }),
-    doctorService: createDoctorService({ resolver }),
+    statusService: createStatusService({ availabilityService }),
+    doctorService: createDoctorService({ availabilityService }),
     profileService,
     profileExportService: createProfileExportService({ profileService }),
     profileImportService: createProfileImportService(),
-    syncService: createSyncService({ profileService }),
+    profileApplyService: createProfileApplyService({ profileService, snapshotService: profileSnapshotService }),
+    profileSnapshotService,
     ...overrides
   };
 }

@@ -78,7 +78,7 @@ describe('createProfileImportService portable unpack', () => {
     });
 
     const installedProfile = YAML.parse(
-      await readFile(path.join(projectDir, '.brainctl', 'profiles', 'imported.yaml'), 'utf8')
+      await readFile(path.join(projectDir, '.brainctl', 'profiles', 'imported', 'profile.yaml'), 'utf8')
     ) as Record<string, any>;
     expect(installedProfile.mcps.demo.path).toBe(
       path.join(projectDir, '.brainctl', 'profiles', 'imported', 'mcps', 'demo')
@@ -370,7 +370,7 @@ describe('createProfileImportService portable unpack', () => {
     });
 
     const installedProfile = YAML.parse(
-      await readFile(path.join(projectDir, '.brainctl', 'profiles', 'imported.yaml'), 'utf8')
+      await readFile(path.join(projectDir, '.brainctl', 'profiles', 'imported', 'profile.yaml'), 'utf8')
     ) as Record<string, any>;
     expect(installedProfile.mcps.github.env.GITHUB_TOKEN).toBe('ghp_live_secret');
     expect(installedProfile.mcps.docs.headers.Authorization).toBe(
@@ -435,5 +435,44 @@ describe('createProfileImportService portable unpack', () => {
 
     expect(result.profileName).toBe('binpkg');
     expect(result.installedMcps).toContain('myserver');
+  });
+
+  it('imports from a folder path (no tarball extraction)', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'brainctl-unpack-folder-'));
+    tempDirs.push(root);
+
+    const projectDir = path.join(root, 'workspace');
+    const folderSource = path.join(root, 'folder-profile');
+    await mkdir(projectDir, { recursive: true });
+    await mkdir(folderSource, { recursive: true });
+
+    await writeFile(
+      path.join(folderSource, 'manifest.yaml'),
+      ['schemaVersion: 1', 'profileName: folderimp'].join('\n'),
+      'utf8'
+    );
+    await writeFile(
+      path.join(folderSource, 'profile.yaml'),
+      ['name: folderimp', 'skills: {}', 'mcps: {}', 'memory:', '  paths: []'].join('\n'),
+      'utf8'
+    );
+
+    const service = createProfileImportService();
+    const result = await service.execute({
+      cwd: projectDir,
+      archivePath: folderSource,
+    });
+
+    expect(result.profileName).toBe('folderimp');
+
+    // folder source must not be deleted by import
+    await expect(readFile(path.join(folderSource, 'profile.yaml'), 'utf8')).resolves.toContain(
+      'folderimp'
+    );
+
+    const installedProfile = YAML.parse(
+      await readFile(path.join(projectDir, '.brainctl', 'profiles', 'folderimp', 'profile.yaml'), 'utf8')
+    );
+    expect(installedProfile.name).toBe('folderimp');
   });
 });

@@ -523,4 +523,116 @@ describe('createPortableProfilePackService', () => {
       }
     }
   });
+
+
+  it('writes a folder with README, .gitignore, .env.example in folder format', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'brainctl-pack-folder-'));
+    tempDirs.push(root);
+
+    const cwd = path.join(root, 'workspace');
+    await mkdir(cwd, { recursive: true });
+
+    const service = createPortableProfilePackService({
+      profileService: {
+        async get() {
+          return {
+            name: 'repo-profile',
+            description: 'a shareable profile',
+            skills: { summarize: { description: 's', prompt: 'p' } },
+            mcps: {
+              github: {
+                kind: 'local',
+                source: 'npm',
+                package: '@modelcontextprotocol/server-github',
+                env: { GITHUB_TOKEN: 'ghp_live_secret' },
+              },
+            },
+            memory: { paths: [] },
+          };
+        },
+      },
+    });
+
+    const outputDir = path.join(cwd, 'repo-profile');
+    const result = await service.execute({
+      cwd,
+      source: { source: 'profile', name: 'repo-profile' },
+      outputPath: outputDir,
+      format: 'folder',
+    });
+
+    expect(result.format).toBe('folder');
+    expect(result.archivePath).toBe(outputDir);
+
+    const readme = await readFile(path.join(outputDir, 'README.md'), 'utf8');
+    expect(readme).toContain('# repo-profile');
+    expect(readme).toContain('a shareable profile');
+    expect(readme).toContain('github');
+
+    const envExample = await readFile(path.join(outputDir, '.env.example'), 'utf8');
+    expect(envExample).toContain('GITHUB_TOKEN');
+
+    const gitignore = await readFile(path.join(outputDir, '.gitignore'), 'utf8');
+    expect(gitignore).toContain('.env');
+    expect(gitignore).toContain('node_modules');
+
+    await expect(readFile(path.join(outputDir, 'manifest.yaml'), 'utf8')).resolves.toContain(
+      'repo-profile'
+    );
+    await expect(readFile(path.join(outputDir, 'profile.yaml'), 'utf8')).resolves.not.toContain(
+      'ghp_live_secret'
+    );
+  });
+
+  it('writes a .env with real values when credentialsMode is keep', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'brainctl-pack-keep-'));
+    tempDirs.push(root);
+
+    const cwd = path.join(root, 'workspace');
+    await mkdir(cwd, { recursive: true });
+
+    const service = createPortableProfilePackService({
+      profileService: {
+        async get() {
+          return {
+            name: 'selfsync',
+            skills: {},
+            mcps: {
+              github: {
+                kind: 'local',
+                source: 'npm',
+                package: '@modelcontextprotocol/server-github',
+                env: { GITHUB_TOKEN: 'ghp_real_secret_123' },
+              },
+            },
+            memory: { paths: [] },
+          };
+        },
+      },
+    });
+
+    const outputDir = path.join(cwd, 'selfsync');
+    const result = await service.execute({
+      cwd,
+      source: { source: 'profile', name: 'selfsync' },
+      outputPath: outputDir,
+      format: 'folder',
+      credentialsMode: 'keep',
+    });
+
+    expect(result.warnings.some((w) => /.env/.test(w) && /Do NOT publish/.test(w))).toBe(true);
+
+    const envContents = await readFile(path.join(outputDir, '.env'), 'utf8');
+    expect(envContents).toContain('GITHUB_TOKEN=ghp_real_secret_123');
+
+    // profile.yaml still uses placeholder (so archive without .env stays portable)
+    const profile = await readFile(path.join(outputDir, 'profile.yaml'), 'utf8');
+    expect(profile).toContain('${credentials.github_token}');
+    expect(profile).not.toContain('ghp_real_secret_123');
+
+    // .gitignore must exclude .env so this folder is safe to git init + push
+    const gitignore = await readFile(path.join(outputDir, '.gitignore'), 'utf8');
+    expect(gitignore).toContain('.env');
+  });
+
 });

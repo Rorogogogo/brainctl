@@ -1,37 +1,36 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
-import { loadConfig } from '../config.js';
-import { parseConfigPayload } from '../config.js';
-import { BrainctlError, ConfigError, ProfileError, ProfileNotFoundError, ValidationError } from '../errors.js';
-import { loadMemory } from '../context/memory.js';
+import { BrainctlError, ProfileError, ProfileNotFoundError, ValidationError } from '../errors.js';
 import { createAgentConfigService } from '../services/agent-config-service.js';
 import type {
   AgentMcpEntry,
   AgentSkillEntry,
   PortableRemoteMcpMetadata,
 } from '../services/agent-config-service.js';
-import { createConfigWriteService } from '../services/config-write-service.js';
 import { createMcpPreflightService } from '../services/mcp-preflight-service.js';
 import { createPluginInstallService } from '../services/plugin-install-service.js';
 import { createProfileExportService } from '../services/profile-export-service.js';
 import { createProfileImportService } from '../services/profile-import-service.js';
 import { createProfileService } from '../services/profile-service.js';
-import { createRunService } from '../services/run-service.js';
-import type { RunService } from '../services/run-service.js';
 import { createSkillPreflightService } from '../services/skill-preflight-service.js';
 import { createStatusService } from '../services/status-service.js';
 import type { StatusService } from '../services/status-service.js';
-import { createSyncService } from '../services/sync-service.js';
-import { startSseStream, writeSseEvent } from './streaming.js';
-import type { AgentName, RunRequest } from '../types.js';
+import {
+  createProfileApplyService,
+  type ItemSelector,
+} from '../services/profile-apply-service.js';
+import {
+  createProfileSnapshotService,
+  defaultBackupProfileName,
+} from '../services/profile-snapshot-service.js';
+import type { AgentName } from '../types.js';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 export interface UiRouteDependencies {
   cwd: string;
   statusService?: StatusService;
-  runService?: RunService;
 }
 
 export type UiRouteHandler = (
@@ -45,12 +44,11 @@ export function createUiRouteHandler(
   dependencies: UiRouteDependencies
 ): UiRouteHandler {
   const statusService = dependencies.statusService ?? createStatusService();
-  const runService = dependencies.runService ?? createRunService();
-  const configWriteService = createConfigWriteService();
   const profileService = createProfileService();
   const profileExportService = createProfileExportService({ profileService });
   const profileImportService = createProfileImportService();
-  const syncService = createSyncService({ profileService });
+  const profileApplyService = createProfileApplyService({ profileService });
+  const profileSnapshotService = createProfileSnapshotService();
   const agentConfigService = createAgentConfigService();
   const mcpPreflightService = createMcpPreflightService();
   const pluginInstallService = createPluginInstallService();
@@ -67,85 +65,6 @@ export function createUiRouteHandler(
 
         const overview = await statusService.execute({ cwd: dependencies.cwd });
         return sendJson(response, 200, overview);
-      }
-      case '/api/run/stream': {
-        if (request.method !== 'GET') {
-          return sendJson(response, 405, { error: 'Method not allowed' });
-        }
-
-        const runRequest = parseRunRequest(url);
-        if (runRequest === null) {
-          return sendJson(response, 400, {
-            error: 'Missing skill, inputFile, or primaryAgent'
-          });
-        }
-
-        if ('error' in runRequest) {
-          return sendJson(response, 400, {
-            error: runRequest.error
-          });
-        }
-
-        startSseStream(response);
-
-        try {
-          const trace = await runService.execute(
-            {
-              ...runRequest.request,
-              cwd: dependencies.cwd
-            },
-            {
-              onOutputChunk: (chunk) => {
-                writeSseEvent(response, 'output', chunk);
-              },
-              streamOutput: false
-            }
-          );
-
-          writeSseEvent(response, 'result', trace);
-          response.end();
-        } catch (error) {
-          writeSseEvent(response, 'run-error', {
-            error: error instanceof Error ? error.message : 'Unexpected server error'
-          });
-          response.end();
-        }
-
-        return;
-      }
-      case '/api/config': {
-        if (request.method === 'PUT') {
-          const body = await readJsonBody(request);
-          if (!body.ok) {
-            return sendJson(response, 400, { error: 'Invalid JSON body' });
-          }
-
-          const config = parseConfigPayload(body.value);
-
-          await configWriteService.execute({
-            cwd: dependencies.cwd,
-            config
-          });
-
-          const savedConfig = await loadConfig({ cwd: dependencies.cwd });
-          return sendJson(response, 200, savedConfig);
-        }
-
-        if (request.method !== 'GET') {
-          return sendJson(response, 405, { error: 'Method not allowed' });
-        }
-
-        const config = await loadConfig({ cwd: dependencies.cwd });
-        return sendJson(response, 200, config);
-      }
-      case '/api/memory': {
-        if (request.method !== 'GET') {
-          return sendJson(response, 405, { error: 'Method not allowed' });
-        }
-
-        const config = await loadConfig({ cwd: dependencies.cwd });
-        const memory = await loadMemory({ paths: config.memory.paths });
-        return sendJson(response, 200, memory);
       }
       case '/api/agents': {
         if (request.method !== 'GET') {
@@ -273,21 +192,62 @@ export function createUiRouteHandler(
           return sendProfileError(response, error);
         }
       }
-      case '/api/sync': {
+      case '/api/profiles/snapshot': {
         if (request.method !== 'POST') {
           return sendJson(response, 405, { error: 'Method not allowed' });
         }
-
+        const body = await readJsonBody(request);
+        if (!body.ok) {
+          return sendJson(response, 400, { error: 'Invalid JSON body' });
+        }
+        const data = (body.value ?? {}) as { agent?: AgentName; as?: string };
+        if (data.agent !== 'claude' && data.agent !== 'codex' && data.agent !== 'gemini') {
+          return sendJson(response, 400, { error: 'Invalid agent' });
+        }
+        const profileName = data.as ?? defaultBackupProfileName(data.agent);
         try {
-          const result = await syncService.execute({ cwd: dependencies.cwd });
-          return sendJson(response, 200, result);
-        } catch (error) {
-          return sendJson(response, 500, {
-            error: error instanceof Error ? error.message : 'Sync failed',
+          const result = await profileSnapshotService.execute({
+            cwd: dependencies.cwd,
+            agent: data.agent,
+            profileName,
           });
+          return sendJson(response, 200, { profileName, ...result });
+        } catch (error) {
+          return sendProfileError(response, error);
         }
       }
       default: {
+        // Profile apply: POST /api/profiles/:name/apply
+        const applyMatch = url.pathname.match(/^\/api\/profiles\/([^/]+)\/apply$/);
+        if (applyMatch) {
+          if (request.method !== 'POST') {
+            return sendJson(response, 405, { error: 'Method not allowed' });
+          }
+          const profileName = decodeURIComponent(applyMatch[1]);
+          const body = await readJsonBody(request);
+          if (!body.ok) {
+            return sendJson(response, 400, { error: 'Invalid JSON body' });
+          }
+          const data = (body.value ?? {}) as {
+            agents?: AgentName[];
+            items?: ItemSelector[];
+            backup?: boolean;
+          };
+
+          try {
+            const result = await profileApplyService.execute({
+              cwd: dependencies.cwd,
+              profileName,
+              agents: data.agents ?? (['claude', 'codex', 'gemini'] as AgentName[]),
+              items: data.items,
+              backup: data.backup,
+            });
+            return sendJson(response, 200, result);
+          } catch (error) {
+            return sendProfileError(response, error);
+          }
+        }
+
         // Agent MCP routes: /api/agents/:name/mcps(/:key)
         const agentMcpCheckMatch = url.pathname.match(/^\/api\/agents\/(claude|codex|gemini)\/mcps\/check$/);
         if (agentMcpCheckMatch) {
@@ -556,22 +516,39 @@ export function createUiRouteHandler(
           return sendJson(response, 405, { error: 'Method not allowed' });
         }
 
-        const profileMatch = url.pathname.match(/^\/api\/profiles\/([^/]+)(\/activate)?$/);
+        // Profile contents: GET /api/profiles/:name/contents
+        const contentsMatch = url.pathname.match(/^\/api\/profiles\/([^/]+)\/contents$/);
+        if (contentsMatch) {
+          if (request.method !== 'GET') {
+            return sendJson(response, 405, { error: 'Method not allowed' });
+          }
+          const profileName = decodeURIComponent(contentsMatch[1]);
+          try {
+            const profile = await profileService.get({ cwd: dependencies.cwd, name: profileName });
+            const manifestPath = path.join(
+              dependencies.cwd,
+              '.brainctl',
+              'profiles',
+              profileName,
+              'manifest.yaml'
+            );
+            let manifest: unknown = null;
+            try {
+              const { readFile: readManifest } = await import('node:fs/promises');
+              const yamlMod = await import('yaml');
+              manifest = yamlMod.default.parse(await readManifest(manifestPath, 'utf8'));
+            } catch {
+              manifest = null;
+            }
+            return sendJson(response, 200, { profile, manifest });
+          } catch (error) {
+            return sendProfileError(response, error);
+          }
+        }
+
+        const profileMatch = url.pathname.match(/^\/api\/profiles\/([^/]+)$/);
         if (profileMatch) {
           const name = decodeURIComponent(profileMatch[1]);
-          const isActivate = profileMatch[2] === '/activate';
-
-          if (isActivate) {
-            if (request.method !== 'POST') {
-              return sendJson(response, 405, { error: 'Method not allowed' });
-            }
-            try {
-              const result = await profileService.use({ cwd: dependencies.cwd, name });
-              return sendJson(response, 200, result);
-            } catch (error) {
-              return sendProfileError(response, error);
-            }
-          }
 
           if (request.method === 'GET') {
             try {
@@ -684,42 +661,6 @@ async function readJsonBody(
   }
 }
 
-function parseRunRequest(url: URL):
-  | { request: RunRequest }
-  | { error: string }
-  | null {
-  const skill = url.searchParams.get('skill');
-  const inputFile = url.searchParams.get('inputFile');
-  const primaryAgent = parseAgentName(url.searchParams.get('primaryAgent'));
-  const fallbackAgentParam = url.searchParams.get('fallbackAgent');
-  const fallbackAgent =
-    fallbackAgentParam === null ? null : parseAgentName(fallbackAgentParam);
-
-  if (!skill || !inputFile || !primaryAgent || fallbackAgentParam !== null && !fallbackAgent) {
-    return null;
-  }
-
-  if (fallbackAgent !== null && fallbackAgent === primaryAgent) {
-    return { error: 'fallbackAgent must differ from primaryAgent' };
-  }
-
-  return {
-    request: {
-      skill,
-      inputFile,
-      primaryAgent,
-      fallbackAgent: fallbackAgent ?? undefined
-    }
-  };
-}
-
-function parseAgentName(value: string | null): AgentName | null {
-  if (value === 'claude' || value === 'codex') {
-    return value;
-  }
-
-  return null;
-}
 
 function sendProfileError(response: ServerResponse, error: unknown): void {
   if (error instanceof ProfileNotFoundError) {

@@ -5,19 +5,21 @@ import path from 'node:path';
 import { FastMCP } from 'fastmcp';
 import { z } from 'zod';
 
-import { loadConfig } from '../config.js';
-import { loadMemory } from '../context/memory.js';
 import { createAgentConfigService } from '../services/agent-config-service.js';
 import { createDoctorService } from '../services/doctor-service.js';
 import { startUiServer, type UiServer } from '../ui/server.js';
-import { createMemoryWriteService } from '../services/memory-write-service.js';
 import { createProfileExportService } from '../services/profile-export-service.js';
 import { createProfileImportService } from '../services/profile-import-service.js';
+import { createProfileApplyService, type ItemSelector } from '../services/profile-apply-service.js';
 import { createProfileService } from '../services/profile-service.js';
-import { createRunService } from '../services/run-service.js';
+import {
+  createProfileSnapshotService,
+  defaultBackupProfileName,
+} from '../services/profile-snapshot-service.js';
 import { createStatusService } from '../services/status-service.js';
-import { createSyncService } from '../services/sync-service.js';
 import type { AgentName, ProfileConfig } from '../types.js';
+
+const ALL_AGENTS: AgentName[] = ['claude', 'codex', 'gemini'];
 
 const packageVersion = JSON.parse(
   readFileSync(new URL('../../package.json', import.meta.url), 'utf8')
@@ -36,56 +38,6 @@ export function createMcpServer(
   const server = new FastMCP({
     name: 'brainctl',
     version: packageVersion.version as `${number}.${number}.${number}`,
-  });
-
-  server.addTool({
-    name: 'brainctl_list_skills',
-    description: 'List available skills from the ai-stack.yaml config',
-    parameters: z.object({}),
-    execute: async () => {
-      const config = await loadConfig({ cwd });
-      const skills = Object.entries(config.skills).map(([name, skill]) => ({
-        name,
-        description: skill.description ?? null,
-      }));
-      return JSON.stringify(skills, null, 2);
-    },
-  });
-
-  server.addTool({
-    name: 'brainctl_run',
-    description: 'Execute a skill with input text. Runs the skill through the configured agent and returns the output.',
-    parameters: z.object({
-      skill: z.string().describe('Skill name as defined in ai-stack.yaml'),
-      input: z.string().describe('Input text to pass to the skill'),
-      agent: z.enum(['claude', 'codex']).default('claude').describe('Agent to use for execution'),
-      fallback_agent: z.enum(['claude', 'codex']).optional().describe('Fallback agent if primary is unavailable'),
-    }),
-    execute: async (args) => {
-      const inputPath = path.join(cwd, `.brainctl-mcp-input-${Date.now()}.tmp`);
-      const { writeFile: writeFileAsync, unlink } = await import('node:fs/promises');
-
-      try {
-        await writeFileAsync(inputPath, args.input, 'utf8');
-
-        const runService = createRunService();
-        const trace = await runService.execute({
-          cwd,
-          skill: args.skill,
-          inputFile: path.basename(inputPath),
-          primaryAgent: args.agent as AgentName,
-          fallbackAgent: args.fallback_agent as AgentName | undefined,
-        });
-
-        return trace.finalOutput;
-      } finally {
-        try {
-          await unlink(inputPath);
-        } catch {
-          // temp file cleanup is best-effort
-        }
-      }
-    },
   });
 
   server.addTool({
@@ -111,62 +63,6 @@ export function createMcpServer(
   });
 
   server.addTool({
-    name: 'brainctl_read_memory',
-    description: 'Read all shared memory files. Returns every markdown file from configured memory paths with file names and content. Use this to understand context left by other agents.',
-    parameters: z.object({}),
-    execute: async () => {
-      const config = await loadConfig({ cwd });
-      const memory = await loadMemory({ paths: config.memory.paths });
-      const result = {
-        count: memory.count,
-        files: memory.entries.map((entry) => ({
-          path: entry.path,
-          content: entry.content,
-        })),
-      };
-      return JSON.stringify(result, null, 2);
-    },
-  });
-
-  server.addTool({
-    name: 'brainctl_write_memory',
-    description: 'Write or update a shared memory file. Use this to leave notes, decisions, or context for other agents. The file must be within a configured memory path.',
-    parameters: z.object({
-      file_path: z.string().describe('Relative path for the memory file (e.g., "memory/notes.md")'),
-      content: z.string().describe('Markdown content to write'),
-    }),
-    execute: async (args) => {
-      const memoryWriteService = createMemoryWriteService();
-      const result = await memoryWriteService.execute({
-        cwd,
-        filePath: args.file_path,
-        content: args.content,
-      });
-      return JSON.stringify({ written: result.filePath });
-    },
-  });
-
-  server.addTool({
-    name: 'brainctl_get_skill',
-    description: 'Get the full details of a specific skill including its prompt text and description. Use this to understand what a skill does before running it.',
-    parameters: z.object({
-      skill: z.string().describe('Skill name as defined in ai-stack.yaml'),
-    }),
-    execute: async (args) => {
-      const config = await loadConfig({ cwd });
-      const skillConfig = config.skills[args.skill];
-      if (!skillConfig) {
-        throw new Error(`Skill "${args.skill}" is not defined in ai-stack.yaml.`);
-      }
-      return JSON.stringify({
-        name: args.skill,
-        description: skillConfig.description ?? null,
-        prompt: skillConfig.prompt,
-      }, null, 2);
-    },
-  });
-
-  server.addTool({
     name: 'brainctl_list_profiles',
     description: 'List available profiles and show which one is active.',
     parameters: z.object({}),
@@ -178,32 +74,62 @@ export function createMcpServer(
   });
 
   server.addTool({
-    name: 'brainctl_switch_profile',
-    description: 'Switch the active profile and sync it to all configured agents. Combines profile switch + sync in one step.',
+    name: 'brainctl_apply_profile',
+    description:
+      'Apply a profile (MCPs, plugins, user skills) to the specified agents. Selective by --agents and --items. Auto-backs up live agent state before a full apply unless backup=false.',
     parameters: z.object({
-      name: z.string().describe('Profile name to activate'),
+      name: z.string().describe('Profile name to apply'),
+      agents: z
+        .array(z.enum(['claude', 'codex', 'gemini']))
+        .optional()
+        .describe('Agents to target (default: all three)'),
+      items: z
+        .array(
+          z.object({
+            type: z.enum(['mcp', 'plugin', 'skill']),
+            name: z.string(),
+          })
+        )
+        .optional()
+        .describe('Specific items to apply (default: everything matching)'),
+      backup: z
+        .boolean()
+        .optional()
+        .describe('Force backup on/off (default: on for full apply, off for partial)'),
     }),
     execute: async (args) => {
-      const profileService = createProfileService();
-      const switchResult = await profileService.use({ cwd, name: args.name });
-      const syncService = createSyncService({ profileService });
-      const syncResult = await syncService.execute({ cwd });
-      return JSON.stringify({
-        previousProfile: switchResult.previousProfile,
-        activeProfile: args.name,
-        synced: syncResult,
-      }, null, 2);
+      const applyService = createProfileApplyService();
+      const result = await applyService.execute({
+        cwd,
+        profileName: args.name,
+        agents: (args.agents as AgentName[] | undefined) ?? ALL_AGENTS,
+        items: args.items as ItemSelector[] | undefined,
+        backup: args.backup,
+      });
+      return JSON.stringify(result, null, 2);
     },
   });
 
   server.addTool({
-    name: 'brainctl_sync',
-    description: 'Sync the active profile to all configured agent configs (Claude, Codex). Creates backups before overwriting.',
-    parameters: z.object({}),
-    execute: async () => {
-      const syncService = createSyncService();
-      const result = await syncService.execute({ cwd });
-      return JSON.stringify(result, null, 2);
+    name: 'brainctl_snapshot_agent',
+    description:
+      "Snapshot a live agent's MCPs+plugins+skills into a new profile folder. Useful for backups or capturing your current setup as a shareable profile.",
+    parameters: z.object({
+      agent: z.enum(['claude', 'codex', 'gemini']),
+      as: z
+        .string()
+        .optional()
+        .describe('Profile name to write into (default: backup-<agent>-<timestamp>)'),
+    }),
+    execute: async (args) => {
+      const snapshotService = createProfileSnapshotService();
+      const profileName = args.as ?? defaultBackupProfileName(args.agent as AgentName);
+      const result = await snapshotService.execute({
+        cwd,
+        agent: args.agent as AgentName,
+        profileName,
+      });
+      return JSON.stringify({ profileName, ...result }, null, 2);
     },
   });
 
@@ -240,20 +166,13 @@ export function createMcpServer(
 
   server.addTool({
     name: 'brainctl_update_profile',
-    description: 'Update a profile config. Pass the full profile object with skills, mcps, and memory fields. Use this to add, remove, or modify skills and MCPs within a profile.',
+    description: 'Update a profile config. Pass the full profile object with name, optional description, and mcps map.',
     parameters: z.object({
       name: z.string().describe('Profile name to update'),
       config: z.object({
         name: z.string(),
         description: z.string().optional(),
-        skills: z.record(z.string(), z.object({
-          description: z.string().optional(),
-          prompt: z.string(),
-        })),
         mcps: z.record(z.string(), z.unknown()),
-        memory: z.object({
-          paths: z.array(z.string()),
-        }),
       }).describe('Full profile config object'),
     }),
     execute: async (args) => {
@@ -282,11 +201,10 @@ export function createMcpServer(
 
   server.addTool({
     name: 'brainctl_copy_profile_items',
-    description: 'Copy skills and/or MCPs from one profile to another. Specify which skill and MCP keys to copy. Existing items with the same key in the target are overwritten.',
+    description: 'Copy MCPs from one profile to another. Existing MCPs with the same key in the target are overwritten.',
     parameters: z.object({
       source: z.string().describe('Source profile name'),
       target: z.string().describe('Target profile name'),
-      skills: z.array(z.string()).default([]).describe('Skill keys to copy'),
       mcps: z.array(z.string()).default([]).describe('MCP keys to copy'),
     }),
     execute: async (args) => {
@@ -294,15 +212,7 @@ export function createMcpServer(
       const sourceProfile = await profileService.get({ cwd, name: args.source });
       const targetProfile = await profileService.get({ cwd, name: args.target });
 
-      const copiedSkills: string[] = [];
       const copiedMcps: string[] = [];
-
-      for (const key of args.skills) {
-        if (sourceProfile.skills[key]) {
-          targetProfile.skills[key] = sourceProfile.skills[key];
-          copiedSkills.push(key);
-        }
-      }
 
       for (const key of args.mcps) {
         if (sourceProfile.mcps[key]) {
@@ -316,7 +226,6 @@ export function createMcpServer(
       return JSON.stringify({
         source: args.source,
         target: args.target,
-        copiedSkills,
         copiedMcps,
       }, null, 2);
     },
