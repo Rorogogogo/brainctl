@@ -1,18 +1,31 @@
 import pc from 'picocolors';
 import type { Command } from 'commander';
 
+import type { ProfileApplyService, ItemSelector } from '../services/profile-apply-service.js';
 import type { ProfileExportService } from '../services/profile-export-service.js';
 import type { ProfileImportService } from '../services/profile-import-service.js';
 import type { ProfileService } from '../services/profile-service.js';
+import type { ProfileSnapshotService } from '../services/profile-snapshot-service.js';
+import type { AgentName } from '../types.js';
+
+const ALL_AGENTS: AgentName[] = ['claude', 'codex', 'gemini'];
 
 export interface ProfileCommandServices {
   profileService: ProfileService;
   profileExportService: ProfileExportService;
   profileImportService: ProfileImportService;
+  profileApplyService: ProfileApplyService;
+  profileSnapshotService: ProfileSnapshotService;
 }
 
 export function registerProfileCommand(program: Command, services: ProfileCommandServices): void {
-  const { profileService, profileExportService, profileImportService } = services;
+  const {
+    profileService,
+    profileExportService,
+    profileImportService,
+    profileApplyService,
+    profileSnapshotService,
+  } = services;
   const profileCmd = program
     .command('profile')
     .description('Manage brainctl profiles');
@@ -21,7 +34,7 @@ export function registerProfileCommand(program: Command, services: ProfileComman
     .command('list')
     .description('List available profiles')
     .action(async () => {
-      const { profiles, activeProfile } = await profileService.list({ cwd: process.cwd() });
+      const { profiles } = await profileService.list({ cwd: process.cwd() });
 
       if (profiles.length === 0) {
         console.log('No profiles found. Run "brainctl profile create <name>" to create one.');
@@ -30,8 +43,7 @@ export function registerProfileCommand(program: Command, services: ProfileComman
 
       console.log(pc.bold('Profiles:'));
       for (const name of profiles) {
-        const marker = name === activeProfile ? pc.green(' (active)') : '';
-        console.log(`  ${name}${marker}`);
+        console.log(`  ${name}`);
       }
     });
 
@@ -50,39 +62,60 @@ export function registerProfileCommand(program: Command, services: ProfileComman
     });
 
   profileCmd
-    .command('use')
-    .argument('<name>', 'Profile name to activate')
-    .description('Switch the active profile')
-    .action(async (name: string) => {
-      const result = await profileService.use({ cwd: process.cwd(), name });
-      const prev = result.previousProfile ? ` (was "${result.previousProfile}")` : '';
-      console.log(`Switched to profile "${name}"${prev}`);
-    });
-
-  profileCmd
     .command('export')
     .argument('[name]', 'Profile name to export')
     .option('-a, --agent <name>', 'Pack a live agent config instead (claude, codex, gemini)')
-    .option('-o, --output <path>', 'Output file path')
-    .description('Export a profile as a portable tarball')
-    .action(async (name: string | undefined, options: { agent?: string; output?: string }) => {
-      const agent =
-        options.agent === 'claude' || options.agent === 'codex' || options.agent === 'gemini'
-          ? options.agent
-          : undefined;
-      if (!agent && !name) {
-        throw new Error('Provide a profile name or --agent <name>.');
-      }
+    .option('-o, --output <path>', 'Output file or directory path')
+    .option('-f, --format <format>', 'Output format: tarball (default) or folder', 'tarball')
+    .option(
+      '--credentials <mode>',
+      'How to handle secrets: redact (default, public-safe) or keep (writes .env with real values for self-sync)',
+      'redact'
+    )
+    .description('Export a profile as a portable tarball or folder')
+    .action(
+      async (
+        name: string | undefined,
+        options: { agent?: string; output?: string; format?: string; credentials?: string }
+      ) => {
+        const agent =
+          options.agent === 'claude' || options.agent === 'codex' || options.agent === 'gemini'
+            ? options.agent
+            : undefined;
+        if (!agent && !name) {
+          throw new Error('Provide a profile name or --agent <name>.');
+        }
 
-      const result = await profileExportService.execute({
-        cwd: process.cwd(),
-        source: agent
-          ? { source: 'agent', agent, cwd: process.cwd() }
-          : { source: 'profile', name: name as string },
-        outputPath: options.output,
-      });
-      console.log(`Exported profile to ${result.archivePath}`);
-    });
+        if (options.format && options.format !== 'tarball' && options.format !== 'folder') {
+          throw new Error(`Invalid --format "${options.format}". Use "tarball" or "folder".`);
+        }
+
+        if (
+          options.credentials &&
+          options.credentials !== 'redact' &&
+          options.credentials !== 'keep'
+        ) {
+          throw new Error(
+            `Invalid --credentials "${options.credentials}". Use "redact" or "keep".`
+          );
+        }
+
+        const result = await profileExportService.execute({
+          cwd: process.cwd(),
+          source: agent
+            ? { source: 'agent', agent, cwd: process.cwd() }
+            : { source: 'profile', name: name as string },
+          outputPath: options.output,
+          format: (options.format as 'tarball' | 'folder' | undefined) ?? 'tarball',
+          credentialsMode: (options.credentials as 'redact' | 'keep' | undefined) ?? 'redact',
+        });
+        for (const warning of result.warnings) {
+          console.warn(pc.yellow(`warning: ${warning}`));
+        }
+        const label = result.format === 'folder' ? 'profile folder' : 'profile tarball';
+        console.log(`Exported ${label} to ${result.archivePath}`);
+      }
+    );
 
   profileCmd
     .command('import')
@@ -102,6 +135,106 @@ export function registerProfileCommand(program: Command, services: ProfileComman
       if (result.installedMcps.length > 0) {
         console.log(`Installed bundled MCPs: ${result.installedMcps.join(', ')}`);
       }
+    });
+
+  profileCmd
+    .command('apply')
+    .argument('<name>', 'Profile name to apply')
+    .option(
+      '-a, --agent <list>',
+      'Comma-separated agents to target (claude, codex, gemini, or all)',
+      'all'
+    )
+    .option(
+      '-i, --items <list>',
+      'Comma-separated items to apply (e.g. mcp:github,plugin:demo,skill:reviewer). Default: everything matching.'
+    )
+    .option('--no-backup', 'Skip auto-backup of live agent state before applying')
+    .description('Apply a profile (MCPs + plugins + skills) to selected agents')
+    .action(
+      async (
+        name: string,
+        options: { agent: string; items?: string; backup: boolean }
+      ) => {
+        const agents = parseAgentList(options.agent);
+        const items = options.items ? parseItemList(options.items) : undefined;
+
+        const { backups, applied } = await profileApplyService.execute({
+          cwd: process.cwd(),
+          profileName: name,
+          agents,
+          items,
+          backup: options.backup,
+        });
+
+        if (backups.length > 0) {
+          console.log(pc.bold('Backups:'));
+          for (const b of backups) {
+            console.log(`  ${b.agent} -> ${b.profileName}`);
+          }
+        }
+
+        console.log(pc.bold(`Applied "${name}" to:`));
+        for (const r of applied) {
+          const extras: string[] = [`${r.mcpCount} MCPs`];
+          if (r.pluginsInstalled?.length) extras.push(`plugins: ${r.pluginsInstalled.join(',')}`);
+          if (r.userSkillsInstalled?.length) extras.push(`skills: ${r.userSkillsInstalled.join(',')}`);
+          console.log(`  ${r.agent}: ${extras.join(' | ')}`);
+        }
+      }
+    );
+
+  profileCmd
+    .command('snapshot')
+    .option('-a, --agent <name>', 'Agent to snapshot (claude, codex, gemini)')
+    .option('--as <name>', 'Profile name to write into (default: backup-<agent>-<timestamp>)')
+    .description("Snapshot a live agent's MCPs+plugins+skills into a new profile folder")
+    .action(async (options: { agent?: string; as?: string }) => {
+      if (!options.agent || !ALL_AGENTS.includes(options.agent as AgentName)) {
+        throw new Error('Provide --agent <claude|codex|gemini>.');
+      }
+      const agent = options.agent as AgentName;
+      const { defaultBackupProfileName } = await import(
+        '../services/profile-snapshot-service.js'
+      );
+      const profileName = options.as ?? defaultBackupProfileName(agent);
+      const result = await profileSnapshotService.execute({
+        cwd: process.cwd(),
+        agent,
+        profileName,
+      });
+      console.log(`Snapshotted ${agent} into ${result.profilePath}`);
+    });
+}
+
+function parseAgentList(value: string): AgentName[] {
+  if (value === 'all') return [...ALL_AGENTS];
+  const parts = value.split(',').map((s) => s.trim()).filter(Boolean);
+  for (const p of parts) {
+    if (!ALL_AGENTS.includes(p as AgentName)) {
+      throw new Error(`Invalid agent "${p}". Use claude, codex, gemini, or all.`);
+    }
+  }
+  return parts as AgentName[];
+}
+
+function parseItemList(value: string): ItemSelector[] {
+  return value
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .map((entry) => {
+      const colonIdx = entry.indexOf(':');
+      if (colonIdx <= 0) {
+        throw new Error(`Invalid item "${entry}". Use type:name (e.g. mcp:github).`);
+      }
+      const type = entry.slice(0, colonIdx);
+      const name = entry.slice(colonIdx + 1);
+      if (type !== 'mcp' && type !== 'plugin' && type !== 'skill') {
+        throw new Error(`Invalid item type "${type}". Use mcp, plugin, or skill.`);
+      }
+      if (!name) throw new Error(`Item "${entry}" missing name.`);
+      return { type, name };
     });
 }
 

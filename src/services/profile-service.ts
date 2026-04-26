@@ -1,25 +1,46 @@
-import { readdir, readFile, writeFile, mkdir, stat, unlink } from 'node:fs/promises';
+import { readdir, readFile, writeFile, mkdir, rename, rm, stat } from 'node:fs/promises';
 import path from 'node:path';
 
 import YAML from 'yaml';
 
 import { ProfileError, ProfileNotFoundError } from '../errors.js';
-import type { AgentName, BrainctlMetaConfig, McpRuntime, McpServerConfig, ProfileConfig, SkillConfig } from '../types.js';
+import type { McpRuntime, McpServerConfig, ProfileConfig } from '../types.js';
 
 const VALID_RUNTIMES = new Set<McpRuntime>(['node', 'python', 'java', 'go', 'rust', 'binary']);
 
-const BRAINCTL_DIR = '.brainctl';
 const PROFILES_DIR = '.brainctl/profiles';
-const META_CONFIG = '.brainctl/config.yaml';
+const PROFILE_FILE = 'profile.yaml';
+
+export function profileDir(cwd: string, name: string): string {
+  return path.join(cwd, PROFILES_DIR, name);
+}
+
+export function profileFile(cwd: string, name: string): string {
+  return path.join(profileDir(cwd, name), PROFILE_FILE);
+}
+
+function legacyProfileFile(cwd: string, name: string): string {
+  return path.join(cwd, PROFILES_DIR, `${name}.yaml`);
+}
+
+async function migrateLegacyProfile(cwd: string, name: string): Promise<void> {
+  const legacy = legacyProfileFile(cwd, name);
+  const folder = profileDir(cwd, name);
+  const newFile = profileFile(cwd, name);
+
+  if (!(await pathExists(legacy))) return;
+  if (await pathExists(newFile)) return;
+
+  await mkdir(folder, { recursive: true });
+  await rename(legacy, newFile);
+}
 
 export interface ProfileService {
-  list(options?: { cwd?: string }): Promise<{ profiles: string[]; activeProfile: string | null }>;
+  list(options?: { cwd?: string }): Promise<{ profiles: string[] }>;
   get(options: { cwd?: string; name: string }): Promise<ProfileConfig>;
   create(options: { cwd?: string; name: string; description?: string }): Promise<{ profilePath: string }>;
   update(options: { cwd?: string; name: string; config: ProfileConfig }): Promise<void>;
   delete(options: { cwd?: string; name: string }): Promise<void>;
-  use(options: { cwd?: string; name: string }): Promise<{ previousProfile: string | null }>;
-  getMetaConfig(options?: { cwd?: string }): Promise<BrainctlMetaConfig>;
 }
 
 export function createProfileService(): ProfileService {
@@ -28,33 +49,39 @@ export function createProfileService(): ProfileService {
       const cwd = options.cwd ?? process.cwd();
       const profilesDir = path.join(cwd, PROFILES_DIR);
 
-      let files: string[] = [];
+      const names = new Set<string>();
       try {
-        const entries = await readdir(profilesDir);
-        files = entries
-          .filter((f) => f.endsWith('.yaml'))
-          .map((f) => f.replace(/\.yaml$/, ''))
-          .sort();
+        const entries = await readdir(profilesDir, { withFileTypes: true });
+        for (const entry of entries) {
+          if (entry.isDirectory()) {
+            if (await pathExists(path.join(profilesDir, entry.name, PROFILE_FILE))) {
+              names.add(entry.name);
+            }
+          } else if (entry.isFile() && entry.name.endsWith('.yaml')) {
+            const bare = entry.name.replace(/\.yaml$/, '');
+            await migrateLegacyProfile(cwd, bare);
+            names.add(bare);
+          }
+        }
       } catch {
         // No profiles directory yet
       }
 
-      const meta = await loadMetaConfig(cwd);
       return {
-        profiles: files,
-        activeProfile: meta.active_profile || null,
+        profiles: Array.from(names).sort(),
       };
     },
 
     async get(options) {
       const cwd = options.cwd ?? process.cwd();
-      const profilePath = path.join(cwd, PROFILES_DIR, `${options.name}.yaml`);
+      await migrateLegacyProfile(cwd, options.name);
+      const filePath = profileFile(cwd, options.name);
 
       let source: string;
       try {
-        source = await readFile(profilePath, 'utf8');
+        source = await readFile(filePath, 'utf8');
       } catch {
-        throw new ProfileNotFoundError(`Profile "${options.name}" not found at ${profilePath}`);
+        throw new ProfileNotFoundError(`Profile "${options.name}" not found at ${filePath}`);
       }
 
       return parseProfile(source, options.name);
@@ -62,39 +89,34 @@ export function createProfileService(): ProfileService {
 
     async create(options) {
       const cwd = options.cwd ?? process.cwd();
-      const profilesDir = path.join(cwd, PROFILES_DIR);
-      const profilePath = path.join(profilesDir, `${options.name}.yaml`);
+      const folder = profileDir(cwd, options.name);
+      const filePath = profileFile(cwd, options.name);
 
-      if (await pathExists(profilePath)) {
+      if (
+        (await pathExists(filePath)) ||
+        (await pathExists(legacyProfileFile(cwd, options.name)))
+      ) {
         throw new ProfileError(`Profile "${options.name}" already exists.`);
       }
 
       const scaffold: Record<string, unknown> = {
         name: options.name,
         description: options.description ?? '',
-        skills: {
-          example: {
-            description: 'Example skill',
-            prompt: 'Describe what this skill does...',
-          },
-        },
         mcps: {},
-        memory: {
-          paths: ['./memory'],
-        },
       };
 
-      await mkdir(profilesDir, { recursive: true });
-      await writeFile(profilePath, YAML.stringify(scaffold), 'utf8');
+      await mkdir(folder, { recursive: true });
+      await writeFile(filePath, YAML.stringify(scaffold), 'utf8');
 
-      return { profilePath };
+      return { profilePath: filePath };
     },
 
     async update(options) {
       const cwd = options.cwd ?? process.cwd();
-      const profilePath = path.join(cwd, PROFILES_DIR, `${options.name}.yaml`);
+      await migrateLegacyProfile(cwd, options.name);
+      const filePath = profileFile(cwd, options.name);
 
-      if (!(await pathExists(profilePath))) {
+      if (!(await pathExists(filePath))) {
         throw new ProfileNotFoundError(`Profile "${options.name}" not found.`);
       }
 
@@ -103,71 +125,25 @@ export function createProfileService(): ProfileService {
       const data: Record<string, unknown> = {
         name: normalized.name,
         ...(normalized.description ? { description: normalized.description } : {}),
-        skills: normalized.skills,
         mcps: normalized.mcps,
-        memory: normalized.memory,
       };
 
-      await writeFile(profilePath, YAML.stringify(data), 'utf8');
+      await writeFile(filePath, YAML.stringify(data), 'utf8');
     },
 
     async delete(options) {
       const cwd = options.cwd ?? process.cwd();
-      const profilePath = path.join(cwd, PROFILES_DIR, `${options.name}.yaml`);
+      await migrateLegacyProfile(cwd, options.name);
+      const folder = profileDir(cwd, options.name);
+      const filePath = profileFile(cwd, options.name);
 
-      if (!(await pathExists(profilePath))) {
+      if (!(await pathExists(filePath))) {
         throw new ProfileNotFoundError(`Profile "${options.name}" not found.`);
       }
 
-      const meta = await loadMetaConfig(cwd);
-      if (meta.active_profile === options.name) {
-        throw new ProfileError('Cannot delete the active profile.');
-      }
-
-      await unlink(profilePath);
-    },
-
-    async use(options) {
-      const cwd = options.cwd ?? process.cwd();
-
-      // Validate profile exists
-      const profilePath = path.join(cwd, PROFILES_DIR, `${options.name}.yaml`);
-      if (!(await pathExists(profilePath))) {
-        throw new ProfileNotFoundError(`Profile "${options.name}" not found.`);
-      }
-
-      const meta = await loadMetaConfig(cwd);
-      const previousProfile = meta.active_profile || null;
-
-      meta.active_profile = options.name;
-
-      const metaPath = path.join(cwd, META_CONFIG);
-      await mkdir(path.dirname(metaPath), { recursive: true });
-      await writeFile(metaPath, YAML.stringify(meta), 'utf8');
-
-      return { previousProfile };
-    },
-
-    async getMetaConfig(options = {}) {
-      const cwd = options.cwd ?? process.cwd();
-      return loadMetaConfig(cwd);
+      await rm(folder, { recursive: true, force: true });
     },
   };
-}
-
-async function loadMetaConfig(cwd: string): Promise<BrainctlMetaConfig> {
-  const metaPath = path.join(cwd, META_CONFIG);
-
-  try {
-    const source = await readFile(metaPath, 'utf8');
-    const parsed = YAML.parse(source) ?? {};
-    return {
-      active_profile: typeof parsed.active_profile === 'string' ? parsed.active_profile : '',
-      agents: Array.isArray(parsed.agents) ? parsed.agents : ['claude', 'codex'],
-    };
-  } catch {
-    return { active_profile: '', agents: ['claude', 'codex', 'gemini'] };
-  }
 }
 
 export function parseProfile(source: string, name: string): ProfileConfig {
@@ -191,41 +167,12 @@ export function normalizeProfileConfig(value: unknown, name: string): ProfileCon
   }
 
   const data = value as Record<string, unknown>;
-  const skills: Record<string, SkillConfig> = {};
-  if (data.skills && typeof data.skills === 'object' && !Array.isArray(data.skills)) {
-    for (const [key, value] of Object.entries(data.skills as Record<string, unknown>)) {
-      if (value && typeof value === 'object' && !Array.isArray(value)) {
-        const s = value as Record<string, unknown>;
-        if (typeof s.prompt === 'string') {
-          skills[key] = {
-            prompt: s.prompt,
-            description: typeof s.description === 'string' ? s.description : undefined,
-          };
-        }
-      }
-    }
-  }
-
   const mcps = normalizeMcps(data.mcps, name);
-
-  const memoryPaths: string[] = [];
-  if (data.memory && typeof data.memory === 'object' && !Array.isArray(data.memory)) {
-    const mem = data.memory as Record<string, unknown>;
-    if (Array.isArray(mem.paths)) {
-      for (const p of mem.paths) {
-        if (typeof p === 'string') {
-          memoryPaths.push(p);
-        }
-      }
-    }
-  }
 
   return {
     name: typeof data.name === 'string' ? data.name : name,
     description: typeof data.description === 'string' ? data.description : undefined,
-    skills,
     mcps,
-    memory: { paths: memoryPaths },
   };
 }
 

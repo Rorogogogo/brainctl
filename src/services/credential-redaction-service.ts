@@ -7,16 +7,18 @@ import type {
 export interface CredentialRedactionResult<T extends McpServerConfig> {
   redacted: T;
   credentials: PortableCredentialSpec[];
+  rawValues: Record<string, string>;
 }
 
 export function redactPortableMcpCredentials<T extends McpServerConfig>(
   config: T
 ): CredentialRedactionResult<T> {
   const credentialsByKey = new Map<string, CredentialAccumulator>();
-  const redactedEnv = redactStringMap(config.env, 'env', credentialsByKey);
+  const rawValues: Record<string, string> = {};
+  const redactedEnv = redactStringMap(config.env, 'env', credentialsByKey, rawValues);
 
   if (config.kind === 'remote') {
-    const redactedHeaders = redactStringMap(config.headers, 'header', credentialsByKey);
+    const redactedHeaders = redactStringMap(config.headers, 'header', credentialsByKey, rawValues);
     return {
       redacted: {
         ...config,
@@ -24,6 +26,7 @@ export function redactPortableMcpCredentials<T extends McpServerConfig>(
         ...(redactedHeaders ? { headers: redactedHeaders } : {}),
       },
       credentials: finalizePortableCredentialSpecs(credentialsByKey),
+      rawValues,
     };
   }
 
@@ -33,13 +36,15 @@ export function redactPortableMcpCredentials<T extends McpServerConfig>(
       ...(redactedEnv ? { env: redactedEnv } : {}),
     },
     credentials: finalizePortableCredentialSpecs(credentialsByKey),
+    rawValues,
   };
 }
 
 function redactStringMap(
   values: Record<string, string> | undefined,
   source: 'env' | 'header',
-  credentialsByKey: Map<string, CredentialAccumulator>
+  credentialsByKey: Map<string, CredentialAccumulator>,
+  rawValues: Record<string, string>
 ): Record<string, string> | undefined {
   if (!values) {
     return undefined;
@@ -55,6 +60,9 @@ function redactStringMap(
 
     const credentialKey = normalizeCredentialKey(key);
     addCredentialSpec(credentialsByKey, credentialKey, source, key);
+    if (!isCredentialPlaceholder(value)) {
+      rawValues[credentialKey] = value;
+    }
     redacted[key] = isCredentialPlaceholder(value)
       ? value
       : `\${credentials.${credentialKey}}` as PortableCredentialPlaceholder;

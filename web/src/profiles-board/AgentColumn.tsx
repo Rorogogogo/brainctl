@@ -1,6 +1,6 @@
 import { useDndContext, useDroppable } from '@dnd-kit/core';
 import { Boxes, FileText, Server } from 'lucide-react';
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 
 import { AgentLogo } from '../agent-brand.js';
 import {
@@ -42,6 +42,11 @@ export function AgentColumn({
 }) {
   const { setNodeRef } = useDroppable({ id: `${config.agent}:column` });
   const { active, over } = useDndContext();
+  const [drawerHover, setDrawerHover] = useState(false);
+  const [drawerStatus, setDrawerStatus] = useState<'idle' | 'pending' | 'success' | 'error'>(
+    'idle'
+  );
+  const [drawerError, setDrawerError] = useState<string | null>(null);
 
   const isHighlighted = () => {
     if (!active || !over) return false;
@@ -51,7 +56,7 @@ export function AgentColumn({
     return target.agent === config.agent && source.agent !== config.agent;
   };
 
-  const highlight = isHighlighted();
+  const highlight = isHighlighted() || drawerHover;
 
   const mcpEntries = [
     ...Object.entries(config.mcpServers).map(([key, entry]) => ({
@@ -70,7 +75,75 @@ export function AgentColumn({
   return (
     <div
       ref={setNodeRef}
-      className={`flex flex-col gap-4 profile-column-${config.agent} transition-all duration-300 rounded-2xl ${highlight ? 'bg-zinc-50 ring-4 ring-zinc-200/50 shadow-inner p-4 -m-4' : ''}`}
+      onDragOver={(e) => {
+        if (e.dataTransfer.types.includes('application/x-brainctl-apply')) {
+          e.preventDefault();
+          e.dataTransfer.dropEffect = 'copy';
+          if (!drawerHover) setDrawerHover(true);
+        }
+      }}
+      onDragLeave={(e) => {
+        // ignore inner-element flicker
+        if (e.currentTarget.contains(e.relatedTarget as Node)) return;
+        setDrawerHover(false);
+      }}
+      onDrop={async (e) => {
+        const raw = e.dataTransfer.getData('application/x-brainctl-apply');
+        if (!raw) return;
+        e.preventDefault();
+        setDrawerHover(false);
+        let payload: { profileName: string; type: 'mcp' | 'plugin' | 'skill'; name: string; agent?: string };
+        try {
+          payload = JSON.parse(raw);
+        } catch {
+          return;
+        }
+        if (payload.agent && payload.agent !== config.agent) {
+          setDrawerStatus('error');
+          setDrawerError(`Item is scoped to ${payload.agent}`);
+          setTimeout(() => {
+            setDrawerStatus('idle');
+            setDrawerError(null);
+          }, 2500);
+          return;
+        }
+        setDrawerStatus('pending');
+        try {
+          const r = await fetch(`/api/profiles/${encodeURIComponent(payload.profileName)}/apply`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({
+              agents: [config.agent],
+              items: [{ type: payload.type, name: payload.name }],
+              backup: false,
+            }),
+          });
+          if (!r.ok) {
+            const data = (await r.json().catch(() => ({}))) as { error?: string };
+            throw new Error(data.error ?? `HTTP ${r.status}`);
+          }
+          setDrawerStatus('success');
+          setTimeout(() => setDrawerStatus('idle'), 1500);
+        } catch (err) {
+          setDrawerStatus('error');
+          setDrawerError(err instanceof Error ? err.message : 'Apply failed');
+          setTimeout(() => {
+            setDrawerStatus('idle');
+            setDrawerError(null);
+          }, 2500);
+        }
+      }}
+      className={`flex flex-col gap-4 profile-column-${config.agent} transition-all duration-300 rounded-2xl ${
+        drawerHover
+          ? 'bg-emerald-50 ring-4 ring-emerald-200 shadow-inner p-4 -m-4'
+          : highlight
+            ? 'bg-zinc-50 ring-4 ring-zinc-200/50 shadow-inner p-4 -m-4'
+            : drawerStatus === 'success'
+              ? 'bg-emerald-50/40 ring-2 ring-emerald-200'
+              : drawerStatus === 'error'
+                ? 'bg-rose-50/40 ring-2 ring-rose-200'
+                : ''
+      }`}
     >
       <div className="flex items-start justify-between gap-4 border-b border-zinc-100 pb-4">
         <div className="flex min-w-0 items-center gap-3">
@@ -83,9 +156,28 @@ export function AgentColumn({
           </div>
         </div>
         <span
-          className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium shadow-sm ${config.exists ? 'border-zinc-200 bg-zinc-50 text-zinc-700' : 'border-zinc-200 bg-zinc-50 text-zinc-400'}`}
+          className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium shadow-sm ${
+            drawerStatus === 'pending'
+              ? 'border-amber-200 bg-amber-50 text-amber-700'
+              : drawerStatus === 'success'
+                ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                : drawerStatus === 'error'
+                  ? 'border-rose-200 bg-rose-50 text-rose-700'
+                  : config.exists
+                    ? 'border-zinc-200 bg-zinc-50 text-zinc-700'
+                    : 'border-zinc-200 bg-zinc-50 text-zinc-400'
+          }`}
+          title={drawerError ?? undefined}
         >
-          {config.exists ? 'Active' : 'Offline'}
+          {drawerStatus === 'pending'
+            ? 'Applying…'
+            : drawerStatus === 'success'
+              ? 'Applied'
+              : drawerStatus === 'error'
+                ? 'Apply failed'
+                : config.exists
+                  ? 'Active'
+                  : 'Offline'}
         </span>
       </div>
 

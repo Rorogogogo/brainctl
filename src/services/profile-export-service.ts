@@ -1,6 +1,11 @@
 import type { AgentName } from '../types.js';
 import type { AgentConfigService } from './agent-config-service.js';
-import { createPortableProfilePackService, type PortableProfilePackService } from './portable-profile-pack-service.js';
+import {
+  createPortableProfilePackService,
+  type PortableCredentialsMode,
+  type PortablePackFormat,
+  type PortableProfilePackService,
+} from './portable-profile-pack-service.js';
 import type { ProfileService } from './profile-service.js';
 
 export interface ProfileExportService {
@@ -10,7 +15,9 @@ export interface ProfileExportService {
       | { source: 'profile'; name: string }
       | { source: 'agent'; agent: AgentName; cwd: string };
     outputPath?: string;
-  }): Promise<{ archivePath: string }>;
+    format?: PortablePackFormat;
+    credentialsMode?: PortableCredentialsMode;
+  }): Promise<{ archivePath: string; format: PortablePackFormat; warnings: string[] }>;
 }
 
 interface ProfileExportDependencies {
@@ -34,6 +41,8 @@ export function createProfileExportService(
         cwd: options.cwd,
         source: options.source,
         outputPath: options.outputPath,
+        format: options.format,
+        credentialsMode: options.credentialsMode,
       });
     },
   };
