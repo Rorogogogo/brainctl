@@ -3,7 +3,7 @@ import type { AddressInfo } from 'node:net';
 
 import { BrainctlError } from '../errors.js';
 import { createUiRouteHandler } from './routes.js';
-import type { StatusService } from '../services/status-service.js';
+import type { StatusService } from '../services/platform/status-service.js';
 
 export interface StartUiServerOptions {
   cwd?: string;

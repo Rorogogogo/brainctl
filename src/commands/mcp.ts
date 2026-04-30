@@ -2,8 +2,8 @@ import { spawn } from 'node:child_process';
 
 import type { Command } from 'commander';
 
-import { startMcpServer } from '../mcp/server.js';
-import { createUpdateCheckService } from '../services/update-check-service.js';
+import { startMcpServer } from '../mcp-server.js';
+import { createUpdateCheckService } from '../services/platform/update-check-service.js';
 
 export function registerMcpCommand(program: Command): void {
   program

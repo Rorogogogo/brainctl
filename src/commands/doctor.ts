@@ -1,7 +1,7 @@
 import type { Command } from 'commander';
 
 import { formatDiagnosticStatus } from '../output.js';
-import type { DoctorService } from '../services/doctor-service.js';
+import type { DoctorService } from '../services/platform/doctor-service.js';
 
 export function registerDoctorCommand(program: Command, doctorService: DoctorService): void {
   program

@@ -1,9 +1,9 @@
 import { useState, type ReactNode } from 'react';
 import { Check, Download, Loader2 } from 'lucide-react';
 
-import { AgentLogo } from './agent-brand';
-import ProfilesDrawer from './ProfilesDrawer';
-import ProfilesView from './ProfilesView';
+import { AgentLogo } from './components/agent-brand';
+import ProfilesDrawer from './profiles/ProfilesDrawer';
+import ProfilesView from './profiles/ProfilesView';
 
 const AGENTS = ['claude', 'codex', 'gemini'] as const;
 type Agent = typeof AGENTS[number];
