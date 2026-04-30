@@ -2,28 +2,28 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { BrainctlError, ProfileError, ProfileNotFoundError, ValidationError } from '../errors.js';
-import { createAgentConfigService } from '../services/agent-config-service.js';
+import { createAgentConfigService } from '../services/agent/agent-config-service.js';
 import type {
   AgentMcpEntry,
   AgentSkillEntry,
   PortableRemoteMcpMetadata,
-} from '../services/agent-config-service.js';
-import { createMcpPreflightService } from '../services/mcp-preflight-service.js';
-import { createPluginInstallService } from '../services/plugin-install-service.js';
-import { createProfileExportService } from '../services/profile-export-service.js';
-import { createProfileImportService } from '../services/profile-import-service.js';
-import { createProfileService } from '../services/profile-service.js';
-import { createSkillPreflightService } from '../services/skill-preflight-service.js';
-import { createStatusService } from '../services/status-service.js';
-import type { StatusService } from '../services/status-service.js';
+} from '../services/agent/agent-config-service.js';
+import { createMcpPreflightService } from '../services/platform/mcp-preflight-service.js';
+import { createPluginInstallService } from '../services/plugin/plugin-install-service.js';
+import { createProfileExportService } from '../services/profile/profile-export-service.js';
+import { createProfileImportService } from '../services/profile/profile-import-service.js';
+import { createProfileService } from '../services/profile/profile-service.js';
+import { createSkillPreflightService } from '../services/plugin/skill-preflight-service.js';
+import { createStatusService } from '../services/platform/status-service.js';
+import type { StatusService } from '../services/platform/status-service.js';
 import {
   createProfileApplyService,
   type ItemSelector,
-} from '../services/profile-apply-service.js';
+} from '../services/profile/profile-apply-service.js';
 import {
   createProfileSnapshotService,
   defaultBackupProfileName,
-} from '../services/profile-snapshot-service.js';
+} from '../services/profile/profile-snapshot-service.js';
 import type { AgentName } from '../types.js';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';

@@ -1,11 +1,11 @@
 import pc from 'picocolors';
 import type { Command } from 'commander';
 
-import type { ProfileApplyService, ItemSelector } from '../services/profile-apply-service.js';
-import type { ProfileExportService } from '../services/profile-export-service.js';
-import type { ProfileImportService } from '../services/profile-import-service.js';
-import type { ProfileService } from '../services/profile-service.js';
-import type { ProfileSnapshotService } from '../services/profile-snapshot-service.js';
+import type { ProfileApplyService, ItemSelector } from '../services/profile/profile-apply-service.js';
+import type { ProfileExportService } from '../services/profile/profile-export-service.js';
+import type { ProfileImportService } from '../services/profile/profile-import-service.js';
+import type { ProfileService } from '../services/profile/profile-service.js';
+import type { ProfileSnapshotService } from '../services/profile/profile-snapshot-service.js';
 import type { AgentName } from '../types.js';
 
 const ALL_AGENTS: AgentName[] = ['claude', 'codex', 'gemini'];
@@ -195,7 +195,7 @@ export function registerProfileCommand(program: Command, services: ProfileComman
       }
       const agent = options.agent as AgentName;
       const { defaultBackupProfileName } = await import(
-        '../services/profile-snapshot-service.js'
+        '../services/profile/profile-snapshot-service.js'
       );
       const profileName = options.as ?? defaultBackupProfileName(agent);
       const result = await profileSnapshotService.execute({

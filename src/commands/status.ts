@@ -1,7 +1,7 @@
 import pc from 'picocolors';
 import type { Command } from 'commander';
 
-import type { StatusService } from '../services/status-service.js';
+import type { StatusService } from '../services/platform/status-service.js';
 
 export function registerStatusCommand(program: Command, statusService: StatusService): void {
   program

@@ -13,15 +13,15 @@ import { registerProfileCommand } from './commands/profile.js';
 import { registerStatusCommand } from './commands/status.js';
 import { registerUiCommand } from './commands/ui.js';
 import { printError } from './output.js';
-import { createUpdateCheckService } from './services/update-check-service.js';
-import { createDoctorService, type DoctorService } from './services/doctor-service.js';
-import { createProfileApplyService, type ProfileApplyService } from './services/profile-apply-service.js';
-import { createProfileExportService, type ProfileExportService } from './services/profile-export-service.js';
-import { createProfileImportService, type ProfileImportService } from './services/profile-import-service.js';
-import { createProfileService, type ProfileService } from './services/profile-service.js';
-import { createProfileSnapshotService, type ProfileSnapshotService } from './services/profile-snapshot-service.js';
-import { createStatusService, type StatusService } from './services/status-service.js';
-import { createAgentAvailabilityService } from './services/agent-availability-service.js';
+import { createUpdateCheckService } from './services/platform/update-check-service.js';
+import { createDoctorService, type DoctorService } from './services/platform/doctor-service.js';
+import { createProfileApplyService, type ProfileApplyService } from './services/profile/profile-apply-service.js';
+import { createProfileExportService, type ProfileExportService } from './services/profile/profile-export-service.js';
+import { createProfileImportService, type ProfileImportService } from './services/profile/profile-import-service.js';
+import { createProfileService, type ProfileService } from './services/profile/profile-service.js';
+import { createProfileSnapshotService, type ProfileSnapshotService } from './services/profile/profile-snapshot-service.js';
+import { createStatusService, type StatusService } from './services/platform/status-service.js';
+import { createAgentAvailabilityService } from './services/agent/agent-availability-service.js';
 
 const packageVersion = JSON.parse(
   readFileSync(new URL('../package.json', import.meta.url), 'utf8')
