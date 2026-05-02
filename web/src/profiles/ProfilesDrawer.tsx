@@ -4,6 +4,7 @@ import {
   ChevronDown,
   ChevronRight,
   Folder,
+  FolderOpen,
   Loader2,
   RefreshCw,
   Zap,
@@ -100,6 +101,20 @@ export default function ProfilesDrawer() {
     window.addEventListener('brainctl:profiles-changed', onChanged);
     return () => window.removeEventListener('brainctl:profiles-changed', onChanged);
   }, [handleRefresh]);
+
+  async function openFolder(profileName: string) {
+    try {
+      const r = await fetch(`/api/profiles/${encodeURIComponent(profileName)}/open-folder`, {
+        method: 'POST',
+      });
+      if (!r.ok) {
+        const data = (await r.json().catch(() => ({}))) as { error?: string };
+        throw new Error(data.error ?? `HTTP ${r.status}`);
+      }
+    } catch (err) {
+      window.alert(`Open folder failed: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
 
   async function toggle(name: string) {
     const next = new Set(expanded);
@@ -260,6 +275,14 @@ export default function ProfilesDrawer() {
                 )}
                 <Folder size={12} className="text-zinc-500" />
                 <span className="truncate">{p.name}</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => void openFolder(p.name)}
+                title="Open profile folder in Finder"
+                className="grid size-5 place-items-center rounded text-zinc-500 transition hover:bg-zinc-100"
+              >
+                <FolderOpen size={11} />
               </button>
               <ApplyAllButton
                 state={applyAllState[p.name]}

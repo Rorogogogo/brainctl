@@ -27,6 +27,7 @@ import {
 import type { AgentName } from '../types.js';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { spawn } from 'node:child_process';
 
 export interface UiRouteDependencies {
   cwd: string;
@@ -217,6 +218,33 @@ export function createUiRouteHandler(
         }
       }
       default: {
+        // Open profile folder in OS file explorer: POST /api/profiles/:name/open-folder
+        const openFolderMatch = url.pathname.match(/^\/api\/profiles\/([^/]+)\/open-folder$/);
+        if (openFolderMatch) {
+          if (request.method !== 'POST') {
+            return sendJson(response, 405, { error: 'Method not allowed' });
+          }
+          const profileName = decodeURIComponent(openFolderMatch[1]);
+          const folderPath = path.join(dependencies.cwd, '.brainctl', 'profiles', profileName);
+          if (!existsSync(folderPath)) {
+            return sendJson(response, 404, { error: `Profile folder not found: ${folderPath}` });
+          }
+          const opener =
+            process.platform === 'darwin'
+              ? 'open'
+              : process.platform === 'win32'
+                ? 'explorer'
+                : 'xdg-open';
+          try {
+            spawn(opener, [folderPath], { detached: true, stdio: 'ignore' }).unref();
+            return sendJson(response, 200, { ok: true, path: folderPath });
+          } catch (error) {
+            return sendJson(response, 500, {
+              error: error instanceof Error ? error.message : 'Failed to open folder',
+            });
+          }
+        }
+
         // Profile apply: POST /api/profiles/:name/apply
         const applyMatch = url.pathname.match(/^\/api\/profiles\/([^/]+)\/apply$/);
         if (applyMatch) {
