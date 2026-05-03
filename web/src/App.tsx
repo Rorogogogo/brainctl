@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react';
+import { useState } from 'react';
 import { Check, Download, Loader2 } from 'lucide-react';
 
 import { AgentLogo } from './components/agent-brand';
@@ -99,33 +99,6 @@ function SnapshotButtons() {
   );
 }
 
-function ActionButton({
-  icon,
-  label,
-  tooltip,
-}: {
-  icon: ReactNode;
-  label: string;
-  tooltip: string;
-}) {
-  return (
-    <div className="relative group">
-      <button
-        className="inline-flex h-9 cursor-not-allowed items-center gap-2 rounded-xl border border-zinc-200 bg-white/60 px-4 text-sm font-medium text-zinc-400"
-        type="button"
-        disabled
-        aria-disabled="true"
-      >
-        {icon}
-        <span>{label}</span>
-      </button>
-      <span className="pointer-events-none absolute left-1/2 top-full z-20 mt-2 -translate-x-1/2 whitespace-nowrap rounded-md bg-zinc-900 px-2.5 py-1.5 text-[11px] font-medium text-white opacity-0 shadow-lg transition-opacity duration-150 group-hover:opacity-100">
-        {tooltip}
-      </span>
-    </div>
-  );
-}
-
 export default function App() {
   return (
     <main className="min-h-screen overflow-x-hidden bg-[#fcfcfc] p-4 text-zinc-900">
@@ -158,11 +131,15 @@ export default function App() {
           <div className="flex flex-wrap items-center gap-2">
             <SnapshotButtons />
             <CreateProfileButton />
-            <ActionButton
-              icon={<Download size={16} />}
-              label="Install"
-              tooltip="Coming soon — portable install flow under construction"
-            />
+            <a
+              href="https://www.brainctl.net"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex h-9 items-center gap-2 rounded-xl border border-zinc-200 bg-white px-4 text-sm font-medium text-zinc-700 shadow-sm transition-colors hover:bg-zinc-50 hover:text-zinc-900"
+            >
+              <Download size={16} />
+              <span>Install</span>
+            </a>
           </div>
         </header>
 
