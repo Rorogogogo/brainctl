@@ -4,14 +4,27 @@ import path from 'node:path';
 
 import { ProfileError } from '../../errors.js';
 import type {
+  AgentName,
   PortablePluginSnapshot,
   PortableUserSkillSnapshot,
 } from '../../types.js';
+import {
+  defaultReadInstalledPluginBundle,
+  isAgentInstallableOnTarget,
+  isCommandInstallableOnTarget,
+} from '../plugin/plugin-install-bundle.js';
+import {
+  defaultCopySkillDirectory,
+  defaultInstallAgent,
+  defaultInstallCommand,
+} from '../plugin/plugin-install-fs.js';
+import { writeManagedPluginInstall } from '../sync/managed-plugin-registry.js';
 import { formatTimestamp } from '../sync/agent-writer.js';
 
 export async function installPlugin(
   sourceDir: string,
-  plugin: PortablePluginSnapshot
+  plugin: PortablePluginSnapshot,
+  targetAgent?: AgentName
 ): Promise<void> {
   try {
     await stat(sourceDir);
@@ -19,6 +32,13 @@ export async function installPlugin(
     throw new ProfileError(
       `Bundled plugin "${plugin.name}" source missing at ${sourceDir}.`
     );
+  }
+
+  const target = targetAgent ?? plugin.agent;
+
+  if (target !== plugin.agent) {
+    await installPluginCrossAgent(sourceDir, plugin, target);
+    return;
   }
 
   if (plugin.agent === 'gemini') {
@@ -50,9 +70,56 @@ export async function installPlugin(
   }
 }
 
+async function installPluginCrossAgent(
+  sourceDir: string,
+  plugin: PortablePluginSnapshot,
+  targetAgent: AgentName
+): Promise<void> {
+  const bundle = await defaultReadInstalledPluginBundle(sourceDir);
+
+  for (const skillName of bundle.skills) {
+    await defaultCopySkillDirectory({
+      sourceInstallPath: sourceDir,
+      skillName,
+      targetAgent,
+    });
+  }
+
+  const installedAgents: string[] = [];
+  if (isAgentInstallableOnTarget(targetAgent)) {
+    for (const agent of bundle.agents) {
+      await defaultInstallAgent({ targetAgent, agent });
+      installedAgents.push(agent.name);
+    }
+  }
+
+  const installedCommands: string[] = [];
+  if (isCommandInstallableOnTarget(targetAgent)) {
+    for (const command of bundle.commands) {
+      await defaultInstallCommand({ targetAgent, command });
+      installedCommands.push(command.name);
+    }
+  }
+
+  await writeManagedPluginInstall({
+    agent: targetAgent,
+    plugin: {
+      name: plugin.name,
+      kind: 'plugin',
+      managed: true,
+      source: plugin.source,
+      pluginSkills: bundle.skills,
+      pluginMcps: Object.keys(bundle.mcps),
+      pluginAgents: installedAgents,
+      pluginCommands: installedCommands,
+    },
+  });
+}
+
 export async function installUserSkill(
   sourceDir: string,
-  skill: PortableUserSkillSnapshot
+  skill: PortableUserSkillSnapshot,
+  targetAgent?: PortableUserSkillSnapshot['agent']
 ): Promise<void> {
   try {
     await stat(sourceDir);
@@ -62,7 +129,8 @@ export async function installUserSkill(
     );
   }
 
-  const targetDir = path.join(homedir(), `.${skill.agent}`, 'skills', skill.name);
+  const agent = targetAgent ?? skill.agent;
+  const targetDir = path.join(homedir(), `.${agent}`, 'skills', skill.name);
   await rm(targetDir, { recursive: true, force: true });
   await mkdir(path.dirname(targetDir), { recursive: true });
   await cp(sourceDir, targetDir, { recursive: true });

@@ -101,7 +101,7 @@ describe('createProfileImportService portable unpack', () => {
     await mkdir(archiveStageDir, { recursive: true });
     await writeFile(
       path.join(archiveStageDir, 'manifest.yaml'),
-      ['schemaVersion: 3', 'profileName: unsupported'].join('\n'),
+      ['schemaVersion: 4', 'profileName: unsupported'].join('\n'),
       'utf8'
     );
     await writeFile(
@@ -121,7 +121,7 @@ describe('createProfileImportService portable unpack', () => {
         archivePath,
       })
     ).rejects.toThrowError(
-      new ProfileError('Unsupported portable profile schema version: 3.')
+      new ProfileError('Unsupported portable profile schema version: 4.')
     );
   });
 

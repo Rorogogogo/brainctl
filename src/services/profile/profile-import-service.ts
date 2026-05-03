@@ -351,7 +351,7 @@ async function readPortableManifest(extractDir: string): Promise<PortableProfile
   }
 
   const manifest = parsed as Record<string, unknown>;
-  if (manifest.schemaVersion !== 1 && manifest.schemaVersion !== 2) {
+  if (manifest.schemaVersion !== 1 && manifest.schemaVersion !== 2 && manifest.schemaVersion !== 3) {
     throw new ProfileError(
       `Unsupported portable profile schema version: ${String(manifest.schemaVersion)}.`
     );

@@ -487,7 +487,7 @@ describe('createPortableProfilePackService', () => {
         await readFile(path.join(extractDir, 'manifest.yaml'), 'utf8')
       ) as Record<string, any>;
 
-      expect(manifest.schemaVersion).toBe(2);
+      expect(manifest.schemaVersion).toBe(3);
       expect(manifest.plugins).toHaveLength(1);
       expect(manifest.plugins[0]).toMatchObject({
         agent: 'claude',
@@ -501,7 +501,7 @@ describe('createPortableProfilePackService', () => {
         {
           agent: 'claude',
           name: 'personal',
-          archivePath: 'skills/claude/personal',
+          archivePath: 'skills/personal',
         },
       ]);
 
@@ -513,7 +513,7 @@ describe('createPortableProfilePackService', () => {
         readFile(path.join(extractDir, pluginArchivePath, 'skills', 'inner', 'SKILL.md'), 'utf8')
       ).resolves.toContain('inner');
       await expect(
-        readFile(path.join(extractDir, 'skills', 'claude', 'personal', 'SKILL.md'), 'utf8')
+        readFile(path.join(extractDir, 'skills', 'personal', 'SKILL.md'), 'utf8')
       ).resolves.toContain('personal');
     } finally {
       if (originalHome === undefined) {

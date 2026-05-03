@@ -2,6 +2,7 @@ import { useState, type ReactNode } from 'react';
 import { Check, Download, Loader2 } from 'lucide-react';
 
 import { AgentLogo } from './components/agent-brand';
+import CreateProfileButton from './components/CreateProfileButton';
 import ProfilesDrawer from './profiles/ProfilesDrawer';
 import ProfilesView from './profiles/ProfilesView';
 
@@ -127,12 +128,12 @@ function ActionButton({
 
 export default function App() {
   return (
-    <main className="min-h-screen bg-[#fcfcfc] p-4 text-zinc-900 lg:p-6">
+    <main className="min-h-screen overflow-x-hidden bg-[#fcfcfc] p-4 text-zinc-900">
       <div className="mx-auto grid w-full gap-4">
         <header className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex items-center gap-3">
             <div className="grid size-7 place-items-center rounded-lg bg-zinc-900 text-white shadow-sm">
-              <img src="/brainctl-mark.svg" alt="Brainctl Logo" className="size-4" />
+              <img src="/favicon-light.svg" alt="Brainctl Logo" className="size-4" />
             </div>
             <div>
               <h1 className="text-sm font-semibold leading-none tracking-tight">Brainctl</h1>
@@ -156,6 +157,7 @@ export default function App() {
 
           <div className="flex flex-wrap items-center gap-2">
             <SnapshotButtons />
+            <CreateProfileButton />
             <ActionButton
               icon={<Download size={16} />}
               label="Install"
@@ -164,7 +166,7 @@ export default function App() {
           </div>
         </header>
 
-        <section className="flex w-full gap-4 pt-4">
+        <section className="flex w-full gap-4 pt-4 -ml-4">
           <ProfilesDrawer />
           <div className="flex-1">
             <ProfilesView />

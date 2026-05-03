@@ -145,7 +145,7 @@ export default function ProfilesView() {
           {previewConfigs.map((config, index) => (
             <div
               key={config.agent}
-              className={`py-10 lg:py-0 lg:px-10 ${index !== 0 ? 'border-t border-zinc-200 lg:border-t-0 lg:border-l' : ''} ${index === 0 ? 'lg:pl-0 lg:pr-10 pt-0' : ''} ${index === previewConfigs.length - 1 ? 'lg:pr-0 lg:pl-10 pb-0' : ''}`}
+              className={`py-10 lg:py-0 lg:px-6 ${index !== 0 ? 'border-t border-zinc-200 lg:border-t-0 lg:border-l' : ''} ${index === 0 ? 'pt-0' : ''} ${index === previewConfigs.length - 1 ? 'pb-0' : ''}`}
             >
               <AgentColumn
                 config={config}

@@ -1,15 +1,20 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Check,
   ChevronDown,
   ChevronRight,
   Folder,
+  FolderOpen,
   Loader2,
+  PencilLine,
   RefreshCw,
-  Zap,
+  Trash2,
+  X,
 } from 'lucide-react';
 
 import { AgentLogo } from '../components/agent-brand';
+import ConfirmDialog from '../components/ConfirmDialog';
+import { Tooltip } from '../components/Tooltip';
 
 const AGENTS = ['claude', 'codex', 'gemini'] as const;
 type Agent = typeof AGENTS[number];
@@ -42,20 +47,19 @@ interface ApplyState {
   message?: string;
 }
 
-interface ApplyAllState {
-  status: 'idle' | 'pending' | 'success' | 'error';
-  message?: string;
-  backups?: Array<{ agent: Agent; profileName: string }>;
-}
 
 export default function ProfilesDrawer() {
   const [profiles, setProfiles] = useState<ProfileSummary[]>([]);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [contents, setContents] = useState<Record<string, ProfileContents>>({});
   const [applyState, setApplyState] = useState<Record<string, ApplyState>>({});
-  const [applyAllState, setApplyAllState] = useState<Record<string, ApplyAllState>>({});
   const [loading, setLoading] = useState(true);
   const [refreshState, setRefreshState] = useState<'idle' | 'loading' | 'success'>('idle');
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [renameTarget, setRenameTarget] = useState<string | null>(null);
+  const [renameValue, setRenameValue] = useState('');
+  const [renaming, setRenaming] = useState(false);
 
   const loadProfiles = useCallback(async () => {
     try {
@@ -101,6 +105,90 @@ export default function ProfilesDrawer() {
     return () => window.removeEventListener('brainctl:profiles-changed', onChanged);
   }, [handleRefresh]);
 
+  async function commitRename() {
+    if (!renameTarget) return;
+    const newName = renameValue.trim();
+    if (newName.length === 0 || newName === renameTarget) {
+      setRenameTarget(null);
+      setRenameValue('');
+      return;
+    }
+    setRenaming(true);
+    try {
+      const r = await fetch(`/api/profiles/${encodeURIComponent(renameTarget)}/rename`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ newName }),
+      });
+      if (!r.ok) {
+        const data = (await r.json().catch(() => ({}))) as { error?: string };
+        throw new Error(data.error ?? `HTTP ${r.status}`);
+      }
+      setExpanded((prev) => {
+        const next = new Set(prev);
+        if (next.delete(renameTarget)) next.add(newName);
+        return next;
+      });
+      setContents((prev) => {
+        if (!(renameTarget in prev)) return prev;
+        const { [renameTarget]: moved, ...rest } = prev;
+        return moved ? { ...rest, [newName]: moved } : rest;
+      });
+      window.dispatchEvent(new CustomEvent('brainctl:profiles-changed'));
+      await loadProfiles();
+      setRenameTarget(null);
+      setRenameValue('');
+    } catch (err) {
+      window.alert(`Rename failed: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setRenaming(false);
+    }
+  }
+
+  async function deleteProfile(profileName: string) {
+    setDeleting(true);
+    try {
+      const r = await fetch(`/api/profiles/${encodeURIComponent(profileName)}`, {
+        method: 'DELETE',
+      });
+      if (!r.ok) {
+        const data = (await r.json().catch(() => ({}))) as { error?: string };
+        throw new Error(data.error ?? `HTTP ${r.status}`);
+      }
+      setExpanded((prev) => {
+        const next = new Set(prev);
+        next.delete(profileName);
+        return next;
+      });
+      setContents((prev) => {
+        const next = { ...prev };
+        delete next[profileName];
+        return next;
+      });
+      window.dispatchEvent(new CustomEvent('brainctl:profiles-changed'));
+      await loadProfiles();
+    } catch (err) {
+      window.alert(`Delete failed: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setDeleting(false);
+      setDeleteTarget(null);
+    }
+  }
+
+  async function openFolder(profileName: string) {
+    try {
+      const r = await fetch(`/api/profiles/${encodeURIComponent(profileName)}/open-folder`, {
+        method: 'POST',
+      });
+      if (!r.ok) {
+        const data = (await r.json().catch(() => ({}))) as { error?: string };
+        throw new Error(data.error ?? `HTTP ${r.status}`);
+      }
+    } catch (err) {
+      window.alert(`Open folder failed: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+
   async function toggle(name: string) {
     const next = new Set(expanded);
     if (next.has(name)) {
@@ -118,44 +206,6 @@ export default function ProfilesDrawer() {
       } catch {
         // ignore
       }
-    }
-  }
-
-  async function applyAll(profileName: string) {
-    setApplyAllState((prev) => ({ ...prev, [profileName]: { status: 'pending' } }));
-    try {
-      const r = await fetch(`/api/profiles/${encodeURIComponent(profileName)}/apply`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ agents: AGENTS, backup: true }),
-      });
-      if (!r.ok) {
-        const data = (await r.json().catch(() => ({}))) as { error?: string };
-        throw new Error(data.error ?? `HTTP ${r.status}`);
-      }
-      const data = (await r.json()) as {
-        backups?: Array<{ agent: Agent; profileName: string }>;
-      };
-      setApplyAllState((prev) => ({
-        ...prev,
-        [profileName]: { status: 'success', backups: data.backups ?? [] },
-      }));
-      window.dispatchEvent(new CustomEvent('brainctl:profiles-changed'));
-      setTimeout(() => {
-        setApplyAllState((prev) => {
-          const copy = { ...prev };
-          delete copy[profileName];
-          return copy;
-        });
-      }, 8000);
-    } catch (err) {
-      setApplyAllState((prev) => ({
-        ...prev,
-        [profileName]: {
-          status: 'error',
-          message: err instanceof Error ? err.message : 'Apply failed',
-        },
-      }));
     }
   }
 
@@ -199,23 +249,23 @@ export default function ProfilesDrawer() {
 
   if (loading) {
     return (
-      <aside className="flex w-72 flex-col gap-2 border-r border-zinc-200 bg-white p-3 text-xs">
+      <aside className="flex w-56 flex-col gap-2 border-r border-zinc-200 bg-[#fcfcfc] p-2 text-xs">
         <Loader2 className="size-4 animate-spin text-zinc-400" />
       </aside>
     );
   }
 
   return (
-    <aside className="flex w-72 flex-col gap-2 border-r border-zinc-200 bg-white p-3 text-xs">
+    <aside className="flex w-56 flex-col gap-2 border-r border-zinc-200 bg-[#fcfcfc] p-2 text-xs">
       <div className="flex items-center justify-between px-1">
         <h2 className="text-[10px] font-semibold uppercase tracking-wide text-zinc-500">
           Profiles
         </h2>
+        <Tooltip label="Reload profiles list">
         <button
           type="button"
           onClick={() => void handleRefresh()}
           disabled={refreshState === 'loading'}
-          title="Reload profiles list"
           className={`grid size-5 place-items-center rounded transition ${
             refreshState === 'success'
               ? 'bg-emerald-100 text-emerald-700'
@@ -230,6 +280,7 @@ export default function ProfilesDrawer() {
             <RefreshCw size={11} />
           )}
         </button>
+        </Tooltip>
       </div>
       {profiles.length === 0 && (
         <div className="rounded-lg border border-dashed border-zinc-300 bg-zinc-50/60 px-3 py-3 text-zinc-500">
@@ -248,42 +299,92 @@ export default function ProfilesDrawer() {
         {profiles.map((p) => (
           <li key={p.name} className="rounded-lg border border-zinc-200 bg-zinc-50">
             <div className="flex items-center gap-1 px-1 py-1">
+              {renameTarget === p.name ? (
+                <div className="flex min-w-0 flex-1 items-center gap-2 rounded-md px-1 py-0.5">
+                  <Folder size={12} className="text-zinc-500 shrink-0" />
+                  <input
+                    autoFocus
+                    type="text"
+                    value={renameValue}
+                    disabled={renaming}
+                    onChange={(e) => setRenameValue(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') void commitRename();
+                      else if (e.key === 'Escape') {
+                        setRenameTarget(null);
+                        setRenameValue('');
+                      }
+                    }}
+                    onBlur={() => void commitRename()}
+                    className="min-w-0 flex-1 rounded border border-zinc-300 bg-white px-1.5 py-0.5 text-xs font-medium text-zinc-800 outline-none focus:border-zinc-500 disabled:opacity-50"
+                  />
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => void toggle(p.name)}
+                  title={p.name}
+                  className="flex min-w-0 flex-1 items-center gap-2 rounded-md px-1 py-0.5 text-left font-medium text-zinc-800 hover:bg-zinc-100"
+                >
+                  {expanded.has(p.name) ? (
+                    <ChevronDown size={12} />
+                  ) : (
+                    <ChevronRight size={12} />
+                  )}
+                  <Folder size={12} className="text-zinc-500" />
+                  <span className="truncate">{p.name}</span>
+                </button>
+              )}
+              {renameTarget === p.name ? (
+                <Tooltip label="Cancel rename">
+                <button
+                  type="button"
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => {
+                    setRenameTarget(null);
+                    setRenameValue('');
+                  }}
+                  disabled={renaming}
+                  className="grid size-5 place-items-center rounded text-zinc-500 transition hover:bg-zinc-100 disabled:opacity-50"
+                >
+                  <X size={11} />
+                </button>
+                </Tooltip>
+              ) : (
+                <Tooltip label="Rename profile">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setRenameTarget(p.name);
+                    setRenameValue(p.name);
+                  }}
+                  disabled={renaming || deleting}
+                  className="grid size-5 place-items-center rounded text-zinc-500 transition hover:bg-zinc-100 disabled:opacity-50"
+                >
+                  <PencilLine size={11} />
+                </button>
+                </Tooltip>
+              )}
+              <Tooltip label="Open profile folder in Finder">
               <button
                 type="button"
-                onClick={() => void toggle(p.name)}
-                className="flex flex-1 items-center gap-2 rounded-md px-1 py-0.5 text-left font-medium text-zinc-800 hover:bg-zinc-100"
+                onClick={() => void openFolder(p.name)}
+                className="grid size-5 place-items-center rounded text-zinc-500 transition hover:bg-zinc-100"
               >
-                {expanded.has(p.name) ? (
-                  <ChevronDown size={12} />
-                ) : (
-                  <ChevronRight size={12} />
-                )}
-                <Folder size={12} className="text-zinc-500" />
-                <span className="truncate">{p.name}</span>
+                <FolderOpen size={11} />
               </button>
-              <ApplyAllButton
-                state={applyAllState[p.name]}
-                onClick={() => void applyAll(p.name)}
-              />
+              </Tooltip>
+              <Tooltip label="Delete profile">
+              <button
+                type="button"
+                onClick={() => setDeleteTarget(p.name)}
+                disabled={deleting}
+                className="grid size-5 place-items-center rounded text-zinc-500 transition hover:bg-rose-100 hover:text-rose-700 disabled:opacity-50"
+              >
+                <Trash2 size={11} />
+              </button>
+              </Tooltip>
             </div>
-            {applyAllState[p.name]?.status === 'success' &&
-              (applyAllState[p.name]?.backups?.length ?? 0) > 0 && (
-                <div className="border-t border-emerald-200 bg-emerald-50 px-2 py-1.5 text-[10px] text-emerald-800">
-                  <div className="font-semibold uppercase tracking-wide">Backed up</div>
-                  <ul className="mt-1 space-y-0.5">
-                    {(applyAllState[p.name]?.backups ?? []).map((b) => (
-                      <li key={b.profileName} className="font-mono">
-                        {b.profileName}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-            {applyAllState[p.name]?.status === 'error' && (
-              <div className="border-t border-rose-200 bg-rose-50 px-2 py-1.5 text-[10px] text-rose-800">
-                {applyAllState[p.name]?.message ?? 'Apply failed'}
-              </div>
-            )}
             {expanded.has(p.name) && (
               <div className="border-t border-zinc-200 px-2 py-1.5">
                 <ProfileItems
@@ -297,49 +398,21 @@ export default function ProfilesDrawer() {
           </li>
         ))}
       </ul>
+      <ConfirmDialog
+        open={deleteTarget !== null}
+        onOpenChange={(open) => {
+          if (!open) setDeleteTarget(null);
+        }}
+        title={`Delete profile "${deleteTarget ?? ''}"?`}
+        description="This removes the profile folder and all bundled plugins/skills. Live agent configs are not changed."
+        confirmLabel={deleting ? 'Deleting...' : 'Delete'}
+        cancelLabel="Cancel"
+        variant="danger"
+        onConfirm={() => {
+          if (deleteTarget) void deleteProfile(deleteTarget);
+        }}
+      />
     </aside>
-  );
-}
-
-function ApplyAllButton({
-  state,
-  onClick,
-}: {
-  state: ApplyAllState | undefined;
-  onClick: () => void;
-}) {
-  const status = state?.status ?? 'idle';
-  const tooltip =
-    status === 'success' && state?.backups && state.backups.length > 0
-      ? `Applied. Backups: ${state.backups.map((b) => b.profileName).join(', ')}`
-      : status === 'error'
-        ? state?.message ?? 'Apply failed'
-        : 'Apply this entire profile to all 3 agents (with backup)';
-
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={status === 'pending'}
-      title={tooltip}
-      className={`grid size-5 place-items-center rounded transition ${
-        status === 'success'
-          ? 'bg-emerald-100 text-emerald-700'
-          : status === 'error'
-            ? 'bg-rose-100 text-rose-700'
-            : status === 'pending'
-              ? 'bg-zinc-100 text-zinc-500'
-              : 'text-zinc-500 hover:bg-zinc-100'
-      }`}
-    >
-      {status === 'pending' ? (
-        <Loader2 size={11} className="animate-spin" />
-      ) : status === 'success' ? (
-        <Check size={11} />
-      ) : (
-        <Zap size={11} />
-      )}
-    </button>
   );
 }
 
@@ -390,7 +463,6 @@ function ProfileItems({
               label={`${p.name} (${p.agent})`}
               applyState={applyState}
               applyKeyPrefix={`${profileName}::plugin:${p.name}`}
-              singleAgent={p.agent}
               onApply={(agent) =>
                 onApply(profileName, { type: 'plugin', name: p.name, agent: p.agent }, agent)
               }
@@ -401,23 +473,33 @@ function ProfileItems({
       )}
       {skills.length > 0 && (
         <Group label="Skills">
-          {skills.map((s) => (
+          {dedupeByName(skills).map((s) => (
             <Item
-              key={`skill-${s.agent}-${s.name}`}
-              label={`${s.name} (${s.agent})`}
+              key={`skill-${s.name}`}
+              label={s.name}
               applyState={applyState}
               applyKeyPrefix={`${profileName}::skill:${s.name}`}
-              singleAgent={s.agent}
               onApply={(agent) =>
-                onApply(profileName, { type: 'skill', name: s.name, agent: s.agent }, agent)
+                onApply(profileName, { type: 'skill', name: s.name, agent }, agent)
               }
-              dragPayload={{ profileName, type: 'skill', name: s.name, agent: s.agent }}
+              dragPayload={{ profileName, type: 'skill', name: s.name }}
             />
           ))}
         </Group>
       )}
     </div>
   );
+}
+
+function dedupeByName<T extends { name: string }>(items: T[]): T[] {
+  const seen = new Set<string>();
+  const out: T[] = [];
+  for (const item of items) {
+    if (seen.has(item.name)) continue;
+    seen.add(item.name);
+    out.push(item);
+  }
+  return out;
 }
 
 function Group({ label, children }: { label: string; children: React.ReactNode }) {
@@ -447,6 +529,21 @@ function Item({
   dragPayload: { profileName: string; type: ItemType; name: string; agent?: Agent };
 }) {
   const targets = singleAgent ? [singleAgent] : AGENTS;
+  const [armedAgent, setArmedAgent] = useState<Agent | null>(null);
+  const armedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const arm = (agent: Agent) => {
+    setArmedAgent(agent);
+    if (armedTimer.current) clearTimeout(armedTimer.current);
+    armedTimer.current = setTimeout(() => setArmedAgent(null), 3000);
+  };
+
+  const fire = (agent: Agent) => {
+    if (armedTimer.current) clearTimeout(armedTimer.current);
+    armedTimer.current = null;
+    setArmedAgent(null);
+    void onApply(agent);
+  };
 
   return (
     <div
@@ -465,31 +562,39 @@ function Item({
         {targets.map((agent) => {
           const state = applyState[`${applyKeyPrefix}->${agent}`];
           const status = state?.status ?? 'idle';
+          const armed = armedAgent === agent;
           return (
-            <button
+            <Tooltip
               key={agent}
-              type="button"
-              onClick={() => void onApply(agent)}
-              title={
-                state?.message
-                  ? `${agent}: ${state.message}`
-                  : `Apply to ${agent}`
+              label={
+                armed
+                  ? `Click again to apply to ${agent}`
+                  : state?.message
+                    ? `${agent}: ${state.message}`
+                    : `Apply to ${agent} (overwrites live config)`
               }
-              disabled={status === 'pending'}
-              className={`grid size-5 place-items-center rounded transition ${
-                status === 'success'
-                  ? 'bg-emerald-100'
-                  : status === 'error'
-                    ? 'bg-rose-100'
-                    : status === 'pending'
-                      ? 'bg-zinc-100'
-                      : 'bg-zinc-50 hover:bg-zinc-100'
-              }`}
             >
-              <span className="grid size-3 place-items-center overflow-hidden">
-                <AgentLogo agent={agent} className="size-full object-contain" />
-              </span>
-            </button>
+              <button
+                type="button"
+                onClick={() => (armed ? fire(agent) : arm(agent))}
+                disabled={status === 'pending'}
+                className={`grid size-5 place-items-center rounded transition ${
+                  armed
+                    ? 'bg-amber-200 ring-1 ring-amber-400'
+                    : status === 'success'
+                      ? 'bg-emerald-100'
+                      : status === 'error'
+                        ? 'bg-rose-100'
+                        : status === 'pending'
+                          ? 'bg-zinc-100'
+                          : 'bg-zinc-50 hover:bg-zinc-100'
+                }`}
+              >
+                <span className="grid size-3 place-items-center overflow-hidden">
+                  <AgentLogo agent={agent} className="size-full object-contain" />
+                </span>
+              </button>
+            </Tooltip>
           );
         })}
       </div>
