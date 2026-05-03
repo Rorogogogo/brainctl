@@ -574,6 +574,36 @@ export function createUiRouteHandler(
           }
         }
 
+        const profileRenameMatch = url.pathname.match(/^\/api\/profiles\/([^/]+)\/rename$/);
+        if (profileRenameMatch) {
+          const oldName = decodeURIComponent(profileRenameMatch[1]);
+
+          if (request.method !== 'POST') {
+            return sendJson(response, 405, { error: 'Method not allowed' });
+          }
+
+          const body = await readJsonBody(request);
+          if (!body.ok) {
+            return sendJson(response, 400, { error: 'Invalid JSON body' });
+          }
+
+          const data = body.value as { newName?: string };
+          if (typeof data.newName !== 'string' || data.newName.trim().length === 0) {
+            return sendJson(response, 400, { error: 'Missing newName' });
+          }
+
+          try {
+            await profileService.rename({
+              cwd: dependencies.cwd,
+              oldName,
+              newName: data.newName.trim(),
+            });
+            return sendJson(response, 200, { ok: true, name: data.newName.trim() });
+          } catch (error) {
+            return sendProfileError(response, error);
+          }
+        }
+
         const profileMatch = url.pathname.match(/^\/api\/profiles\/([^/]+)$/);
         if (profileMatch) {
           const name = decodeURIComponent(profileMatch[1]);

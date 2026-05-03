@@ -40,8 +40,11 @@ export interface ProfileService {
   get(options: { cwd?: string; name: string }): Promise<ProfileConfig>;
   create(options: { cwd?: string; name: string; description?: string }): Promise<{ profilePath: string }>;
   update(options: { cwd?: string; name: string; config: ProfileConfig }): Promise<void>;
+  rename(options: { cwd?: string; oldName: string; newName: string }): Promise<void>;
   delete(options: { cwd?: string; name: string }): Promise<void>;
 }
+
+const PROFILE_NAME_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 
 export function createProfileService(): ProfileService {
   return {
@@ -89,18 +92,26 @@ export function createProfileService(): ProfileService {
 
     async create(options) {
       const cwd = options.cwd ?? process.cwd();
-      const folder = profileDir(cwd, options.name);
-      const filePath = profileFile(cwd, options.name);
+      const trimmed = options.name.trim();
+
+      if (!PROFILE_NAME_PATTERN.test(trimmed)) {
+        throw new ProfileError(
+          `Invalid profile name "${trimmed}". Use letters, numbers, ".", "_", or "-".`
+        );
+      }
+
+      const folder = profileDir(cwd, trimmed);
+      const filePath = profileFile(cwd, trimmed);
 
       if (
         (await pathExists(filePath)) ||
-        (await pathExists(legacyProfileFile(cwd, options.name)))
+        (await pathExists(legacyProfileFile(cwd, trimmed)))
       ) {
-        throw new ProfileError(`Profile "${options.name}" already exists.`);
+        throw new ProfileError(`Profile "${trimmed}" already exists.`);
       }
 
       const scaffold: Record<string, unknown> = {
-        name: options.name,
+        name: trimmed,
         description: options.description ?? '',
         mcps: {},
       };
@@ -129,6 +140,55 @@ export function createProfileService(): ProfileService {
       };
 
       await writeFile(filePath, YAML.stringify(data), 'utf8');
+    },
+
+    async rename(options) {
+      const cwd = options.cwd ?? process.cwd();
+      const trimmedNew = options.newName.trim();
+
+      if (!PROFILE_NAME_PATTERN.test(trimmedNew)) {
+        throw new ProfileError(
+          `Invalid profile name "${trimmedNew}". Use letters, numbers, ".", "_", or "-".`
+        );
+      }
+
+      if (trimmedNew === options.oldName) return;
+
+      await migrateLegacyProfile(cwd, options.oldName);
+      const oldFolder = profileDir(cwd, options.oldName);
+      const oldFile = profileFile(cwd, options.oldName);
+      const newFolder = profileDir(cwd, trimmedNew);
+      const newFile = profileFile(cwd, trimmedNew);
+
+      if (!(await pathExists(oldFile))) {
+        throw new ProfileNotFoundError(`Profile "${options.oldName}" not found.`);
+      }
+
+      if (
+        (await pathExists(newFolder)) ||
+        (await pathExists(legacyProfileFile(cwd, trimmedNew)))
+      ) {
+        throw new ProfileError(`Profile "${trimmedNew}" already exists.`);
+      }
+
+      await rename(oldFolder, newFolder);
+
+      const profileSource = await readFile(newFile, 'utf8');
+      const parsed = (YAML.parse(profileSource) as Record<string, unknown>) ?? {};
+      parsed.name = trimmedNew;
+      await writeFile(newFile, YAML.stringify(parsed), 'utf8');
+
+      const manifestPath = path.join(newFolder, 'manifest.yaml');
+      if (await pathExists(manifestPath)) {
+        try {
+          const manifestSource = await readFile(manifestPath, 'utf8');
+          const manifest = (YAML.parse(manifestSource) as Record<string, unknown>) ?? {};
+          manifest.profileName = trimmedNew;
+          await writeFile(manifestPath, YAML.stringify(manifest), 'utf8');
+        } catch {
+          // Manifest is best-effort; pack-time will rewrite it on next export.
+        }
+      }
     },
 
     async delete(options) {

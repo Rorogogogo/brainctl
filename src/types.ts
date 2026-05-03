@@ -56,7 +56,7 @@ export interface PortableUserSkillSnapshot {
 }
 
 export interface PortableProfileManifest {
-  schemaVersion: 1 | 2;
+  schemaVersion: 1 | 2 | 3;
   profileName: string;
   createdBy?: {
     tool: string;

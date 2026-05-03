@@ -128,7 +128,7 @@ function ActionButton({
 
 export default function App() {
   return (
-    <main className="min-h-screen overflow-x-hidden bg-[#fcfcfc] p-4 text-zinc-900 lg:p-6">
+    <main className="min-h-screen overflow-x-hidden bg-[#fcfcfc] p-4 text-zinc-900">
       <div className="mx-auto grid w-full gap-4">
         <header className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex items-center gap-3">
@@ -166,7 +166,7 @@ export default function App() {
           </div>
         </header>
 
-        <section className="flex w-full gap-4 pt-4">
+        <section className="flex w-full gap-4 pt-4 -ml-4">
           <ProfilesDrawer />
           <div className="flex-1">
             <ProfilesView />

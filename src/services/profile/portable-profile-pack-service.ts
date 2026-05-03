@@ -329,8 +329,8 @@ function collectAgentExtras(agentConfig: AgentLiveConfig): {
       const installPath = skill.installPath;
       const source = skill.source;
       if (!installPath || !source) continue;
-      const safeName = sanitizePackName(`${skill.name}--${source}`);
-      const archivePath = `plugins/${agentConfig.agent}/${safeName}`;
+      const safeName = sanitizePackName(skill.name);
+      const archivePath = `plugins/${safeName}`;
       bundledPlugins.set(archivePath, installPath);
       plugins.push({
         agent: agentConfig.agent,
@@ -350,7 +350,7 @@ function collectAgentExtras(agentConfig: AgentLiveConfig): {
 
     if (skill.kind === 'skill' && skill.source === 'local') {
       const localSkillDir = path.join(homedir(), `.${agentConfig.agent}`, 'skills', skill.name);
-      const archivePath = `skills/${agentConfig.agent}/${skill.name}`;
+      const archivePath = `skills/${sanitizePackName(skill.name)}`;
       bundledUserSkills.set(archivePath, localSkillDir);
       userSkills.push({
         agent: agentConfig.agent,
@@ -436,7 +436,7 @@ async function redactAndNormalizeProfile(
 
   return {
     manifest: {
-      schemaVersion: hasExtras ? 2 : 1,
+      schemaVersion: hasExtras ? 3 : 1,
       profileName: profile.name,
       createdBy: {
         tool: 'brainctl',

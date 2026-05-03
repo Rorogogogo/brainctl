@@ -7,6 +7,7 @@ import { ProfileError } from '../../errors.js';
 import type {
   AgentName,
   PortableProfileManifest,
+  PortableUserSkillSnapshot,
   SyncResult,
 } from '../../types.js';
 import { installPlugin, installUserSkill } from '../agent/agent-asset-installer.js';
@@ -118,20 +119,28 @@ export function createProfileApplyService(
         }
 
         const pluginsInstalled: string[] = [];
-        for (const plugin of (manifest?.plugins ?? []).filter(
-          (p) => p.agent === agent && wantPlugin(p.name)
-        )) {
+        const pluginsByName = new Map<string, NonNullable<typeof manifest>['plugins'] extends Array<infer T> | undefined ? T : never>();
+        for (const p of manifest?.plugins ?? []) {
+          if (!wantPlugin(p.name)) continue;
+          const existing = pluginsByName.get(p.name);
+          if (!existing || p.agent === agent) pluginsByName.set(p.name, p);
+        }
+        for (const plugin of pluginsByName.values()) {
           const sourceDir = path.join(folder, plugin.archivePath);
-          await installPlugin(sourceDir, plugin);
+          await installPlugin(sourceDir, plugin, agent);
           pluginsInstalled.push(plugin.name);
         }
 
         const userSkillsInstalled: string[] = [];
-        for (const skill of (manifest?.userSkills ?? []).filter(
-          (s) => s.agent === agent && wantSkill(s.name)
-        )) {
+        const skillsByName = new Map<string, PortableUserSkillSnapshot>();
+        for (const s of manifest?.userSkills ?? []) {
+          if (!wantSkill(s.name)) continue;
+          if (!skillsByName.has(s.name)) skillsByName.set(s.name, s);
+          else if (s.agent === agent) skillsByName.set(s.name, s); // prefer matching source if available
+        }
+        for (const skill of skillsByName.values()) {
           const sourceDir = path.join(folder, skill.archivePath);
-          await installUserSkill(sourceDir, skill);
+          await installUserSkill(sourceDir, skill, agent);
           userSkillsInstalled.push(skill.name);
         }
 
