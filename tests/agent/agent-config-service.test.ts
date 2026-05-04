@@ -43,6 +43,7 @@ describe('agent config service', () => {
       cwd,
       agent: 'claude',
       key: 'docs',
+      scope: 'project',
       remoteEntry: {
         transport: 'http',
         url: 'https://developers.openai.com/mcp',
