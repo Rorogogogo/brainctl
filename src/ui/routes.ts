@@ -83,6 +83,36 @@ export function createUiRouteHandler(
         const configs = await agentConfigService.readAll({ cwd: dependencies.cwd });
         return sendJson(response, 200, configs);
       }
+      case '/api/open-folder': {
+        if (request.method !== 'POST') {
+          return sendJson(response, 405, { error: 'Method not allowed' });
+        }
+        const body = await readJsonBody(request);
+        if (!body.ok) {
+          return sendJson(response, 400, { error: 'Invalid JSON body' });
+        }
+        const { path: folderPath } = (body.value ?? {}) as { path?: string };
+        if (!folderPath || typeof folderPath !== 'string') {
+          return sendJson(response, 400, { error: 'path is required' });
+        }
+        if (!existsSync(folderPath)) {
+          return sendJson(response, 404, { error: `Path not found: ${folderPath}` });
+        }
+        const opener =
+          process.platform === 'darwin'
+            ? 'open'
+            : process.platform === 'win32'
+              ? 'explorer'
+              : 'xdg-open';
+        try {
+          spawn(opener, [folderPath], { detached: true, stdio: 'ignore' }).unref();
+          return sendJson(response, 200, { ok: true, path: folderPath });
+        } catch (error) {
+          return sendJson(response, 500, {
+            error: error instanceof Error ? error.message : 'Failed to open folder',
+          });
+        }
+      }
       case '/api/profiles': {
         if (request.method === 'GET') {
           const result = await profileService.list({ cwd: dependencies.cwd });

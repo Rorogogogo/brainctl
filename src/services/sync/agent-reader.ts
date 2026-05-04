@@ -462,10 +462,11 @@ async function readSkillDirs(skillsDir: string): Promise<AgentSkillEntry[]> {
 
   for (const entry of entries) {
     if (entry.name.startsWith('.')) continue;
+    const installPath = path.join(skillsDir, entry.name);
     if (entry.isDirectory()) {
-      skills.push({ name: entry.name, source: 'local', kind: 'skill' });
+      skills.push({ name: entry.name, source: 'local', kind: 'skill', installPath });
     } else if (entry.isSymbolicLink()) {
-      skills.push({ name: entry.name, source: 'linked', kind: 'skill' });
+      skills.push({ name: entry.name, source: 'linked', kind: 'skill', installPath });
     }
   }
 
