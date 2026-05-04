@@ -8,8 +8,23 @@ import {
   formatPluginSubtitle,
   splitAgentSkillEntries,
   type AgentLiveConfig,
+  type AgentMcpEntry,
 } from '../profiles-view.js';
 import { parseDragId, parseDropId } from './dnd.js';
+
+function getMcpFolderPath(entry: AgentMcpEntry): string | undefined {
+  for (const arg of entry.args ?? []) {
+    if (arg.startsWith('/')) {
+      const i = arg.lastIndexOf('/');
+      return i > 0 ? arg.slice(0, i) : '/';
+    }
+  }
+  if (entry.command.startsWith('/')) {
+    const i = entry.command.lastIndexOf('/');
+    return i > 0 ? entry.command.slice(0, i) : '/';
+  }
+  return undefined;
+}
 import { DraggableCard } from './DraggableCard.js';
 import { DroppableZone } from './DroppableZone.js';
 import { StaticCard } from './StaticCard.js';
@@ -63,11 +78,13 @@ export function AgentColumn({
       key,
       type: 'local' as const,
       sublabel: entry.args && entry.args.length > 0 ? `${entry.command} ${entry.args.join(' ')}` : entry.command,
+      folderPath: getMcpFolderPath(entry),
     })),
     ...Object.entries(config.remoteMcpServers).map(([key, entry]) => ({
       key,
       type: 'remote' as const,
       sublabel: `${entry.transport.toUpperCase()} ${entry.url}`,
+      folderPath: undefined,
     })),
   ];
   const { skills: localSkills, plugins } = splitAgentSkillEntries(config.skills);
@@ -216,6 +233,7 @@ export function AgentColumn({
               status={status}
               onRemove={editable ? () => onStagedRemove(config.agent, 'skill', skill.name) : undefined}
               editable={editable}
+              folderPath={skill.installPath}
             />
           );
 
@@ -237,7 +255,7 @@ export function AgentColumn({
         icon={<Server size={16} />}
         count={mcpEntries.length}
       >
-        {mcpEntries.map(({ key, sublabel, type }, index) => {
+        {mcpEntries.map(({ key, sublabel, type, folderPath }, index) => {
           const status = pendingAdded.has(key)
             ? ('added' as const)
             : pendingRemoved.has(key)
@@ -254,6 +272,7 @@ export function AgentColumn({
               status={status}
               onRemove={editable ? () => onStagedRemove(config.agent, 'mcp', key) : undefined}
               editable={editable}
+              folderPath={folderPath}
             />
           );
 
@@ -305,6 +324,7 @@ export function AgentColumn({
                   : undefined
               }
               editable={editable}
+              folderPath={plugin.installPath}
             />
           );
 

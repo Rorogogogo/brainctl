@@ -1,6 +1,14 @@
 import { useDraggable } from '@dnd-kit/core';
-import { Bot, ChevronDown, ChevronRight, FileText, Server, Terminal, Trash2 } from 'lucide-react';
+import { Bot, ChevronDown, ChevronRight, FileText, FolderOpen, Server, Terminal, Trash2 } from 'lucide-react';
 import { useState } from 'react';
+
+function openFolder(folderPath: string) {
+  void fetch('/api/open-folder', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ path: folderPath }),
+  });
+}
 
 export function StaticCard({
   id,
@@ -10,6 +18,7 @@ export function StaticCard({
   status,
   onRemove,
   editable,
+  folderPath,
 }: {
   id: string;
   label: string;
@@ -18,6 +27,7 @@ export function StaticCard({
   status?: 'added' | 'removed';
   onRemove?: () => void;
   editable: boolean;
+  folderPath?: string;
 }) {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id, disabled: !editable });
   const [expanded, setExpanded] = useState(false);
@@ -55,6 +65,17 @@ export function StaticCard({
         ) : (
           <span className="inline-flex shrink-0 items-center justify-center rounded-md border border-zinc-200 bg-zinc-50 px-2 py-0.5 text-xs font-medium leading-none text-zinc-600">Plugin</span>
         )}
+        {folderPath && !status ? (
+          <button
+            className="grid size-8 shrink-0 place-items-center rounded-lg border border-transparent text-zinc-400 transition-colors hover:bg-zinc-50 hover:text-zinc-900 opacity-0 group-hover:opacity-100"
+            type="button"
+            onPointerDown={(event) => event.stopPropagation()}
+            onClick={() => openFolder(folderPath)}
+            title={`Open folder: ${folderPath}`}
+          >
+            <FolderOpen size={16} />
+          </button>
+        ) : null}
         {hasDetails ? (
           <button
             className="grid size-8 shrink-0 place-items-center rounded-lg border border-transparent text-zinc-400 transition-colors hover:bg-zinc-50 hover:text-zinc-900"
