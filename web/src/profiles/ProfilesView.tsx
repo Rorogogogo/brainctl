@@ -30,9 +30,13 @@ export default function ProfilesView() {
     refreshState,
     isEditMode,
     previewConfigs,
+    columnScopes,
+    setColumnScope,
     pendingChanges,
     pendingAddedMap,
     pendingRemovedMap,
+    pendingProjectAddedMap,
+    pendingProjectRemovedMap,
     pendingSkillAddedMap,
     pendingSkillRemovedMap,
     pendingPluginAddedMap,
@@ -149,8 +153,12 @@ export default function ProfilesView() {
             >
               <AgentColumn
                 config={config}
+                scope={columnScopes[config.agent] ?? 'global'}
+                onScopeChange={setColumnScope}
                 pendingAdded={pendingAddedMap.get(config.agent) ?? new Set()}
                 pendingRemoved={pendingRemovedMap.get(config.agent) ?? new Set()}
+                pendingProjectAdded={pendingProjectAddedMap.get(config.agent) ?? new Set()}
+                pendingProjectRemoved={pendingProjectRemovedMap.get(config.agent) ?? new Set()}
                 pendingSkillAdded={pendingSkillAddedMap.get(config.agent) ?? new Set()}
                 pendingSkillRemoved={pendingSkillRemovedMap.get(config.agent) ?? new Set()}
                 pendingPluginAdded={pendingPluginAddedMap.get(config.agent) ?? new Set()}

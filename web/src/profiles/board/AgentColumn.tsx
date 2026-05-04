@@ -36,8 +36,12 @@ function DropAnchorWrapper({ id, children }: { id: string; children?: ReactNode 
 
 export function AgentColumn({
   config,
+  scope,
+  onScopeChange,
   pendingAdded,
   pendingRemoved,
+  pendingProjectAdded,
+  pendingProjectRemoved,
   pendingSkillAdded,
   pendingSkillRemoved,
   pendingPluginAdded,
@@ -46,13 +50,17 @@ export function AgentColumn({
   editable,
 }: {
   config: AgentLiveConfig;
+  scope: 'global' | 'project';
+  onScopeChange: (agent: string, scope: 'global' | 'project') => void;
   pendingAdded: Set<string>;
   pendingRemoved: Set<string>;
+  pendingProjectAdded: Set<string>;
+  pendingProjectRemoved: Set<string>;
   pendingSkillAdded: Set<string>;
   pendingSkillRemoved: Set<string>;
   pendingPluginAdded: Set<string>;
   pendingPluginRemoved: Set<string>;
-  onStagedRemove: (agent: string, category: 'mcp' | 'skill' | 'plugin', key: string) => void;
+  onStagedRemove: (agent: string, category: 'mcp' | 'skill' | 'plugin', key: string, scope: 'global' | 'project') => void;
   editable: boolean;
 }) {
   const { setNodeRef } = useDroppable({ id: `${config.agent}:column` });
@@ -73,14 +81,25 @@ export function AgentColumn({
 
   const highlight = isHighlighted() || drawerHover;
 
+  const activePendingAdded = scope === 'project' ? pendingProjectAdded : pendingAdded;
+  const activePendingRemoved = scope === 'project' ? pendingProjectRemoved : pendingRemoved;
+
+  const globalMcpServers = config.mcpServers ?? {};
+  const globalRemoteMcpServers = config.remoteMcpServers ?? {};
+  const projectMcpServers = config.projectMcpServers ?? {};
+  const projectRemoteMcpServers = config.projectRemoteMcpServers ?? {};
+
+  const activeMcpServers = scope === 'project' ? projectMcpServers : globalMcpServers;
+  const activeRemoteMcpServers = scope === 'project' ? projectRemoteMcpServers : globalRemoteMcpServers;
+
   const mcpEntries = [
-    ...Object.entries(config.mcpServers).map(([key, entry]) => ({
+    ...Object.entries(activeMcpServers).map(([key, entry]) => ({
       key,
       type: 'local' as const,
       sublabel: entry.args && entry.args.length > 0 ? `${entry.command} ${entry.args.join(' ')}` : entry.command,
       folderPath: getMcpFolderPath(entry),
     })),
-    ...Object.entries(config.remoteMcpServers).map(([key, entry]) => ({
+    ...Object.entries(activeRemoteMcpServers).map(([key, entry]) => ({
       key,
       type: 'remote' as const,
       sublabel: `${entry.transport.toUpperCase()} ${entry.url}`,
@@ -172,7 +191,8 @@ export function AgentColumn({
             <p className="font-mono text-[10px] text-zinc-400 m-0 break-all">{config.configPath}</p>
           </div>
         </div>
-        <span
+        <div className="flex shrink-0 flex-col items-end gap-2">
+          <span
           className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium shadow-sm ${
             drawerStatus === 'pending'
               ? 'border-amber-200 bg-amber-50 text-amber-700'
@@ -195,7 +215,24 @@ export function AgentColumn({
                 : config.exists
                   ? 'Active'
                   : 'Offline'}
-        </span>
+          </span>
+          <div className="flex gap-0.5 rounded-lg border border-zinc-200 bg-zinc-50 p-0.5">
+            <button
+              className={`rounded-md px-2.5 py-1 text-[11px] font-medium transition-colors ${scope === 'global' ? 'bg-white text-zinc-900 shadow-sm' : 'text-zinc-500 hover:text-zinc-700'}`}
+              type="button"
+              onClick={() => onScopeChange(config.agent, 'global')}
+            >
+              Global
+            </button>
+            <button
+              className={`rounded-md px-2.5 py-1 text-[11px] font-medium transition-colors ${scope === 'project' ? 'bg-white text-zinc-900 shadow-sm' : 'text-zinc-500 hover:text-zinc-700'}`}
+              type="button"
+              onClick={() => onScopeChange(config.agent, 'project')}
+            >
+              Project
+            </button>
+          </div>
+        </div>
       </div>
 
       <div className="flex flex-wrap gap-2">
@@ -231,7 +268,7 @@ export function AgentColumn({
               sublabel={skill.source ?? 'local'}
               icon={<FileText size={16} />}
               status={status}
-              onRemove={editable ? () => onStagedRemove(config.agent, 'skill', skill.name) : undefined}
+              onRemove={editable ? () => onStagedRemove(config.agent, 'skill', skill.name, 'global') : undefined}
               editable={editable}
               folderPath={skill.installPath}
             />
@@ -256,9 +293,9 @@ export function AgentColumn({
         count={mcpEntries.length}
       >
         {mcpEntries.map(({ key, sublabel, type, folderPath }, index) => {
-          const status = pendingAdded.has(key)
+          const status = activePendingAdded.has(key)
             ? ('added' as const)
-            : pendingRemoved.has(key)
+            : activePendingRemoved.has(key)
             ? ('removed' as const)
             : undefined;
 
@@ -270,7 +307,7 @@ export function AgentColumn({
               sublabel={type === 'remote' ? `[remote] ${sublabel}` : sublabel}
               icon={<Server size={16} />}
               status={status}
-              onRemove={editable ? () => onStagedRemove(config.agent, 'mcp', key) : undefined}
+              onRemove={editable ? () => onStagedRemove(config.agent, 'mcp', key, scope) : undefined}
               editable={editable}
               folderPath={folderPath}
             />
@@ -320,7 +357,7 @@ export function AgentColumn({
                   ((config.agent === 'codex' || config.agent === 'claude') &&
                     typeof plugin.installPath === 'string' &&
                     typeof plugin.source === 'string'))
-                  ? () => onStagedRemove(config.agent, 'plugin', plugin.name)
+                  ? () => onStagedRemove(config.agent, 'plugin', plugin.name, 'global')
                   : undefined
               }
               editable={editable}

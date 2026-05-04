@@ -29,6 +29,8 @@ export interface AgentLiveConfig {
   exists: boolean;
   mcpServers: Record<string, AgentMcpEntry>;
   remoteMcpServers: Record<string, AgentRemoteMcpEntry>;
+  projectMcpServers: Record<string, AgentMcpEntry>;
+  projectRemoteMcpServers: Record<string, AgentRemoteMcpEntry>;
   skills: AgentSkillEntry[];
 }
 
@@ -37,6 +39,7 @@ export interface PendingChange {
   type: 'add' | 'remove';
   category: 'mcp' | 'skill' | 'plugin';
   agent: string;
+  scope: 'global' | 'project';
   key: string;
   entry?: AgentMcpEntry;
   remoteEntry?: AgentRemoteMcpEntry;
@@ -76,8 +79,10 @@ export function canStagePendingAddition(
       return `MCP "${change.key}" is missing the command metadata needed to copy it.`;
     }
 
-    if (targetConfig.mcpServers[change.key] || targetConfig.remoteMcpServers[change.key]) {
-      return `MCP "${change.key}" already exists in ${targetLabel}. Remove it first before copying.`;
+    const mcpMap = change.scope === 'project' ? targetConfig.projectMcpServers : targetConfig.mcpServers;
+    const remoteMcpMap = change.scope === 'project' ? targetConfig.projectRemoteMcpServers : targetConfig.remoteMcpServers;
+    if (mcpMap[change.key] || remoteMcpMap[change.key]) {
+      return `MCP "${change.key}" already exists in ${targetLabel} (${change.scope}). Remove it first before copying.`;
     }
 
     return null;
