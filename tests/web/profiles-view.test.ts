@@ -369,6 +369,8 @@ describe('profiles view helpers', () => {
           },
         },
         remoteMcpServers: {},
+        projectMcpServers: {},
+        projectRemoteMcpServers: {},
         skills: [],
       },
       {
@@ -382,6 +384,8 @@ describe('profiles view helpers', () => {
           },
         },
         remoteMcpServers: {},
+        projectMcpServers: {},
+        projectRemoteMcpServers: {},
         skills: [],
       },
     ]);

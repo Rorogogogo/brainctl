@@ -82,7 +82,8 @@ export function canStagePendingAddition(
     const mcpMap = change.scope === 'project' ? targetConfig.projectMcpServers : targetConfig.mcpServers;
     const remoteMcpMap = change.scope === 'project' ? targetConfig.projectRemoteMcpServers : targetConfig.remoteMcpServers;
     if (mcpMap[change.key] || remoteMcpMap[change.key]) {
-      return `MCP "${change.key}" already exists in ${targetLabel} (${change.scope}). Remove it first before copying.`;
+      const scopeSuffix = change.scope ? ` (${change.scope})` : '';
+      return `MCP "${change.key}" already exists in ${targetLabel}${scopeSuffix}. Remove it first before copying.`;
     }
 
     return null;

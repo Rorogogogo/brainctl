@@ -67,13 +67,18 @@ describe('agent readers', () => {
 
     const result = await createClaudeReader().read({ cwd });
 
-    expect(result.mcpServers).toEqual({
+    // Claude project-scoped servers (under projects[cwd].mcpServers) flow into
+    // the projectMcpServers / projectRemoteMcpServers maps; the global maps
+    // come from the top-level mcpServers field, which is empty here.
+    expect(result.mcpServers).toEqual({});
+    expect(result.remoteMcpServers).toEqual({});
+    expect(result.projectMcpServers).toEqual({
       github: {
         command: 'npx',
         args: ['-y', '@modelcontextprotocol/server-github'],
       },
     });
-    expect(result.remoteMcpServers).toEqual({
+    expect(result.projectRemoteMcpServers).toEqual({
       docs: {
         transport: 'http',
         url: 'https://developers.openai.com/mcp',
