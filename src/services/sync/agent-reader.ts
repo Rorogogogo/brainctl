@@ -40,6 +40,8 @@ export interface AgentLiveConfig {
   exists: boolean;
   mcpServers: Record<string, AgentMcpEntry>;
   remoteMcpServers: Record<string, PortableRemoteMcpMetadata>;
+  projectMcpServers: Record<string, AgentMcpEntry>;
+  projectRemoteMcpServers: Record<string, PortableRemoteMcpMetadata>;
   skills: AgentSkillEntry[];
 }
 
@@ -56,42 +58,41 @@ export function createClaudeReader(): AgentConfigReader {
         const source = await readFile(configPath, 'utf8');
         const data = JSON.parse(source) as Record<string, unknown>;
 
-        // Merge user-scoped MCPs (top-level) with project-scoped MCPs (project overrides user)
         const userServers = (data.mcpServers ?? {}) as Record<string, Record<string, unknown>>;
         const projects = (data.projects ?? {}) as Record<string, Record<string, unknown>>;
-        const projectConfig = projects[options.cwd] ?? {};
+        const projectConfig = (projects[options.cwd] ?? {}) as Record<string, unknown>;
         const projectServers = (projectConfig.mcpServers ?? {}) as Record<string, Record<string, unknown>>;
-        const rawServers = { ...userServers, ...projectServers };
 
         const mcpServers: Record<string, AgentMcpEntry> = {};
         const remoteMcpServers: Record<string, PortableRemoteMcpMetadata> = {};
-        for (const [name, entry] of Object.entries(rawServers)) {
+        for (const [name, entry] of Object.entries(userServers)) {
           if (isClaudeRemoteEntry(entry)) {
-            const url = typeof entry.url === 'string' ? entry.url : '';
-            remoteMcpServers[name] = {
-              transport: entry.type === 'sse' ? 'sse' : 'http',
-              url,
-              headers: parseEnvObject(entry.headers),
-              env: parseEnvObject(entry.env),
-            };
-            continue;
+            remoteMcpServers[name] = { transport: entry.type === 'sse' ? 'sse' : 'http', url: String(entry.url ?? ''), headers: parseEnvObject(entry.headers), env: parseEnvObject(entry.env) };
+          } else {
+            mcpServers[name] = { command: String(entry.command ?? ''), args: Array.isArray(entry.args) ? entry.args.map(String) : undefined, env: parseEnvObject(entry.env) };
           }
+        }
 
-          mcpServers[name] = {
-            command: String(entry.command ?? ''),
-            args: Array.isArray(entry.args) ? entry.args.map(String) : undefined,
-            env: parseEnvObject(entry.env),
-          };
+        const projectMcpServers: Record<string, AgentMcpEntry> = {};
+        const projectRemoteMcpServers: Record<string, PortableRemoteMcpMetadata> = {};
+        for (const [name, entry] of Object.entries(projectServers)) {
+          if (isClaudeRemoteEntry(entry)) {
+            projectRemoteMcpServers[name] = { transport: entry.type === 'sse' ? 'sse' : 'http', url: String(entry.url ?? ''), headers: parseEnvObject(entry.headers), env: parseEnvObject(entry.env) };
+          } else {
+            projectMcpServers[name] = { command: String(entry.command ?? ''), args: Array.isArray(entry.args) ? entry.args.map(String) : undefined, env: parseEnvObject(entry.env) };
+          }
         }
 
         const skills = await readClaudePlugins();
-        const filtered = filterPluginOwnedMcps({ mcpServers, remoteMcpServers, skills });
+        const filtered = filterPluginOwnedMcps({ mcpServers, remoteMcpServers, projectMcpServers, projectRemoteMcpServers, skills });
         return {
           agent: 'claude',
           configPath,
           exists: true,
           mcpServers: filtered.mcpServers,
           remoteMcpServers: filtered.remoteMcpServers,
+          projectMcpServers: filtered.projectMcpServers,
+          projectRemoteMcpServers: filtered.projectRemoteMcpServers,
           skills,
         };
       } catch {
@@ -102,6 +103,8 @@ export function createClaudeReader(): AgentConfigReader {
           exists: false,
           mcpServers: {},
           remoteMcpServers: {},
+          projectMcpServers: {},
+          projectRemoteMcpServers: {},
           skills,
         };
       }
@@ -111,20 +114,23 @@ export function createClaudeReader(): AgentConfigReader {
 
 export function createCodexReader(): AgentConfigReader {
   return {
-    async read() {
+    async read(options) {
       const configPath = path.join(homedir(), '.codex', 'config.toml');
+      const { projectMcpServers, projectRemoteMcpServers } = await readBrainctlProjectMcps(options.cwd, 'codex');
 
       try {
         const source = await readFile(configPath, 'utf8');
         const { mcpServers, remoteMcpServers } = parseCodexToml(source);
         const skills = await readCodexSkills();
-        const filtered = filterPluginOwnedMcps({ mcpServers, remoteMcpServers, skills });
+        const filtered = filterPluginOwnedMcps({ mcpServers, remoteMcpServers, projectMcpServers, projectRemoteMcpServers, skills });
         return {
           agent: 'codex',
           configPath,
           exists: true,
           mcpServers: filtered.mcpServers,
           remoteMcpServers: filtered.remoteMcpServers,
+          projectMcpServers: filtered.projectMcpServers,
+          projectRemoteMcpServers: filtered.projectRemoteMcpServers,
           skills,
         };
       } catch {
@@ -135,6 +141,8 @@ export function createCodexReader(): AgentConfigReader {
           exists: false,
           mcpServers: {},
           remoteMcpServers: {},
+          projectMcpServers,
+          projectRemoteMcpServers,
           skills,
         };
       }
@@ -144,8 +152,9 @@ export function createCodexReader(): AgentConfigReader {
 
 export function createGeminiReader(): AgentConfigReader {
   return {
-    async read() {
+    async read(options) {
       const configPath = path.join(homedir(), '.gemini', 'settings.json');
+      const { projectMcpServers, projectRemoteMcpServers } = await readBrainctlProjectMcps(options.cwd, 'gemini');
 
       let rawServers: Record<string, Record<string, unknown>> = {};
       let exists = false;
@@ -166,50 +175,73 @@ export function createGeminiReader(): AgentConfigReader {
           remoteMcpServers[name] = remoteEntry;
           continue;
         }
-
-        mcpServers[name] = {
-          command: String(entry.command ?? ''),
-          args: Array.isArray(entry.args) ? entry.args.map(String) : undefined,
-          env: parseEnvObject(entry.env),
-        };
+        mcpServers[name] = { command: String(entry.command ?? ''), args: Array.isArray(entry.args) ? entry.args.map(String) : undefined, env: parseEnvObject(entry.env) };
       }
 
       const skills = await readGeminiSkills();
-      const filtered = filterPluginOwnedMcps({ mcpServers, remoteMcpServers, skills });
+      const filtered = filterPluginOwnedMcps({ mcpServers, remoteMcpServers, projectMcpServers, projectRemoteMcpServers, skills });
       return {
         agent: 'gemini',
         configPath,
         exists,
         mcpServers: filtered.mcpServers,
         remoteMcpServers: filtered.remoteMcpServers,
+        projectMcpServers: filtered.projectMcpServers,
+        projectRemoteMcpServers: filtered.projectRemoteMcpServers,
         skills,
       };
     },
   };
 }
 
+async function readBrainctlProjectMcps(
+  cwd: string,
+  agent: 'codex' | 'gemini'
+): Promise<{ projectMcpServers: Record<string, AgentMcpEntry>; projectRemoteMcpServers: Record<string, PortableRemoteMcpMetadata> }> {
+  try {
+    const filePath = path.join(cwd, '.brainctl', 'project-mcps.json');
+    const data = JSON.parse(await readFile(filePath, 'utf8')) as Record<string, unknown>;
+    const agentData = (data[agent] ?? {}) as Record<string, unknown>;
+    const rawServers = (agentData.mcpServers ?? {}) as Record<string, Record<string, unknown>>;
+
+    const projectMcpServers: Record<string, AgentMcpEntry> = {};
+    const projectRemoteMcpServers: Record<string, PortableRemoteMcpMetadata> = {};
+    for (const [name, entry] of Object.entries(rawServers)) {
+      if (typeof entry.url === 'string' && entry.url) {
+        projectRemoteMcpServers[name] = { transport: (entry.transport as 'http' | 'sse') ?? 'http', url: entry.url, headers: parseEnvObject(entry.headers), env: parseEnvObject(entry.env) };
+      } else {
+        projectMcpServers[name] = { command: String(entry.command ?? ''), args: Array.isArray(entry.args) ? entry.args.map(String) : undefined, env: parseEnvObject(entry.env) };
+      }
+    }
+    return { projectMcpServers, projectRemoteMcpServers };
+  } catch {
+    return { projectMcpServers: {}, projectRemoteMcpServers: {} };
+  }
+}
+
 function filterPluginOwnedMcps(options: {
   mcpServers: Record<string, AgentMcpEntry>;
   remoteMcpServers: Record<string, PortableRemoteMcpMetadata>;
+  projectMcpServers: Record<string, AgentMcpEntry>;
+  projectRemoteMcpServers: Record<string, PortableRemoteMcpMetadata>;
   skills: AgentSkillEntry[];
 }): {
   mcpServers: Record<string, AgentMcpEntry>;
   remoteMcpServers: Record<string, PortableRemoteMcpMetadata>;
+  projectMcpServers: Record<string, AgentMcpEntry>;
+  projectRemoteMcpServers: Record<string, PortableRemoteMcpMetadata>;
 } {
-  const pluginOwned = new Set(
-    options.skills.flatMap((skill) => skill.pluginMcps ?? [])
-  );
+  const pluginOwned = new Set(options.skills.flatMap((skill) => skill.pluginMcps ?? []));
   if (pluginOwned.size === 0) {
-    return { mcpServers: options.mcpServers, remoteMcpServers: options.remoteMcpServers };
+    return { mcpServers: options.mcpServers, remoteMcpServers: options.remoteMcpServers, projectMcpServers: options.projectMcpServers, projectRemoteMcpServers: options.projectRemoteMcpServers };
   }
-
-  const mcpServers = Object.fromEntries(
-    Object.entries(options.mcpServers).filter(([key]) => !pluginOwned.has(key))
-  );
-  const remoteMcpServers = Object.fromEntries(
-    Object.entries(options.remoteMcpServers).filter(([key]) => !pluginOwned.has(key))
-  );
-  return { mcpServers, remoteMcpServers };
+  const notOwned = ([key]: [string, unknown]) => !pluginOwned.has(key);
+  return {
+    mcpServers: Object.fromEntries(Object.entries(options.mcpServers).filter(notOwned)),
+    remoteMcpServers: Object.fromEntries(Object.entries(options.remoteMcpServers).filter(notOwned)),
+    projectMcpServers: Object.fromEntries(Object.entries(options.projectMcpServers).filter(notOwned)),
+    projectRemoteMcpServers: Object.fromEntries(Object.entries(options.projectRemoteMcpServers).filter(notOwned)),
+  };
 }
 
 function parseEnvObject(value: unknown): Record<string, string> | undefined {

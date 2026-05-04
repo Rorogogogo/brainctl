@@ -29,11 +29,13 @@ export interface AgentConfigService {
     key: string;
     entry?: AgentMcpEntry;
     remoteEntry?: PortableRemoteMcpMetadata;
+    scope?: 'global' | 'project';
   }): Promise<void>;
   removeMcp(options: {
     cwd: string;
     agent: AgentName;
     key: string;
+    scope?: 'global' | 'project';
   }): Promise<void>;
   copySkill(options: {
     sourceAgent: AgentName;
@@ -74,7 +76,7 @@ export function createAgentConfigService(
     },
 
     async addMcp(options) {
-      const { cwd, agent, key, entry, remoteEntry } = options;
+      const { cwd, agent, key, entry, remoteEntry, scope = 'global' } = options;
       const preflight = await mcpPreflightService.execute({ cwd, agent, key, entry, remoteEntry });
       const firstError = preflight.checks.find((check) => check.status === 'error');
       if (firstError) {
@@ -84,42 +86,55 @@ export function createAgentConfigService(
       }
 
       if (agent === 'claude') {
-        await mutateClaudeConfig(cwd, (servers) => {
+        await mutateClaudeConfig(cwd, scope, (servers) => {
           servers[key] = remoteEntry ? toClaudeRemoteEntry(remoteEntry) : toClaudeEntry(entry!);
         });
       } else if (agent === 'codex') {
-        await mutateCodexConfig(cwd, (state) => {
-          delete state.mcpServers[key];
-          delete state.remoteMcpServers[key];
-          if (remoteEntry) {
-            state.remoteMcpServers[key] = remoteEntry;
-          } else {
-            state.mcpServers[key] = entry!;
-          }
-        });
+        if (scope === 'project') {
+          await mutateBrainctlProjectMcps(cwd, 'codex', (state) => {
+            delete state.mcpServers[key];
+            delete state.remoteMcpServers[key];
+            if (remoteEntry) { state.remoteMcpServers[key] = remoteEntry; } else { state.mcpServers[key] = entry!; }
+          });
+        } else {
+          await mutateCodexConfig(cwd, (state) => {
+            delete state.mcpServers[key];
+            delete state.remoteMcpServers[key];
+            if (remoteEntry) { state.remoteMcpServers[key] = remoteEntry; } else { state.mcpServers[key] = entry!; }
+          });
+        }
       } else if (agent === 'gemini') {
-        await mutateGeminiConfig(cwd, (servers) => {
-          servers[key] = remoteEntry ? toGeminiRemoteEntry(remoteEntry) : toGeminiEntry(entry!);
-        });
+        if (scope === 'project') {
+          await mutateBrainctlProjectMcps(cwd, 'gemini', (state) => {
+            delete state.mcpServers[key];
+            delete state.remoteMcpServers[key];
+            if (remoteEntry) { state.remoteMcpServers[key] = remoteEntry; } else { state.mcpServers[key] = entry!; }
+          });
+        } else {
+          await mutateGeminiConfig(cwd, (servers) => {
+            servers[key] = remoteEntry ? toGeminiRemoteEntry(remoteEntry) : toGeminiEntry(entry!);
+          });
+        }
       }
     },
 
     async removeMcp(options) {
-      const { cwd, agent, key } = options;
+      const { cwd, agent, key, scope = 'global' } = options;
 
       if (agent === 'claude') {
-        await mutateClaudeConfig(cwd, (servers) => {
-          delete servers[key];
-        });
+        await mutateClaudeConfig(cwd, scope, (servers) => { delete servers[key]; });
       } else if (agent === 'codex') {
-        await mutateCodexConfig(cwd, (state) => {
-          delete state.mcpServers[key];
-          delete state.remoteMcpServers[key];
-        });
+        if (scope === 'project') {
+          await mutateBrainctlProjectMcps(cwd, 'codex', (state) => { delete state.mcpServers[key]; delete state.remoteMcpServers[key]; });
+        } else {
+          await mutateCodexConfig(cwd, (state) => { delete state.mcpServers[key]; delete state.remoteMcpServers[key]; });
+        }
       } else if (agent === 'gemini') {
-        await mutateGeminiConfig(cwd, (servers) => {
-          delete servers[key];
-        });
+        if (scope === 'project') {
+          await mutateBrainctlProjectMcps(cwd, 'gemini', (state) => { delete state.mcpServers[key]; delete state.remoteMcpServers[key]; });
+        } else {
+          await mutateGeminiConfig(cwd, (servers) => { delete servers[key]; });
+        }
       }
     },
 
@@ -156,6 +171,7 @@ export function createAgentConfigService(
 
 async function mutateClaudeConfig(
   cwd: string,
+  scope: 'global' | 'project',
   mutate: (servers: Record<string, unknown>) => void
 ): Promise<void> {
   const configPath = path.join(homedir(), '.claude.json');
@@ -168,19 +184,19 @@ async function mutateClaudeConfig(
     // fresh config
   }
 
-  // Apply mutation to user-scoped (top-level) MCPs
-  const userServers = (existing.mcpServers ?? {}) as Record<string, unknown>;
-  mutate(userServers);
-  existing.mcpServers = userServers;
-
-  // Apply mutation to project-scoped MCPs
-  const projects = (existing.projects ?? {}) as Record<string, Record<string, unknown>>;
-  const projectConfig = projects[cwd] ?? {};
-  const servers = (projectConfig.mcpServers ?? {}) as Record<string, unknown>;
-  mutate(servers);
-  projectConfig.mcpServers = servers;
-  projects[cwd] = projectConfig;
-  existing.projects = projects;
+  if (scope === 'global') {
+    const servers = (existing.mcpServers ?? {}) as Record<string, unknown>;
+    mutate(servers);
+    existing.mcpServers = servers;
+  } else {
+    const projects = (existing.projects ?? {}) as Record<string, Record<string, unknown>>;
+    const projectConfig = (projects[cwd] ?? {}) as Record<string, unknown>;
+    const servers = (projectConfig.mcpServers ?? {}) as Record<string, unknown>;
+    mutate(servers);
+    projectConfig.mcpServers = servers;
+    projects[cwd] = projectConfig;
+    existing.projects = projects;
+  }
 
   await atomicWriteJson(configPath, existing);
 }
@@ -331,6 +347,49 @@ function toGeminiRemoteEntry(entry: PortableRemoteMcpMetadata): Record<string, u
     ...(entry.headers ? { headers: entry.headers } : {}),
     ...(entry.env ? { env: entry.env } : {}),
   };
+}
+
+/* ---- Brainctl project MCPs: .brainctl/project-mcps.json ---- */
+
+async function mutateBrainctlProjectMcps(
+  cwd: string,
+  agent: 'codex' | 'gemini',
+  mutate: (state: { mcpServers: Record<string, AgentMcpEntry>; remoteMcpServers: Record<string, PortableRemoteMcpMetadata> }) => void
+): Promise<void> {
+  const filePath = path.join(cwd, '.brainctl', 'project-mcps.json');
+  let data: Record<string, unknown> = {};
+  try {
+    data = JSON.parse(await readFile(filePath, 'utf8')) as Record<string, unknown>;
+  } catch {
+    // fresh file
+  }
+
+  const agentData = (data[agent] ?? {}) as Record<string, unknown>;
+  const rawServers = (agentData.mcpServers ?? {}) as Record<string, Record<string, unknown>>;
+
+  const mcpServers: Record<string, AgentMcpEntry> = {};
+  const remoteMcpServers: Record<string, PortableRemoteMcpMetadata> = {};
+  for (const [name, entry] of Object.entries(rawServers)) {
+    if (typeof entry.url === 'string' && entry.url) {
+      remoteMcpServers[name] = { transport: (entry.transport as 'http' | 'sse') ?? 'http', url: entry.url };
+    } else {
+      mcpServers[name] = { command: String(entry.command ?? ''), args: Array.isArray(entry.args) ? entry.args.map(String) : undefined };
+    }
+  }
+
+  mutate({ mcpServers, remoteMcpServers });
+
+  const newServers: Record<string, unknown> = {};
+  for (const [name, entry] of Object.entries(mcpServers)) {
+    newServers[name] = { command: entry.command, ...(entry.args ? { args: entry.args } : {}), ...(entry.env ? { env: entry.env } : {}) };
+  }
+  for (const [name, entry] of Object.entries(remoteMcpServers)) {
+    newServers[name] = { transport: entry.transport, url: entry.url };
+  }
+  data[agent] = { mcpServers: newServers };
+
+  await mkdir(path.join(cwd, '.brainctl'), { recursive: true });
+  await atomicWriteJson(filePath, data);
 }
 
 /* ---- Shared helpers ---- */

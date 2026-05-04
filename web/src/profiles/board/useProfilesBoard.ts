@@ -35,6 +35,8 @@ interface SkillPreflightResult {
 interface PendingKeyMaps {
   added: Map<string, Set<string>>;
   removed: Map<string, Set<string>>;
+  projectAdded: Map<string, Set<string>>;
+  projectRemoved: Map<string, Set<string>>;
   skillAdded: Map<string, Set<string>>;
   skillRemoved: Map<string, Set<string>>;
   pluginAdded: Map<string, Set<string>>;
@@ -76,6 +78,8 @@ export function applyPendingChanges(
     ...config,
     mcpServers: { ...config.mcpServers },
     remoteMcpServers: { ...config.remoteMcpServers },
+    projectMcpServers: { ...(config.projectMcpServers ?? {}) },
+    projectRemoteMcpServers: { ...(config.projectRemoteMcpServers ?? {}) },
     skills: [...config.skills],
   }));
 
@@ -84,15 +88,17 @@ export function applyPendingChanges(
     if (!config) continue;
 
     if (change.category === 'mcp') {
+      const mcpTarget = change.scope === 'project' ? config.projectMcpServers : config.mcpServers;
+      const remoteMcpTarget = change.scope === 'project' ? config.projectRemoteMcpServers : config.remoteMcpServers;
       if (change.type === 'add' && change.entry) {
-        config.mcpServers[change.key] = change.entry;
-        delete config.remoteMcpServers[change.key];
+        mcpTarget[change.key] = change.entry;
+        delete remoteMcpTarget[change.key];
       } else if (change.type === 'add' && change.remoteEntry) {
-        config.remoteMcpServers[change.key] = change.remoteEntry;
-        delete config.mcpServers[change.key];
+        remoteMcpTarget[change.key] = change.remoteEntry;
+        delete mcpTarget[change.key];
       } else if (change.type === 'remove') {
-        delete config.mcpServers[change.key];
-        delete config.remoteMcpServers[change.key];
+        delete mcpTarget[change.key];
+        delete remoteMcpTarget[change.key];
       }
       continue;
     }
@@ -125,6 +131,8 @@ export function applyPendingChanges(
 function getPendingKeys(changes: PendingChange[]): PendingKeyMaps {
   const added = new Map<string, Set<string>>();
   const removed = new Map<string, Set<string>>();
+  const projectAdded = new Map<string, Set<string>>();
+  const projectRemoved = new Map<string, Set<string>>();
   const skillAdded = new Map<string, Set<string>>();
   const skillRemoved = new Map<string, Set<string>>();
   const pluginAdded = new Map<string, Set<string>>();
@@ -138,21 +146,22 @@ function getPendingKeys(changes: PendingChange[]): PendingKeyMaps {
       continue;
     }
 
-    const isSkill = change.category === 'skill';
-    const map =
-      change.type === 'add'
-        ? isSkill
-          ? skillAdded
-          : added
-        : isSkill
-          ? skillRemoved
-          : removed;
+    if (change.category === 'skill') {
+      const map = change.type === 'add' ? skillAdded : skillRemoved;
+      if (!map.has(change.agent)) map.set(change.agent, new Set());
+      map.get(change.agent)?.add(change.key);
+      continue;
+    }
 
+    // MCP — track by scope
+    const map = change.scope === 'project'
+      ? (change.type === 'add' ? projectAdded : projectRemoved)
+      : (change.type === 'add' ? added : removed);
     if (!map.has(change.agent)) map.set(change.agent, new Set());
     map.get(change.agent)?.add(change.key);
   }
 
-  return { added, removed, skillAdded, skillRemoved, pluginAdded, pluginRemoved };
+  return { added, removed, projectAdded, projectRemoved, skillAdded, skillRemoved, pluginAdded, pluginRemoved };
 }
 
 export function buildChangeSummaryLines(changes: PendingChange[]): string[] {
@@ -164,10 +173,11 @@ export function buildChangeSummaryLines(changes: PendingChange[]): string[] {
     }
 
     const prefix = change.category === 'skill' ? '[Skill] ' : '[MCP] ';
+    const scopeTag = change.category === 'mcp' && change.scope === 'project' ? '(project) ' : '';
 
     return change.type === 'add'
-      ? `+ ${prefix}${change.key} → ${AGENT_LABELS[change.agent] ?? change.agent}`
-      : `- ${prefix}${change.key} from ${AGENT_LABELS[change.agent] ?? change.agent}`;
+      ? `+ ${prefix}${scopeTag}${change.key} → ${AGENT_LABELS[change.agent] ?? change.agent}`
+      : `- ${prefix}${scopeTag}${change.key} from ${AGENT_LABELS[change.agent] ?? change.agent}`;
   });
 }
 
@@ -271,6 +281,7 @@ export function finalizeResolvedPendingAddition({
 export function useProfilesBoard() {
   const [agentConfigs, setAgentConfigs] = useState<AgentLiveConfig[]>([]);
   const [pendingChanges, setPendingChanges] = useState<PendingChange[]>([]);
+  const [columnScopes, setColumnScopesState] = useState<Record<string, 'global' | 'project'>>({});
   const [activeId, setActiveId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -279,12 +290,18 @@ export function useProfilesBoard() {
   const [refreshState, setRefreshState] = useState<'idle' | 'loading' | 'success'>('idle');
   const agentConfigsRef = useRef(agentConfigs);
   const pendingChangesRef = useRef(pendingChanges);
+  const columnScopesRef = useRef(columnScopes);
   const isEditModeRef = useRef(isEditMode);
   const preflightGenerationRef = useRef(0);
 
   agentConfigsRef.current = agentConfigs;
   pendingChangesRef.current = pendingChanges;
+  columnScopesRef.current = columnScopes;
   isEditModeRef.current = isEditMode;
+
+  const setColumnScope = useCallback((agent: string, scope: 'global' | 'project') => {
+    setColumnScopesState((prev) => ({ ...prev, [agent]: scope }));
+  }, []);
 
   const showFeedback = useCallback((type: 'success' | 'error', message: string) => {
     if (type === 'success') {
@@ -377,16 +394,16 @@ export function useProfilesBoard() {
   );
 
   const handleStagedRemove = useCallback(
-    (agent: string, category: 'mcp' | 'skill' | 'plugin', key: string) => {
+    (agent: string, category: 'mcp' | 'skill' | 'plugin', key: string, scope: 'global' | 'project' = 'global') => {
       setPendingChanges((previous) => {
         const alreadyStaged = previous.some(
-          (change) => change.agent === agent && change.category === category && change.key === key
+          (change) => change.agent === agent && change.category === category && change.key === key && (category !== 'mcp' || change.scope === scope)
         );
         if (alreadyStaged) return previous;
 
         return [
           ...previous,
-          { id: nextChangeId(), type: 'remove', category, agent, key },
+          { id: nextChangeId(), type: 'remove', category, agent, key, scope },
         ];
       });
     },
@@ -426,13 +443,14 @@ export function useProfilesBoard() {
                 key: change.key,
                 entry: change.entry,
                 remoteEntry: change.remoteEntry,
+                scope: change.scope,
               }),
             });
             return;
           }
 
           if (change.type === 'remove') {
-            await fetchJson(`/api/agents/${change.agent}/mcps/${encodeURIComponent(change.key)}`, {
+            await fetchJson(`/api/agents/${change.agent}/mcps/${encodeURIComponent(change.key)}?scope=${change.scope}`, {
               method: 'DELETE',
             });
             return;
@@ -597,8 +615,12 @@ export function useProfilesBoard() {
       if (!sourceConfig) return;
 
       if (source.category === 'mcp') {
-        const entry = sourceConfig.mcpServers[source.key];
-        const remoteEntry = sourceConfig.remoteMcpServers[source.key];
+        const sourceScope = columnScopesRef.current[source.agent] ?? 'global';
+        const targetScope = columnScopesRef.current[target.agent] ?? 'global';
+        const sourceMcpServers = sourceScope === 'project' ? sourceConfig.projectMcpServers : sourceConfig.mcpServers;
+        const sourceRemoteMcpServers = sourceScope === 'project' ? sourceConfig.projectRemoteMcpServers : sourceConfig.remoteMcpServers;
+        const entry = sourceMcpServers[source.key];
+        const remoteEntry = sourceRemoteMcpServers[source.key];
         if (!entry && !remoteEntry) return;
 
         const alreadyStaged = pendingChanges.some(
@@ -606,7 +628,8 @@ export function useProfilesBoard() {
             change.type === 'add' &&
             change.category === 'mcp' &&
             change.agent === target.agent &&
-            change.key === source.key
+            change.key === source.key &&
+            change.scope === targetScope
         );
         if (alreadyStaged) return;
 
@@ -616,6 +639,7 @@ export function useProfilesBoard() {
           category: 'mcp',
           agent: target.agent,
           key: source.key,
+          scope: targetScope,
           entry,
           remoteEntry,
           sourceAgent: source.agent,
@@ -674,6 +698,7 @@ export function useProfilesBoard() {
           category: 'skill',
           agent: target.agent,
           key: source.key,
+          scope: 'global',
           skillEntry: skill,
           sourceAgent: source.agent,
         };
@@ -736,6 +761,7 @@ export function useProfilesBoard() {
         category: 'plugin',
         agent: target.agent,
         key: source.key,
+        scope: 'global',
         pluginEntry: plugin,
         sourceAgent: source.agent,
       };
@@ -792,8 +818,12 @@ export function useProfilesBoard() {
     refreshState,
     isEditMode,
     previewConfigs,
+    columnScopes,
+    setColumnScope,
     pendingAddedMap: pendingKeyMaps.added,
     pendingRemovedMap: pendingKeyMaps.removed,
+    pendingProjectAddedMap: pendingKeyMaps.projectAdded,
+    pendingProjectRemovedMap: pendingKeyMaps.projectRemoved,
     pendingSkillAddedMap: pendingKeyMaps.skillAdded,
     pendingSkillRemovedMap: pendingKeyMaps.skillRemoved,
     pendingPluginAddedMap: pendingKeyMaps.pluginAdded,

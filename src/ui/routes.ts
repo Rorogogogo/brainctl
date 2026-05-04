@@ -353,6 +353,7 @@ export function createUiRouteHandler(
               key?: string;
               entry?: AgentMcpEntry;
               remoteEntry?: PortableRemoteMcpMetadata;
+              scope?: 'global' | 'project';
             };
             if (!data.key || (!data.entry?.command && !data.remoteEntry?.url)) {
               return sendJson(response, 400, { error: 'Missing key and MCP payload' });
@@ -364,6 +365,7 @@ export function createUiRouteHandler(
                 key: data.key,
                 entry: data.entry,
                 remoteEntry: data.remoteEntry,
+                scope: data.scope === 'project' ? 'project' : 'global',
               });
               return sendJson(response, 200, { ok: true });
             } catch (error) {
@@ -372,11 +374,13 @@ export function createUiRouteHandler(
           }
 
           if (request.method === 'DELETE' && mcpKey) {
+            const scope = url.searchParams.get('scope') === 'project' ? 'project' : 'global';
             try {
               await agentConfigService.removeMcp({
                 cwd: dependencies.cwd,
                 agent: agentName,
                 key: mcpKey,
+                scope,
               });
               return sendJson(response, 200, { ok: true });
             } catch (error) {
