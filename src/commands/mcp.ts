@@ -11,15 +11,61 @@ export function registerMcpCommand(program: Command): void {
     .description('Start the brainctl MCP server (stdio transport)')
     .action(async () => {
       killPriorMcpServers();
+      await autoUpdateAndRelaunch();
       process.stdin.on('end', () => process.exit(0));
       process.stdin.on('close', () => process.exit(0));
       await startMcpServer({ cwd: process.cwd() });
       if (!process.env.BRAINCTL_NO_UPDATE_CHECK) {
-        // Fire-and-forget after the server is up so cold-start isn't blocked
-        // on a network round-trip (or `npm install brainctl@latest`).
         void notifyIfOutdated();
       }
     });
+}
+
+export interface AutoUpdateDeps {
+  service?: ReturnType<typeof createUpdateCheckService>;
+  env?: NodeJS.ProcessEnv;
+  log?: (msg: string) => void;
+  relaunch?: (env: NodeJS.ProcessEnv) => number;
+  exit?: (code: number) => void;
+}
+
+export async function autoUpdateAndRelaunch(
+  deps: AutoUpdateDeps = {}
+): Promise<{ updated: boolean; reason?: string }> {
+  const env = deps.env ?? process.env;
+  if (env.BRAINCTL_NO_UPDATE_CHECK) return { updated: false, reason: 'disabled' };
+  if (env.BRAINCTL_NO_AUTO_UPDATE) return { updated: false, reason: 'disabled' };
+  // Guard against a re-launch loop if the new version still reports outdated.
+  if (env.BRAINCTL_SELF_UPDATED === '1') return { updated: false, reason: 'already-updated' };
+
+  const log = deps.log ?? ((m: string) => process.stderr.write(m));
+  const relaunch =
+    deps.relaunch ??
+    ((nextEnv) => {
+      const child = spawnSync(process.execPath, process.argv.slice(1), {
+        stdio: 'inherit',
+        env: nextEnv,
+      });
+      return child.status ?? 0;
+    });
+  const exit = deps.exit ?? ((code) => process.exit(code));
+
+  const service = deps.service ?? createUpdateCheckService();
+  const check = await service.check().catch(() => null);
+  if (!check || !check.isOutdated) return { updated: false, reason: 'up-to-date' };
+
+  log(`brainctl: auto-updating ${check.current} -> ${check.latest}...\n`);
+  const result = await service.selfUpdate();
+  if (!result.success) {
+    log(
+      `brainctl: self-update failed (${result.error ?? 'unknown'}); continuing on ${check.current}\n`
+    );
+    return { updated: false, reason: 'install-failed' };
+  }
+
+  const status = relaunch({ ...env, BRAINCTL_SELF_UPDATED: '1' });
+  exit(status);
+  return { updated: true };
 }
 
 function killPriorMcpServers(): void {
