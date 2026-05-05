@@ -24,8 +24,10 @@ import {
   createProfileSnapshotService,
   defaultBackupProfileName,
 } from '../services/profile/profile-snapshot-service.js';
+import { createRecentProjectsService } from '../services/platform/recent-projects-service.js';
 import type { AgentName } from '../types.js';
 import path from 'node:path';
+import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { spawn } from 'node:child_process';
 
@@ -40,6 +42,8 @@ function resolveCwd(req: import('node:http').IncomingMessage, fallback: string):
 export interface UiRouteDependencies {
   cwd: string;
   statusService?: StatusService;
+  recentsFilePath?: string;
+  claudeJsonPath?: string;
 }
 
 export type UiRouteHandler = (
@@ -62,6 +66,19 @@ export function createUiRouteHandler(
   const mcpPreflightService = createMcpPreflightService();
   const pluginInstallService = createPluginInstallService();
   const skillPreflightService = createSkillPreflightService();
+  const recentsFilePath = dependencies.recentsFilePath ?? path.join(os.homedir(), '.brainctl', 'recents.json');
+  const claudeJsonPath = dependencies.claudeJsonPath ?? path.join(os.homedir(), '.claude.json');
+  const recentProjectsService = createRecentProjectsService({ filePath: recentsFilePath });
+
+  async function readClaudeProjectPaths(): Promise<string[]> {
+    try {
+      const raw = await readFile(claudeJsonPath, 'utf8');
+      const data = JSON.parse(raw) as { projects?: Record<string, unknown> };
+      return Object.keys(data.projects ?? {}).sort();
+    } catch {
+      return [];
+    }
+  }
 
   return async (request, response) => {
     const url = new URL(request.url ?? '/', 'http://localhost');
@@ -231,6 +248,38 @@ export function createUiRouteHandler(
           return sendProfileError(response, error);
         }
       }
+      case '/api/projects': {
+        if (request.method !== 'GET') {
+          return sendJson(response, 405, { error: 'Method not allowed' });
+        }
+        const [claudeProjects, recents] = await Promise.all([
+          readClaudeProjectPaths(),
+          recentProjectsService.read(),
+        ]);
+        return sendJson(response, 200, {
+          current: dependencies.cwd,
+          claudeProjects,
+          recents,
+        });
+      }
+
+      case '/api/projects/recent': {
+        if (request.method !== 'POST') {
+          return sendJson(response, 405, { error: 'Method not allowed' });
+        }
+        const body = await readJsonBody(request);
+        if (!body.ok) {
+          return sendJson(response, 400, { error: 'Invalid JSON body' });
+        }
+        const value = body.value as { cwd?: unknown };
+        const cwd = typeof value?.cwd === 'string' ? value.cwd : '';
+        if (!path.isAbsolute(cwd)) {
+          return sendJson(response, 400, { error: 'cwd must be an absolute path' });
+        }
+        const recents = await recentProjectsService.addRecent(cwd);
+        return sendJson(response, 200, { recents });
+      }
+
       case '/api/profiles/snapshot': {
         if (request.method !== 'POST') {
           return sendJson(response, 405, { error: 'Method not allowed' });
