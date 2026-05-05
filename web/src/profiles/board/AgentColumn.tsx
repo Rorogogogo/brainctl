@@ -37,7 +37,6 @@ function DropAnchorWrapper({ id, children }: { id: string; children?: ReactNode 
 export function AgentColumn({
   config,
   scope,
-  onScopeChange,
   pendingAdded,
   pendingRemoved,
   pendingProjectAdded,
@@ -51,7 +50,6 @@ export function AgentColumn({
 }: {
   config: AgentLiveConfig;
   scope: 'global' | 'project';
-  onScopeChange: (agent: string, scope: 'global' | 'project') => void;
   pendingAdded: Set<string>;
   pendingRemoved: Set<string>;
   pendingProjectAdded: Set<string>;
@@ -216,22 +214,6 @@ export function AgentColumn({
                   ? 'Active'
                   : 'Offline'}
           </span>
-          <div className="flex gap-0.5 rounded-lg border border-zinc-200 bg-zinc-50 p-0.5">
-            <button
-              className={`rounded-md px-2.5 py-1 text-[11px] font-medium transition-colors ${scope === 'global' ? 'bg-white text-zinc-900 shadow-sm' : 'text-zinc-500 hover:text-zinc-700'}`}
-              type="button"
-              onClick={() => onScopeChange(config.agent, 'global')}
-            >
-              Global
-            </button>
-            <button
-              className={`rounded-md px-2.5 py-1 text-[11px] font-medium transition-colors ${scope === 'project' ? 'bg-white text-zinc-900 shadow-sm' : 'text-zinc-500 hover:text-zinc-700'}`}
-              type="button"
-              onClick={() => onScopeChange(config.agent, 'project')}
-            >
-              Project
-            </button>
-          </div>
         </div>
       </div>
 

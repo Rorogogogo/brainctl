@@ -14,11 +14,14 @@ import {
   RefreshCw,
   Save,
 } from 'lucide-react';
+import { useState } from 'react';
 
 import ConfirmDialog from '../components/ConfirmDialog.js';
 import { AgentColumn } from './board/AgentColumn.js';
+import { ConfirmSwitchProjectModal } from './board/ConfirmSwitchProjectModal.js';
 import { DragOverlayCard, snapToPointer } from './board/DragOverlayCard.js';
 import { PendingChangesBar } from './board/PendingChangesBar.js';
+import { ProjectBar } from './board/ProjectBar.js';
 import { customCollisionDetection } from './board/dnd.js';
 import { useProfilesBoard } from './board/useProfilesBoard.js';
 
@@ -30,8 +33,10 @@ export default function ProfilesView() {
     refreshState,
     isEditMode,
     previewConfigs,
-    columnScopes,
-    setColumnScope,
+    boardScope,
+    setBoardScope,
+    activeProject,
+    setActiveProject,
     pendingChanges,
     pendingAddedMap,
     pendingRemovedMap,
@@ -58,6 +63,17 @@ export default function ProfilesView() {
     setIsEditMode,
   } = useProfilesBoard();
 
+  const [pendingSwitchTarget, setPendingSwitchTarget] = useState<string | null>(null);
+
+  const requestSwitch = (target: string) => {
+    if (target === activeProject) return;
+    if (pendingChanges.length > 0) {
+      setPendingSwitchTarget(target);
+    } else {
+      setActiveProject(target);
+    }
+  };
+
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } })
   );
@@ -74,6 +90,12 @@ export default function ProfilesView() {
 
   return (
     <div className="grid gap-4 w-full">
+      <ProjectBar
+        scope={boardScope}
+        onScopeChange={setBoardScope}
+        activeProject={activeProject}
+        onActiveProjectChange={requestSwitch}
+      />
       <div className="flex flex-col items-stretch gap-4 pb-4 border-b border-zinc-200/60 lg:flex-row lg:items-end lg:justify-between">
         <div className="grid gap-1">
           <h3 className="text-xl font-semibold tracking-tight text-zinc-900 m-0">Local agents</h3>
@@ -153,8 +175,7 @@ export default function ProfilesView() {
             >
               <AgentColumn
                 config={config}
-                scope={columnScopes[config.agent] ?? 'global'}
-                onScopeChange={setColumnScope}
+                scope={boardScope}
                 pendingAdded={pendingAddedMap.get(config.agent) ?? new Set()}
                 pendingRemoved={pendingRemovedMap.get(config.agent) ?? new Set()}
                 pendingProjectAdded={pendingProjectAddedMap.get(config.agent) ?? new Set()}
@@ -200,6 +221,24 @@ export default function ProfilesView() {
           </ul>
         </div>
       </ConfirmDialog>
+
+      {pendingSwitchTarget && (
+        <ConfirmSwitchProjectModal
+          pendingCount={pendingChanges.length}
+          targetProject={pendingSwitchTarget}
+          onCancel={() => setPendingSwitchTarget(null)}
+          onDiscardAndSwitch={() => {
+            handleDiscardAll();
+            setActiveProject(pendingSwitchTarget);
+            setPendingSwitchTarget(null);
+          }}
+          onSaveAndSwitch={async () => {
+            await handleConfirmSave();
+            setActiveProject(pendingSwitchTarget);
+            setPendingSwitchTarget(null);
+          }}
+        />
+      )}
     </div>
   );
 }

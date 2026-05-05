@@ -278,10 +278,17 @@ export function finalizeResolvedPendingAddition({
   };
 }
 
+function withCwd(url: string, cwd: string): string {
+  if (!cwd) return url;
+  const sep = url.includes('?') ? '&' : '?';
+  return `${url}${sep}cwd=${encodeURIComponent(cwd)}`;
+}
+
 export function useProfilesBoard() {
   const [agentConfigs, setAgentConfigs] = useState<AgentLiveConfig[]>([]);
   const [pendingChanges, setPendingChanges] = useState<PendingChange[]>([]);
-  const [columnScopes, setColumnScopesState] = useState<Record<string, 'global' | 'project'>>({});
+  const [boardScope, setBoardScopeState] = useState<'global' | 'project'>('global');
+  const [activeProject, setActiveProjectState] = useState<string>('');
   const [activeId, setActiveId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -290,17 +297,23 @@ export function useProfilesBoard() {
   const [refreshState, setRefreshState] = useState<'idle' | 'loading' | 'success'>('idle');
   const agentConfigsRef = useRef(agentConfigs);
   const pendingChangesRef = useRef(pendingChanges);
-  const columnScopesRef = useRef(columnScopes);
+  const boardScopeRef = useRef(boardScope);
+  const activeProjectRef = useRef(activeProject);
   const isEditModeRef = useRef(isEditMode);
   const preflightGenerationRef = useRef(0);
 
   agentConfigsRef.current = agentConfigs;
   pendingChangesRef.current = pendingChanges;
-  columnScopesRef.current = columnScopes;
+  boardScopeRef.current = boardScope;
+  activeProjectRef.current = activeProject;
   isEditModeRef.current = isEditMode;
 
-  const setColumnScope = useCallback((agent: string, scope: 'global' | 'project') => {
-    setColumnScopesState((prev) => ({ ...prev, [agent]: scope }));
+  const setBoardScope = useCallback((scope: 'global' | 'project') => {
+    setBoardScopeState(scope);
+  }, []);
+
+  const setActiveProject = useCallback((next: string) => {
+    setActiveProjectState(next);
   }, []);
 
   const showFeedback = useCallback((type: 'success' | 'error', message: string) => {
@@ -315,9 +328,22 @@ export function useProfilesBoard() {
     preflightGenerationRef.current += 1;
   }, []);
 
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await fetchJson<{ current: string }>('/api/projects');
+        if (!cancelled) setActiveProjectState(res.current);
+      } catch {
+        // leave empty; routes fall back to server cwd
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
   const fetchLiveConfigs = useCallback(async (options?: { suppressErrorToast?: boolean }) => {
     try {
-      const configs = await fetchJson<AgentLiveConfig[]>('/api/agents/live');
+      const configs = await fetchJson<AgentLiveConfig[]>(withCwd('/api/agents/live', activeProjectRef.current));
       setAgentConfigs(configs);
       return configs;
     } catch (error) {
@@ -360,7 +386,7 @@ export function useProfilesBoard() {
         setLoading(false);
       }
     })();
-  }, [fetchLiveConfigs]);
+  }, [fetchLiveConfigs, activeProject]);
 
   const previewConfigs = useMemo(
     () => applyPendingChanges(agentConfigs, pendingChanges),
@@ -436,7 +462,7 @@ export function useProfilesBoard() {
       const result = await applyPendingChangesWithApi(pendingChanges, async (change) => {
         if (change.category === 'mcp') {
           if (change.type === 'add' && (change.entry || change.remoteEntry)) {
-            await fetchJson(`/api/agents/${change.agent}/mcps`, {
+            await fetchJson(withCwd(`/api/agents/${change.agent}/mcps`, activeProjectRef.current), {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
@@ -450,7 +476,7 @@ export function useProfilesBoard() {
           }
 
           if (change.type === 'remove') {
-            await fetchJson(`/api/agents/${change.agent}/mcps/${encodeURIComponent(change.key)}?scope=${change.scope}`, {
+            await fetchJson(withCwd(`/api/agents/${change.agent}/mcps/${encodeURIComponent(change.key)}?scope=${change.scope}`, activeProjectRef.current), {
               method: 'DELETE',
             });
             return;
@@ -463,7 +489,7 @@ export function useProfilesBoard() {
 
         if (change.category === 'skill') {
           if (change.type === 'add' && change.sourceAgent) {
-            await fetchJson(`/api/agents/${change.agent}/skills`, {
+            await fetchJson(withCwd(`/api/agents/${change.agent}/skills`, activeProjectRef.current), {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
@@ -476,7 +502,7 @@ export function useProfilesBoard() {
           }
 
           if (change.type === 'remove') {
-            await fetchJson(`/api/agents/${change.agent}/skills/${encodeURIComponent(change.key)}`, {
+            await fetchJson(withCwd(`/api/agents/${change.agent}/skills/${encodeURIComponent(change.key)}`, activeProjectRef.current), {
               method: 'DELETE',
             });
             return;
@@ -488,7 +514,7 @@ export function useProfilesBoard() {
         }
 
         if (change.type === 'add' && change.sourceAgent) {
-          await fetchJson(`/api/agents/${change.agent}/plugins`, {
+          await fetchJson(withCwd(`/api/agents/${change.agent}/plugins`, activeProjectRef.current), {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -500,7 +526,7 @@ export function useProfilesBoard() {
         }
 
         if (change.type === 'remove') {
-          await fetchJson(`/api/agents/${change.agent}/plugins/${encodeURIComponent(change.key)}`, {
+          await fetchJson(withCwd(`/api/agents/${change.agent}/plugins/${encodeURIComponent(change.key)}`, activeProjectRef.current), {
             method: 'DELETE',
           });
           return;
@@ -615,8 +641,8 @@ export function useProfilesBoard() {
       if (!sourceConfig) return;
 
       if (source.category === 'mcp') {
-        const sourceScope = columnScopesRef.current[source.agent] ?? 'global';
-        const targetScope = columnScopesRef.current[target.agent] ?? 'global';
+        const sourceScope = boardScopeRef.current;
+        const targetScope = boardScopeRef.current;
         const sourceMcpServers = sourceScope === 'project' ? sourceConfig.projectMcpServers : sourceConfig.mcpServers;
         const sourceRemoteMcpServers = sourceScope === 'project' ? sourceConfig.projectRemoteMcpServers : sourceConfig.remoteMcpServers;
         const entry = sourceMcpServers[source.key];
@@ -654,7 +680,7 @@ export function useProfilesBoard() {
         void (async () => {
           try {
             const preflight = await fetchJson<McpPreflightResult>(
-              `/api/agents/${target.agent}/mcps/check`,
+              withCwd(`/api/agents/${target.agent}/mcps/check`, activeProjectRef.current),
               {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -712,7 +738,7 @@ export function useProfilesBoard() {
         void (async () => {
           try {
             const preflight = await fetchJson<SkillPreflightResult>(
-              `/api/agents/${target.agent}/skills/check`,
+              withCwd(`/api/agents/${target.agent}/skills/check`, activeProjectRef.current),
               {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -777,7 +803,7 @@ export function useProfilesBoard() {
           const preflight = await fetchJson<{
             ok: boolean;
             checks: Array<{ label: string; status: 'ok' | 'warn' | 'error'; message: string }>;
-          }>(`/api/agents/${target.agent}/plugins/check`, {
+          }>(withCwd(`/api/agents/${target.agent}/plugins/check`, activeProjectRef.current), {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -818,8 +844,10 @@ export function useProfilesBoard() {
     refreshState,
     isEditMode,
     previewConfigs,
-    columnScopes,
-    setColumnScope,
+    boardScope,
+    setBoardScope,
+    activeProject,
+    setActiveProject,
     pendingAddedMap: pendingKeyMaps.added,
     pendingRemovedMap: pendingKeyMaps.removed,
     pendingProjectAddedMap: pendingKeyMaps.projectAdded,

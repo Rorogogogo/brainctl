@@ -109,7 +109,9 @@ export default function App() {
               <img src="/favicon-light.svg" alt="Brainctl Logo" className="size-4" />
             </div>
             <div>
-              <h1 className="text-sm font-semibold leading-none tracking-tight">Brainctl</h1>
+              <h1 className="text-sm font-semibold leading-none tracking-tight">
+                Brainctl <span className="font-normal text-zinc-400">v{__APP_VERSION__}</span>
+              </h1>
               <p className="text-[9px] font-medium leading-tight text-zinc-500">Transfer Board</p>
             </div>
           </div>
