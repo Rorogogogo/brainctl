@@ -29,6 +29,14 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawn } from 'node:child_process';
 
+function resolveCwd(req: import('node:http').IncomingMessage, fallback: string): string {
+  const url = new URL(req.url ?? '/', 'http://localhost');
+  const raw = url.searchParams.get('cwd');
+  if (!raw) return fallback;
+  if (!path.isAbsolute(raw)) return fallback;
+  return raw;
+}
+
 export interface UiRouteDependencies {
   cwd: string;
   statusService?: StatusService;
@@ -80,7 +88,7 @@ export function createUiRouteHandler(
           return sendJson(response, 405, { error: 'Method not allowed' });
         }
 
-        const configs = await agentConfigService.readAll({ cwd: dependencies.cwd });
+        const configs = await agentConfigService.readAll({ cwd: resolveCwd(request, dependencies.cwd) });
         return sendJson(response, 200, configs);
       }
       case '/api/open-folder': {
@@ -330,7 +338,7 @@ export function createUiRouteHandler(
           }
 
           const result = await mcpPreflightService.execute({
-            cwd: dependencies.cwd,
+            cwd: resolveCwd(request, dependencies.cwd),
             agent: agentName,
             key: data.key,
             entry: data.entry,
@@ -360,7 +368,7 @@ export function createUiRouteHandler(
             }
             try {
               await agentConfigService.addMcp({
-                cwd: dependencies.cwd,
+                cwd: resolveCwd(request, dependencies.cwd),
                 agent: agentName,
                 key: data.key,
                 entry: data.entry,
@@ -377,7 +385,7 @@ export function createUiRouteHandler(
             const scope = url.searchParams.get('scope') === 'project' ? 'project' : 'global';
             try {
               await agentConfigService.removeMcp({
-                cwd: dependencies.cwd,
+                cwd: resolveCwd(request, dependencies.cwd),
                 agent: agentName,
                 key: mcpKey,
                 scope,
@@ -491,7 +499,7 @@ export function createUiRouteHandler(
             return sendJson(response, 400, { error: 'Missing name or sourceAgent' });
           }
 
-          const sourcePlugin = await resolveSourcePlugin(agentConfigService, dependencies.cwd, {
+          const sourcePlugin = await resolveSourcePlugin(agentConfigService, resolveCwd(request, dependencies.cwd), {
             sourceAgent: data.sourceAgent as AgentName,
             name: data.name,
           });
@@ -503,7 +511,7 @@ export function createUiRouteHandler(
           }
 
           const result = await pluginInstallService.plan({
-            cwd: dependencies.cwd,
+            cwd: resolveCwd(request, dependencies.cwd),
             targetAgent: agentName,
             sourceAgent: data.sourceAgent as AgentName,
             plugin: sourcePlugin,
@@ -527,7 +535,7 @@ export function createUiRouteHandler(
               return sendJson(response, 400, { error: 'Missing name or sourceAgent' });
             }
 
-            const sourcePlugin = await resolveSourcePlugin(agentConfigService, dependencies.cwd, {
+            const sourcePlugin = await resolveSourcePlugin(agentConfigService, resolveCwd(request, dependencies.cwd), {
               sourceAgent: data.sourceAgent as AgentName,
               name: data.name,
             });
@@ -540,7 +548,7 @@ export function createUiRouteHandler(
 
             try {
               const result = await pluginInstallService.execute({
-                cwd: dependencies.cwd,
+                cwd: resolveCwd(request, dependencies.cwd),
                 targetAgent: agentName,
                 sourceAgent: data.sourceAgent as AgentName,
                 plugin: sourcePlugin,
@@ -552,7 +560,7 @@ export function createUiRouteHandler(
           }
 
           if (request.method === 'DELETE' && pluginName) {
-            const targetPlugin = await resolveTargetPlugin(agentConfigService, dependencies.cwd, {
+            const targetPlugin = await resolveTargetPlugin(agentConfigService, resolveCwd(request, dependencies.cwd), {
               targetAgent: agentName,
               name: pluginName,
             });
@@ -565,7 +573,7 @@ export function createUiRouteHandler(
 
             try {
               const result = await pluginInstallService.remove({
-                cwd: dependencies.cwd,
+                cwd: resolveCwd(request, dependencies.cwd),
                 targetAgent: agentName,
                 plugin: targetPlugin,
               });
