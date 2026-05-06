@@ -1,6 +1,6 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { existsSync } from 'node:fs';
-import { readFile } from 'node:fs/promises';
+import { readFile, readdir, stat } from 'node:fs/promises';
 import { BrainctlError, ProfileError, ProfileNotFoundError, ValidationError } from '../errors.js';
 import { createAgentConfigService } from '../services/agent/agent-config-service.js';
 import type {
@@ -30,6 +30,18 @@ import path from 'node:path';
 import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { spawn } from 'node:child_process';
+
+function revealInFileManager(targetPath: string): void {
+  if (process.platform === 'darwin') {
+    spawn('open', ['-R', targetPath], { detached: true, stdio: 'ignore' }).unref();
+    return;
+  }
+  if (process.platform === 'win32') {
+    spawn('explorer', [`/select,${targetPath}`], { detached: true, stdio: 'ignore' }).unref();
+    return;
+  }
+  spawn('xdg-open', [path.dirname(targetPath)], { detached: true, stdio: 'ignore' }).unref();
+}
 
 function resolveCwd(req: import('node:http').IncomingMessage, fallback: string): string {
   const url = new URL(req.url ?? '/', 'http://localhost');
@@ -123,14 +135,8 @@ export function createUiRouteHandler(
         if (!existsSync(folderPath)) {
           return sendJson(response, 404, { error: `Path not found: ${folderPath}` });
         }
-        const opener =
-          process.platform === 'darwin'
-            ? 'open'
-            : process.platform === 'win32'
-              ? 'explorer'
-              : 'xdg-open';
         try {
-          spawn(opener, [folderPath], { detached: true, stdio: 'ignore' }).unref();
+          revealInFileManager(folderPath);
           return sendJson(response, 200, { ok: true, path: folderPath });
         } catch (error) {
           return sendJson(response, 500, {
@@ -280,6 +286,48 @@ export function createUiRouteHandler(
         return sendJson(response, 200, { recents });
       }
 
+      case '/api/fs/browse': {
+        if (request.method !== 'GET') {
+          return sendJson(response, 405, { error: 'Method not allowed' });
+        }
+        const raw = url.searchParams.get('path');
+        const mode = url.searchParams.get('mode') === 'file' ? 'file' : 'dir';
+        const startPath =
+          raw && path.isAbsolute(raw) ? raw : os.homedir();
+        try {
+          const stats = await stat(startPath);
+          if (!stats.isDirectory()) {
+            return sendJson(response, 400, { error: 'Path is not a directory' });
+          }
+          const entries = await readdir(startPath, { withFileTypes: true });
+          const items = entries
+            .filter((entry) => !entry.name.startsWith('.'))
+            .filter((entry) => {
+              if (mode === 'file') return entry.isDirectory() || entry.isFile();
+              return entry.isDirectory();
+            })
+            .map((entry) => ({
+              name: entry.name,
+              isDir: entry.isDirectory(),
+            }))
+            .sort((a, b) => {
+              if (a.isDir !== b.isDir) return a.isDir ? -1 : 1;
+              return a.name.localeCompare(b.name);
+            });
+          const parent = path.dirname(startPath);
+          return sendJson(response, 200, {
+            path: startPath,
+            parent: parent === startPath ? null : parent,
+            home: os.homedir(),
+            entries: items,
+          });
+        } catch (error) {
+          return sendJson(response, 404, {
+            error: error instanceof Error ? error.message : 'Cannot read path',
+          });
+        }
+      }
+
       case '/api/profiles/snapshot': {
         if (request.method !== 'POST') {
           return sendJson(response, 405, { error: 'Method not allowed' });
@@ -316,14 +364,8 @@ export function createUiRouteHandler(
           if (!existsSync(folderPath)) {
             return sendJson(response, 404, { error: `Profile folder not found: ${folderPath}` });
           }
-          const opener =
-            process.platform === 'darwin'
-              ? 'open'
-              : process.platform === 'win32'
-                ? 'explorer'
-                : 'xdg-open';
           try {
-            spawn(opener, [folderPath], { detached: true, stdio: 'ignore' }).unref();
+            revealInFileManager(folderPath);
             return sendJson(response, 200, { ok: true, path: folderPath });
           } catch (error) {
             return sendJson(response, 500, {
