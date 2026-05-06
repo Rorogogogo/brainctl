@@ -1,5 +1,8 @@
 import { useEffect, useState } from 'react';
+import { Folder, FolderOpen, Layers } from 'lucide-react';
 import { fetchJson } from '../../lib/fetch-json.js';
+import FolderPicker from '../../components/FolderPicker.js';
+import { Dropdown, type DropdownSection } from '../../components/ui/Dropdown.js';
 
 export interface ProjectBarProps {
   scope: 'global' | 'project';
@@ -25,16 +28,39 @@ export function buildPickerSections(input: {
   };
 }
 
+interface ProfileApplyState {
+  status: 'idle' | 'pending' | 'success' | 'error';
+  name?: string;
+  message?: string;
+}
+
+function basename(p: string): string {
+  if (!p) return '';
+  const trimmed = p.replace(/\/+$/, '');
+  const idx = trimmed.lastIndexOf('/');
+  return idx === -1 ? trimmed : trimmed.slice(idx + 1) || '/';
+}
+
+function dirname(p: string): string {
+  if (!p) return '';
+  const trimmed = p.replace(/\/+$/, '');
+  const idx = trimmed.lastIndexOf('/');
+  if (idx === -1) return '';
+  return trimmed.slice(0, idx) || '/';
+}
+
 export function ProjectBar({
   scope,
   onScopeChange,
   activeProject,
   onActiveProjectChange,
 }: ProjectBarProps): JSX.Element {
-  const [open, setOpen] = useState(false);
   const [claudeProjects, setClaudeProjects] = useState<string[]>([]);
   const [recents, setRecents] = useState<string[]>([]);
-  const [manualPath, setManualPath] = useState('');
+  const [folderPickerOpen, setFolderPickerOpen] = useState(false);
+
+  const [profiles, setProfiles] = useState<string[]>([]);
+  const [profileApply, setProfileApply] = useState<ProfileApplyState>({ status: 'idle' });
 
   useEffect(() => {
     void (async () => {
@@ -52,13 +78,49 @@ export function ProjectBar({
     })();
   }, []);
 
+  const loadProfiles = async (): Promise<void> => {
+    try {
+      const res = await fetchJson<{ profiles: string[] }>('/api/profiles');
+      setProfiles(res.profiles);
+    } catch {
+      setProfiles([]);
+    }
+  };
+
+  useEffect(() => {
+    void loadProfiles();
+    const refresh = (): void => {
+      void loadProfiles();
+    };
+    window.addEventListener('brainctl:profiles-changed', refresh);
+    return () => window.removeEventListener('brainctl:profiles-changed', refresh);
+  }, []);
+
   function pick(path: string): void {
-    setOpen(false);
     onActiveProjectChange(path);
     void fetchJson('/api/projects/recent', {
       method: 'POST',
       body: JSON.stringify({ cwd: path }),
     }).catch(() => {});
+  }
+
+  async function applyProfile(name: string): Promise<void> {
+    setProfileApply({ status: 'pending', name });
+    try {
+      await fetchJson(`/api/profiles/${encodeURIComponent(name)}/apply`, {
+        method: 'POST',
+        body: JSON.stringify({}),
+      });
+      setProfileApply({ status: 'success', name });
+      window.dispatchEvent(new CustomEvent('brainctl:profiles-changed'));
+      setTimeout(() => setProfileApply({ status: 'idle' }), 2000);
+    } catch (err) {
+      setProfileApply({
+        status: 'error',
+        name,
+        message: err instanceof Error ? err.message : 'Apply failed',
+      });
+    }
   }
 
   const sections = buildPickerSections({
@@ -67,50 +129,82 @@ export function ProjectBar({
     recents,
   });
 
+  const projectSections: DropdownSection[] = [];
+  if (sections.recents.length > 0) {
+    projectSections.push({
+      title: 'Recents',
+      items: sections.recents.map((p) => ({
+        value: p,
+        label: basename(p),
+        description: dirname(p) || p,
+      })),
+    });
+  }
+  if (sections.claudeOnly.length > 0) {
+    projectSections.push({
+      title: 'Claude projects',
+      items: sections.claudeOnly.map((p) => ({
+        value: p,
+        label: basename(p),
+        description: dirname(p) || p,
+      })),
+    });
+  }
+
+  const profileSections: DropdownSection[] = [
+    {
+      title: profiles.length > 0 ? 'Apply profile' : undefined,
+      items: profiles.map((name) => ({
+        value: name,
+        label: name,
+        description: 'Apply across all agents',
+      })),
+    },
+  ];
+
+  const profileTriggerLabel =
+    profileApply.status === 'pending'
+      ? `Applying ${profileApply.name}…`
+      : profileApply.status === 'success'
+        ? `Applied ${profileApply.name}`
+        : profileApply.status === 'error'
+          ? `Failed: ${profileApply.name}`
+          : 'Choose profile…';
+
   return (
     <div className="flex items-center gap-3 border-b border-zinc-200 bg-zinc-50 px-4 py-2">
-      <div className="relative">
-        <button
-          type="button"
-          onClick={() => setOpen((o) => !o)}
-          className="rounded-md border border-zinc-300 bg-white px-3 py-1 text-sm font-medium text-zinc-800"
-        >
-          {activeProject || '—'}
-        </button>
-        {open && (
-          <div className="absolute z-10 mt-1 w-96 rounded-md border border-zinc-200 bg-white shadow-lg">
-            {sections.recents.length > 0 && (
-              <Section title="Recents" items={sections.recents} onPick={pick} />
-            )}
-            {sections.claudeOnly.length > 0 && (
-              <Section title="Claude projects" items={sections.claudeOnly} onPick={pick} />
-            )}
-            <div className="border-t border-zinc-200 p-2">
-              <label className="text-[11px] font-medium text-zinc-500">Add path</label>
-              <div className="mt-1 flex gap-1">
-                <input
-                  className="flex-1 rounded border border-zinc-300 px-2 py-1 text-sm"
-                  value={manualPath}
-                  onChange={(e) => setManualPath(e.target.value)}
-                  placeholder="/absolute/path/to/project"
-                />
-                <button
-                  type="button"
-                  className="rounded bg-zinc-900 px-2 py-1 text-sm text-white"
-                  onClick={() => {
-                    if (manualPath) {
-                      pick(manualPath);
-                      setManualPath('');
-                    }
-                  }}
-                >
-                  Add
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
+      <Dropdown
+        leftIcon={<FolderOpen size={13} />}
+        triggerLabel={basename(activeProject) || '—'}
+        sections={projectSections}
+        value={activeProject}
+        onSelect={pick}
+        emptyLabel="No recent projects"
+        width="w-96"
+        footer={
+          <button
+            type="button"
+            onClick={() => setFolderPickerOpen(true)}
+            className="inline-flex w-full items-center justify-center gap-2 rounded-lg border border-zinc-300 bg-white px-2 py-1.5 text-sm font-medium text-zinc-700 hover:bg-zinc-50"
+          >
+            <Folder size={14} className="text-zinc-500" /> Browse folder…
+          </button>
+        }
+      />
+
+      <Dropdown
+        leftIcon={<Layers size={13} />}
+        triggerLabel={profileTriggerLabel}
+        sections={profileSections}
+        onSelect={(name) => void applyProfile(name)}
+        emptyLabel="No profiles yet"
+        width="w-72"
+        footer={
+          profileApply.status === 'error' ? (
+            <div className="text-[11px] text-red-600">{profileApply.message}</div>
+          ) : undefined
+        }
+      />
 
       <div className="ml-auto flex items-center gap-2 rounded-md bg-zinc-200 p-0.5">
         <button
@@ -138,35 +232,19 @@ export function ProjectBar({
           {activeProject}
         </div>
       )}
-    </div>
-  );
-}
 
-function Section({
-  title,
-  items,
-  onPick,
-}: {
-  title: string;
-  items: string[];
-  onPick: (p: string) => void;
-}): JSX.Element {
-  return (
-    <div className="border-b border-zinc-200 last:border-b-0">
-      <div className="px-2 pt-2 pb-1 text-[11px] font-medium text-zinc-500">{title}</div>
-      <ul>
-        {items.map((p) => (
-          <li key={p}>
-            <button
-              type="button"
-              className="block w-full truncate px-2 py-1 text-left text-sm hover:bg-zinc-100"
-              onClick={() => onPick(p)}
-            >
-              {p}
-            </button>
-          </li>
-        ))}
-      </ul>
+      <FolderPicker
+        open={folderPickerOpen}
+        onOpenChange={setFolderPickerOpen}
+        mode="dir"
+        initialPath={activeProject}
+        title="Choose project folder"
+        confirmLabel="Use this project"
+        onSelect={(p) => {
+          setFolderPickerOpen(false);
+          pick(p);
+        }}
+      />
     </div>
   );
 }
