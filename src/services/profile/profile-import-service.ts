@@ -15,9 +15,11 @@ import type {
 import { installPlugin, installUserSkill } from '../agent/agent-asset-installer.js';
 import { resolvePortableMcpCredentials } from '../credential/credential-resolution-service.js';
 import { createMcpPreflightService, type McpPreflightService } from '../platform/mcp-preflight-service.js';
-import { parseProfile } from './profile-service.js';
+import { brainctlHome, parseProfile } from './profile-service.js';
 
-const PROFILES_DIR = '.brainctl/profiles';
+function profilesRoot(_cwd: string): string {
+  return path.join(brainctlHome(), '.brainctl', 'profiles');
+}
 
 async function pathExists(p: string): Promise<boolean> {
   try {
@@ -89,9 +91,9 @@ export function createProfileImportService(
           );
         }
 
-        const profileFolder = path.join(cwd, PROFILES_DIR, profileName);
+        const profileFolder = path.join(profilesRoot(cwd), profileName);
         const profilePath = path.join(profileFolder, 'profile.yaml');
-        const legacyProfilePath = path.join(cwd, PROFILES_DIR, `${profileName}.yaml`);
+        const legacyProfilePath = path.join(profilesRoot(cwd), `${profileName}.yaml`);
         if (!options.force) {
           if ((await pathExists(profilePath)) || (await pathExists(legacyProfilePath))) {
             throw new ProfileError(
@@ -128,7 +130,7 @@ export function createProfileImportService(
         }
 
         const installedMcps: string[] = [];
-        const mcpsBaseDir = path.join(cwd, PROFILES_DIR, profileName, 'mcps');
+        const mcpsBaseDir = path.join(profilesRoot(cwd), profileName, 'mcps');
 
         for (const [name, mcp] of Object.entries(profile.mcps)) {
           if (!(mcp.kind === 'local' && mcp.source === 'bundled')) continue;
@@ -182,7 +184,7 @@ export function createProfileImportService(
         const installedPlugins: string[] = [];
         for (const plugin of manifest.plugins ?? []) {
           const sourceDir = resolveBundledArchivePath(extractDir, plugin.archivePath);
-          const profileLocalDir = path.join(cwd, PROFILES_DIR, profileName, plugin.archivePath);
+          const profileLocalDir = path.join(profilesRoot(cwd), profileName, plugin.archivePath);
           await rm(profileLocalDir, { recursive: true, force: true });
           await mkdir(path.dirname(profileLocalDir), { recursive: true });
           await cp(sourceDir, profileLocalDir, { recursive: true });
@@ -193,7 +195,7 @@ export function createProfileImportService(
         const installedUserSkills: string[] = [];
         for (const skill of manifest.userSkills ?? []) {
           const sourceDir = resolveBundledArchivePath(extractDir, skill.archivePath);
-          const profileLocalDir = path.join(cwd, PROFILES_DIR, profileName, skill.archivePath);
+          const profileLocalDir = path.join(profilesRoot(cwd), profileName, skill.archivePath);
           await rm(profileLocalDir, { recursive: true, force: true });
           await mkdir(path.dirname(profileLocalDir), { recursive: true });
           await cp(sourceDir, profileLocalDir, { recursive: true });
@@ -205,7 +207,7 @@ export function createProfileImportService(
         try {
           await copyFile(
             path.join(extractDir, 'manifest.yaml'),
-            path.join(cwd, PROFILES_DIR, profileName, 'manifest.yaml')
+            path.join(profilesRoot(cwd), profileName, 'manifest.yaml')
           );
         } catch {
           // best-effort

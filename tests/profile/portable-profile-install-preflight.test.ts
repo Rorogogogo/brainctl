@@ -10,8 +10,11 @@ import { createProfileImportService } from '../../src/services/profile/profile-i
 
 describe('portable profile install preflight', () => {
   const tempDirs: string[] = [];
+  const originalBrainctlHome = process.env.BRAINCTL_HOME;
 
   afterEach(async () => {
+    if (originalBrainctlHome === undefined) delete process.env.BRAINCTL_HOME;
+    else process.env.BRAINCTL_HOME = originalBrainctlHome;
     await Promise.all(
       tempDirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true }))
     );
@@ -24,6 +27,7 @@ describe('portable profile install preflight', () => {
     const projectDir = path.join(root, 'workspace');
     const archiveStageDir = path.join(root, 'archive-stage');
     await mkdir(projectDir, { recursive: true });
+    process.env.BRAINCTL_HOME = projectDir;
     await mkdir(path.join(archiveStageDir, 'bundle', 'server'), { recursive: true });
     await writeFile(
       path.join(archiveStageDir, 'bundle', 'server', 'package.json'),
@@ -79,6 +83,7 @@ describe('portable profile install preflight', () => {
     const projectDir = path.join(root, 'workspace');
     const archiveStageDir = path.join(root, 'archive-stage');
     await mkdir(projectDir, { recursive: true });
+    process.env.BRAINCTL_HOME = projectDir;
     await mkdir(path.join(archiveStageDir, 'bundle', 'server'), { recursive: true });
     await writeFile(
       path.join(archiveStageDir, 'bundle', 'server', 'package.json'),
@@ -147,6 +152,7 @@ describe('portable profile install preflight', () => {
     const projectDir = path.join(root, 'workspace');
     const archiveStageDir = path.join(root, 'archive-stage');
     await mkdir(projectDir, { recursive: true });
+    process.env.BRAINCTL_HOME = projectDir;
     await mkdir(archiveStageDir, { recursive: true });
     await writeFile(
       path.join(archiveStageDir, 'manifest.yaml'),

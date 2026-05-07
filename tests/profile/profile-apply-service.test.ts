@@ -55,7 +55,9 @@ describe('createProfileApplyService', () => {
     const tempProject = await mkdtemp(path.join(os.tmpdir(), 'brainctl-apply-proj-'));
     tempDirs.push(tempHome, tempProject);
     const originalHome = process.env.HOME;
+    const originalBrainctlHome = process.env.BRAINCTL_HOME;
     process.env.HOME = tempHome;
+    process.env.BRAINCTL_HOME = tempProject;
 
     try {
       // Set up a profile folder with a manifest declaring 1 plugin + 2 skills
@@ -168,6 +170,8 @@ describe('createProfileApplyService', () => {
     } finally {
       if (originalHome === undefined) delete process.env.HOME;
       else process.env.HOME = originalHome;
+      if (originalBrainctlHome === undefined) delete process.env.BRAINCTL_HOME;
+      else process.env.BRAINCTL_HOME = originalBrainctlHome;
     }
   });
 

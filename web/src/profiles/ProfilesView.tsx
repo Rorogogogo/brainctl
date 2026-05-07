@@ -9,6 +9,8 @@ import {
   ArrowRightLeft,
   Boxes,
   Check,
+  ChevronsDownUp,
+  ChevronsUpDown,
   Loader2,
   PencilLine,
   RefreshCw,
@@ -114,6 +116,22 @@ export default function ProfilesView() {
           <span className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-2.5 py-1 text-[11px] font-medium text-zinc-700 shadow-sm">
             <Save size={12} className="text-zinc-400" /> {pendingChanges.length} staged
           </span>
+          <button
+            className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-2.5 text-[12px] font-medium text-zinc-700 shadow-sm transition-all hover:bg-zinc-50"
+            type="button"
+            onClick={() => window.dispatchEvent(new CustomEvent('brainctl:zones-expand'))}
+            title="Expand all sections"
+          >
+            <ChevronsUpDown size={12} className="text-zinc-500" /> Expand all
+          </button>
+          <button
+            className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-2.5 text-[12px] font-medium text-zinc-700 shadow-sm transition-all hover:bg-zinc-50"
+            type="button"
+            onClick={() => window.dispatchEvent(new CustomEvent('brainctl:zones-collapse'))}
+            title="Collapse all sections"
+          >
+            <ChevronsDownUp size={12} className="text-zinc-500" /> Collapse all
+          </button>
           <button
             className={`inline-flex h-8 items-center gap-2 rounded-lg px-3 text-[13px] font-medium transition-all disabled:opacity-50 ${isEditMode ? 'bg-zinc-900 text-white shadow-sm' : 'border border-zinc-200 bg-white text-zinc-700 shadow-sm hover:bg-zinc-50'}`}
             type="button"

@@ -64,13 +64,13 @@ export function DraggableCard({
         )}
         {folderPath && !status && (
           <button
-            className="grid size-8 shrink-0 place-items-center rounded-lg border border-transparent text-zinc-400 transition-colors hover:bg-zinc-50 hover:text-zinc-900 opacity-0 group-hover:opacity-100"
+            className="grid size-8 shrink-0 place-items-center rounded-lg border border-zinc-200 bg-white text-zinc-500 transition-colors hover:bg-zinc-50 hover:text-zinc-900"
             type="button"
             onPointerDown={(event) => event.stopPropagation()}
             onClick={() => openFolder(folderPath)}
-            title={`Open folder: ${folderPath}`}
+            title={`Reveal in Finder: ${folderPath}`}
           >
-            <FolderOpen size={16} />
+            <FolderOpen size={15} />
           </button>
         )}
         {onRemove && !status && (

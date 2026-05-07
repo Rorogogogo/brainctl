@@ -1,6 +1,6 @@
 import { useDndContext, useDroppable } from '@dnd-kit/core';
 import { ChevronDown, ChevronRight } from 'lucide-react';
-import { useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 
 import { parseDragId, parseDropId } from './dnd.js';
 
@@ -10,16 +10,29 @@ export function DroppableZone({
   icon,
   count,
   children,
+  hint,
 }: {
   id: string;
   label: string;
   icon: ReactNode;
   count: number;
   children: ReactNode;
+  hint?: ReactNode;
 }) {
   const { isOver, setNodeRef } = useDroppable({ id });
   const [expanded, setExpanded] = useState(true);
   const { active, over } = useDndContext();
+
+  useEffect(() => {
+    const onExpand = (): void => setExpanded(true);
+    const onCollapse = (): void => setExpanded(false);
+    window.addEventListener('brainctl:zones-expand', onExpand);
+    window.addEventListener('brainctl:zones-collapse', onCollapse);
+    return () => {
+      window.removeEventListener('brainctl:zones-expand', onExpand);
+      window.removeEventListener('brainctl:zones-collapse', onCollapse);
+    };
+  }, []);
 
   const isHighlighted = () => {
     if (!active || !over) return false;
@@ -55,6 +68,11 @@ export function DroppableZone({
       </div>
       {expanded && (
         <div className="grid gap-2 relative">
+          {hint && (
+            <div className="rounded-md bg-zinc-100/70 px-2.5 py-1 text-[11px] text-zinc-500">
+              {hint}
+            </div>
+          )}
           {children}
         </div>
       )}

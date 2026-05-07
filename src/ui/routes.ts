@@ -360,7 +360,7 @@ export function createUiRouteHandler(
             return sendJson(response, 405, { error: 'Method not allowed' });
           }
           const profileName = decodeURIComponent(openFolderMatch[1]);
-          const folderPath = path.join(dependencies.cwd, '.brainctl', 'profiles', profileName);
+          const folderPath = path.join(os.homedir(), '.brainctl', 'profiles', profileName);
           if (!existsSync(folderPath)) {
             return sendJson(response, 404, { error: `Profile folder not found: ${folderPath}` });
           }

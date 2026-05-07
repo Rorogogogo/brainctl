@@ -1,4 +1,6 @@
-import { readdir, readFile, writeFile, mkdir, rename, rm, stat } from 'node:fs/promises';
+import type { Dirent } from 'node:fs';
+import { cp, readdir, readFile, writeFile, mkdir, rename, rm, stat } from 'node:fs/promises';
+import os from 'node:os';
 import path from 'node:path';
 
 import YAML from 'yaml';
@@ -11,28 +13,68 @@ const VALID_RUNTIMES = new Set<McpRuntime>(['node', 'python', 'java', 'go', 'rus
 const PROFILES_DIR = '.brainctl/profiles';
 const PROFILE_FILE = 'profile.yaml';
 
-export function profileDir(cwd: string, name: string): string {
-  return path.join(cwd, PROFILES_DIR, name);
+export function brainctlHome(): string {
+  return process.env.BRAINCTL_HOME ?? os.homedir();
 }
 
-export function profileFile(cwd: string, name: string): string {
-  return path.join(profileDir(cwd, name), PROFILE_FILE);
+function globalProfilesRoot(): string {
+  return path.join(brainctlHome(), '.brainctl', 'profiles');
+}
+
+export function profileDir(_cwd: string, name: string): string {
+  return path.join(globalProfilesRoot(), name);
+}
+
+export function profileFile(_cwd: string, name: string): string {
+  return path.join(profileDir(_cwd, name), PROFILE_FILE);
 }
 
 function legacyProfileFile(cwd: string, name: string): string {
   return path.join(cwd, PROFILES_DIR, `${name}.yaml`);
 }
 
+function legacyProfileDir(cwd: string, name: string): string {
+  return path.join(cwd, PROFILES_DIR, name);
+}
+
 async function migrateLegacyProfile(cwd: string, name: string): Promise<void> {
-  const legacy = legacyProfileFile(cwd, name);
-  const folder = profileDir(cwd, name);
+  const legacyFlat = legacyProfileFile(cwd, name);
+  const legacyFolder = legacyProfileDir(cwd, name);
+  const newFolder = profileDir(cwd, name);
   const newFile = profileFile(cwd, name);
 
-  if (!(await pathExists(legacy))) return;
   if (await pathExists(newFile)) return;
 
-  await mkdir(folder, { recursive: true });
-  await rename(legacy, newFile);
+  if (await pathExists(legacyFolder)) {
+    await mkdir(globalProfilesRoot(), { recursive: true });
+    await cp(legacyFolder, newFolder, { recursive: true });
+    return;
+  }
+
+  if (await pathExists(legacyFlat)) {
+    await mkdir(newFolder, { recursive: true });
+    await cp(legacyFlat, newFile);
+  }
+}
+
+async function migrateLegacyProfilesFrom(cwd: string): Promise<void> {
+  const legacyRoot = path.join(cwd, PROFILES_DIR);
+  if (!(await pathExists(legacyRoot))) return;
+
+  let entries: Dirent[];
+  try {
+    entries = await readdir(legacyRoot, { withFileTypes: true });
+  } catch {
+    return;
+  }
+
+  for (const entry of entries) {
+    if (entry.isDirectory()) {
+      await migrateLegacyProfile(cwd, entry.name);
+    } else if (entry.isFile() && entry.name.endsWith('.yaml')) {
+      await migrateLegacyProfile(cwd, entry.name.replace(/\.yaml$/, ''));
+    }
+  }
 }
 
 export interface ProfileService {
@@ -50,8 +92,9 @@ export function createProfileService(): ProfileService {
   return {
     async list(options = {}) {
       const cwd = options.cwd ?? process.cwd();
-      const profilesDir = path.join(cwd, PROFILES_DIR);
+      await migrateLegacyProfilesFrom(cwd);
 
+      const profilesDir = globalProfilesRoot();
       const names = new Set<string>();
       try {
         const entries = await readdir(profilesDir, { withFileTypes: true });
@@ -60,10 +103,6 @@ export function createProfileService(): ProfileService {
             if (await pathExists(path.join(profilesDir, entry.name, PROFILE_FILE))) {
               names.add(entry.name);
             }
-          } else if (entry.isFile() && entry.name.endsWith('.yaml')) {
-            const bare = entry.name.replace(/\.yaml$/, '');
-            await migrateLegacyProfile(cwd, bare);
-            names.add(bare);
           }
         }
       } catch {

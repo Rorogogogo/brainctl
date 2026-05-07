@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Folder, FolderOpen, Layers } from 'lucide-react';
+import { Clipboard, Folder, FolderOpen, Layers } from 'lucide-react';
 import { fetchJson } from '../../lib/fetch-json.js';
 import FolderPicker from '../../components/FolderPicker.js';
 import { Dropdown, type DropdownSection } from '../../components/ui/Dropdown.js';
@@ -58,6 +58,8 @@ export function ProjectBar({
   const [claudeProjects, setClaudeProjects] = useState<string[]>([]);
   const [recents, setRecents] = useState<string[]>([]);
   const [folderPickerOpen, setFolderPickerOpen] = useState(false);
+  const [pastedPath, setPastedPath] = useState('');
+  const [pasteError, setPasteError] = useState<string | null>(null);
 
   const [profiles, setProfiles] = useState<string[]>([]);
   const [profileApply, setProfileApply] = useState<ProfileApplyState>({ status: 'idle' });
@@ -98,6 +100,9 @@ export function ProjectBar({
 
   function pick(path: string): void {
     onActiveProjectChange(path);
+    if (scope === 'global') {
+      onScopeChange('project');
+    }
     void fetchJson('/api/projects/recent', {
       method: 'POST',
       body: JSON.stringify({ cwd: path }),
@@ -182,13 +187,50 @@ export function ProjectBar({
         emptyLabel="No recent projects"
         width="w-96"
         footer={
-          <button
-            type="button"
-            onClick={() => setFolderPickerOpen(true)}
-            className="inline-flex w-full items-center justify-center gap-2 rounded-lg border border-zinc-300 bg-white px-2 py-1.5 text-sm font-medium text-zinc-700 hover:bg-zinc-50"
-          >
-            <Folder size={14} className="text-zinc-500" /> Browse folder…
-          </button>
+          <div className="space-y-2">
+            <div>
+              <label className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
+                Paste absolute path
+              </label>
+              <div className="mt-1 flex gap-1">
+                <input
+                  className="flex-1 rounded-md border border-zinc-300 bg-white px-2 py-1.5 font-mono text-[12px] text-zinc-800 focus:border-zinc-400 focus:outline-none"
+                  value={pastedPath}
+                  onChange={(e) => {
+                    setPastedPath(e.target.value);
+                    setPasteError(null);
+                  }}
+                  placeholder="/Users/you/projects/app"
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    const trimmed = pastedPath.trim();
+                    if (!trimmed.startsWith('/') && !/^[A-Za-z]:[\\/]/.test(trimmed)) {
+                      setPasteError('Path must be absolute');
+                      return;
+                    }
+                    setPastedPath('');
+                    setPasteError(null);
+                    pick(trimmed);
+                  }}
+                  className="inline-flex items-center gap-1 rounded-md bg-zinc-900 px-2 py-1.5 text-[12px] font-medium text-white hover:bg-zinc-800"
+                >
+                  <Clipboard size={12} /> Add
+                </button>
+              </div>
+              {pasteError && (
+                <div className="mt-1 text-[11px] text-red-600">{pasteError}</div>
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={() => setFolderPickerOpen(true)}
+              className="inline-flex w-full items-center justify-center gap-2 rounded-lg border border-zinc-300 bg-white px-2 py-1.5 text-sm font-medium text-zinc-700 hover:bg-zinc-50"
+            >
+              <Folder size={14} className="text-zinc-500" /> Browse folder…
+            </button>
+          </div>
         }
       />
 
@@ -206,10 +248,14 @@ export function ProjectBar({
         }
       />
 
-      <div className="ml-auto flex items-center gap-2 rounded-md bg-zinc-200 p-0.5">
+      <div
+        className="ml-auto flex items-center gap-2 rounded-md bg-zinc-200 p-0.5"
+        title="Global = MCPs/skills shared across all projects. Project = scoped to the selected project folder."
+      >
         <button
           type="button"
           onClick={() => onScopeChange('global')}
+          title="Show config shared across all projects"
           className={`rounded-md px-2.5 py-1 text-[11px] font-medium transition-colors ${
             scope === 'global' ? 'bg-white text-zinc-900 shadow-sm' : 'text-zinc-500 hover:text-zinc-700'
           }`}
@@ -219,6 +265,7 @@ export function ProjectBar({
         <button
           type="button"
           onClick={() => onScopeChange('project')}
+          title="Show config scoped to the selected project"
           className={`rounded-md px-2.5 py-1 text-[11px] font-medium transition-colors ${
             scope === 'project' ? 'bg-white text-zinc-900 shadow-sm' : 'text-zinc-500 hover:text-zinc-700'
           }`}

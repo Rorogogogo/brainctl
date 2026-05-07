@@ -234,6 +234,11 @@ export function AgentColumn({
         label="Skills"
         icon={<FileText size={16} />}
         count={localSkills.length}
+        hint={
+          scope === 'project'
+            ? 'Skills are always installed globally — there is no project-scoped location for them.'
+            : undefined
+        }
       >
         {localSkills.map((skill, index) => {
           const status = pendingSkillAdded.has(skill.name)
@@ -310,6 +315,11 @@ export function AgentColumn({
       <DroppableZone
         id={`${config.agent}:plugins`}
         label="Plugins"
+        hint={
+          scope === 'project'
+            ? 'Plugins are always installed globally — there is no project-scoped location for them.'
+            : undefined
+        }
         icon={<Boxes size={16} />}
         count={plugins.length}
       >

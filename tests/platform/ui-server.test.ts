@@ -10,7 +10,11 @@ import { startUiServer } from '../../src/ui/server.js';
 const tempDirs: string[] = [];
 
 describe('ui server', () => {
+  const originalBrainctlHome = process.env.BRAINCTL_HOME;
+
   afterEach(async () => {
+    if (originalBrainctlHome === undefined) delete process.env.BRAINCTL_HOME;
+    else process.env.BRAINCTL_HOME = originalBrainctlHome;
     await Promise.all(
       tempDirs.splice(0).map(async (dir) => {
         await import('node:fs/promises').then(({ rm }) =>
@@ -23,6 +27,7 @@ describe('ui server', () => {
   it('serves the built frontend entrypoint and static assets from /', async () => {
     const projectDir = await mkdtemp(path.join(os.tmpdir(), 'brainctl-ui-'));
     tempDirs.push(projectDir);
+    process.env.BRAINCTL_HOME = projectDir;
 
     await mkdir(path.join(projectDir, 'memory'), { recursive: true });
     await writeFile(
@@ -71,6 +76,7 @@ describe('ui server', () => {
   it('returns a JSON 404 for unknown api routes', async () => {
     const projectDir = await mkdtemp(path.join(os.tmpdir(), 'brainctl-ui-'));
     tempDirs.push(projectDir);
+    process.env.BRAINCTL_HOME = projectDir;
 
     await mkdir(path.join(projectDir, 'memory'), { recursive: true });
     await writeFile(
@@ -104,6 +110,7 @@ describe('ui server', () => {
   it('rejects PUT on non-config api routes with 405', async () => {
     const projectDir = await mkdtemp(path.join(os.tmpdir(), 'brainctl-ui-'));
     tempDirs.push(projectDir);
+    process.env.BRAINCTL_HOME = projectDir;
 
     await mkdir(path.join(projectDir, 'memory'), { recursive: true });
     await writeFile(
@@ -140,6 +147,7 @@ describe('ui server', () => {
   it('rejects PUT / as a method not allowed response instead of serving the SPA', async () => {
     const projectDir = await mkdtemp(path.join(os.tmpdir(), 'brainctl-ui-'));
     tempDirs.push(projectDir);
+    process.env.BRAINCTL_HOME = projectDir;
 
     await mkdir(path.join(projectDir, 'memory'), { recursive: true });
     await writeFile(
@@ -177,6 +185,7 @@ describe('ui server', () => {
   it('returns MCP preflight results without mutating agent config files', async () => {
     const projectDir = await mkdtemp(path.join(os.tmpdir(), 'brainctl-ui-'));
     tempDirs.push(projectDir);
+    process.env.BRAINCTL_HOME = projectDir;
 
     await mkdir(path.join(projectDir, 'memory'), { recursive: true });
     await writeFile(
@@ -230,6 +239,7 @@ describe('ui server', () => {
   it('rejects MCP writes that fail preflight validation', async () => {
     const projectDir = await mkdtemp(path.join(os.tmpdir(), 'brainctl-ui-'));
     tempDirs.push(projectDir);
+    process.env.BRAINCTL_HOME = projectDir;
 
     await mkdir(path.join(projectDir, 'memory'), { recursive: true });
     await writeFile(
@@ -279,6 +289,7 @@ describe('ui server', () => {
   it('returns skill preflight results for unsupported plugin-backed entries', async () => {
     const projectDir = await mkdtemp(path.join(os.tmpdir(), 'brainctl-ui-'));
     tempDirs.push(projectDir);
+    process.env.BRAINCTL_HOME = projectDir;
 
     await mkdir(path.join(projectDir, 'memory'), { recursive: true });
     await writeFile(
@@ -330,6 +341,7 @@ describe('ui server', () => {
   it('rejects skill writes that fail preflight validation', async () => {
     const projectDir = await mkdtemp(path.join(os.tmpdir(), 'brainctl-ui-'));
     tempDirs.push(projectDir);
+    process.env.BRAINCTL_HOME = projectDir;
 
     await mkdir(path.join(projectDir, 'memory'), { recursive: true });
     await writeFile(
@@ -377,6 +389,7 @@ describe('ui server', () => {
   it('rejects asset path traversal attempts', async () => {
     const projectDir = await mkdtemp(path.join(os.tmpdir(), 'brainctl-ui-'));
     tempDirs.push(projectDir);
+    process.env.BRAINCTL_HOME = projectDir;
 
     await mkdir(path.join(projectDir, 'memory'), { recursive: true });
     await writeFile(
@@ -409,6 +422,7 @@ describe('ui server', () => {
   it('exports a profile archive through the web api', async () => {
     const projectDir = await mkdtemp(path.join(os.tmpdir(), 'brainctl-ui-'));
     tempDirs.push(projectDir);
+    process.env.BRAINCTL_HOME = projectDir;
 
     await mkdir(path.join(projectDir, 'memory'), { recursive: true });
     await mkdir(path.join(projectDir, '.brainctl', 'profiles'), { recursive: true });
@@ -457,6 +471,7 @@ describe('ui server', () => {
   it('returns a saved profile through the web api for pack preview', async () => {
     const projectDir = await mkdtemp(path.join(os.tmpdir(), 'brainctl-ui-'));
     tempDirs.push(projectDir);
+    process.env.BRAINCTL_HOME = projectDir;
 
     await mkdir(path.join(projectDir, 'memory'), { recursive: true });
     await mkdir(path.join(projectDir, '.brainctl', 'profiles'), { recursive: true });
@@ -508,6 +523,7 @@ describe('ui server', () => {
   it('imports a profile archive through the web api', async () => {
     const projectDir = await mkdtemp(path.join(os.tmpdir(), 'brainctl-ui-'));
     tempDirs.push(projectDir);
+    process.env.BRAINCTL_HOME = projectDir;
 
     await mkdir(path.join(projectDir, 'memory'), { recursive: true });
     await writeFile(
@@ -579,6 +595,7 @@ describe('ui server', () => {
   it('imports a profile archive with credentials through the web api', async () => {
     const projectDir = await mkdtemp(path.join(os.tmpdir(), 'brainctl-ui-'));
     tempDirs.push(projectDir);
+    process.env.BRAINCTL_HOME = projectDir;
 
     await mkdir(path.join(projectDir, 'memory'), { recursive: true });
     await writeFile(

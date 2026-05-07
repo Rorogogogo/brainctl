@@ -62,18 +62,16 @@ export function StaticCard({
           <span className={`inline-flex shrink-0 items-center justify-center rounded-md px-2 py-0.5 text-xs font-medium leading-none ${status === 'added' ? 'bg-zinc-100 text-zinc-700' : 'bg-red-100 text-red-700'}`}>
             {status === 'added' ? 'Added' : 'Removed'}
           </span>
-        ) : (
-          <span className="inline-flex shrink-0 items-center justify-center rounded-md border border-zinc-200 bg-zinc-50 px-2 py-0.5 text-xs font-medium leading-none text-zinc-600">Plugin</span>
-        )}
+        ) : null}
         {folderPath && !status ? (
           <button
-            className="grid size-8 shrink-0 place-items-center rounded-lg border border-transparent text-zinc-400 transition-colors hover:bg-zinc-50 hover:text-zinc-900 opacity-0 group-hover:opacity-100"
+            className="grid size-8 shrink-0 place-items-center rounded-lg border border-zinc-200 bg-white text-zinc-500 transition-colors hover:bg-zinc-50 hover:text-zinc-900"
             type="button"
             onPointerDown={(event) => event.stopPropagation()}
             onClick={() => openFolder(folderPath)}
-            title={`Open folder: ${folderPath}`}
+            title={`Reveal in Finder: ${folderPath}`}
           >
-            <FolderOpen size={16} />
+            <FolderOpen size={15} />
           </button>
         ) : null}
         {hasDetails ? (

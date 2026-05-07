@@ -11,8 +11,11 @@ import { createProfileImportService } from '../../src/services/profile/profile-i
 
 describe('createProfileImportService portable unpack', () => {
   const tempDirs: string[] = [];
+  const originalBrainctlHome = process.env.BRAINCTL_HOME;
 
   afterEach(async () => {
+    if (originalBrainctlHome === undefined) delete process.env.BRAINCTL_HOME;
+    else process.env.BRAINCTL_HOME = originalBrainctlHome;
     await Promise.all(
       tempDirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true }))
     );
@@ -25,6 +28,7 @@ describe('createProfileImportService portable unpack', () => {
     const projectDir = path.join(root, 'workspace');
     const archiveStageDir = path.join(root, 'archive-stage');
     await mkdir(projectDir, { recursive: true });
+    process.env.BRAINCTL_HOME = projectDir;
     await mkdir(path.join(archiveStageDir, 'bundle', 'server'), { recursive: true });
     await writeFile(
       path.join(archiveStageDir, 'bundle', 'server', 'package.json'),
@@ -98,6 +102,7 @@ describe('createProfileImportService portable unpack', () => {
     const projectDir = path.join(root, 'workspace');
     const archiveStageDir = path.join(root, 'archive-stage');
     await mkdir(projectDir, { recursive: true });
+    process.env.BRAINCTL_HOME = projectDir;
     await mkdir(archiveStageDir, { recursive: true });
     await writeFile(
       path.join(archiveStageDir, 'manifest.yaml'),
@@ -132,6 +137,7 @@ describe('createProfileImportService portable unpack', () => {
     const projectDir = path.join(root, 'workspace');
     const archiveStageDir = path.join(root, 'archive-stage');
     await mkdir(projectDir, { recursive: true });
+    process.env.BRAINCTL_HOME = projectDir;
     await mkdir(archiveStageDir, { recursive: true });
     await writeFile(
       path.join(archiveStageDir, 'manifest.yaml'),
@@ -185,6 +191,7 @@ describe('createProfileImportService portable unpack', () => {
     const firstStageDir = path.join(root, 'archive-stage-first');
     const secondStageDir = path.join(root, 'archive-stage-second');
     await mkdir(projectDir, { recursive: true });
+    process.env.BRAINCTL_HOME = projectDir;
     await mkdir(path.join(firstStageDir, 'bundle', 'server'), { recursive: true });
     await mkdir(path.join(secondStageDir, 'bundle', 'server'), { recursive: true });
 
@@ -261,6 +268,7 @@ describe('createProfileImportService portable unpack', () => {
     const projectDir = path.join(root, 'workspace');
     const archiveStageDir = path.join(root, 'archive-stage');
     await mkdir(projectDir, { recursive: true });
+    process.env.BRAINCTL_HOME = projectDir;
     await mkdir(archiveStageDir, { recursive: true });
     await writeFile(
       path.join(archiveStageDir, 'manifest.yaml'),
@@ -316,6 +324,7 @@ describe('createProfileImportService portable unpack', () => {
     const projectDir = path.join(root, 'workspace');
     const archiveStageDir = path.join(root, 'archive-stage');
     await mkdir(projectDir, { recursive: true });
+    process.env.BRAINCTL_HOME = projectDir;
     await mkdir(archiveStageDir, { recursive: true });
     await writeFile(
       path.join(archiveStageDir, 'manifest.yaml'),
@@ -385,6 +394,7 @@ describe('createProfileImportService portable unpack', () => {
     const projectDir = path.join(root, 'workspace');
     const archiveStageDir = path.join(root, 'archive-stage');
     await mkdir(projectDir, { recursive: true });
+    process.env.BRAINCTL_HOME = projectDir;
     await mkdir(path.join(archiveStageDir, 'bundle', 'myserver'), { recursive: true });
     await writeFile(
       path.join(archiveStageDir, 'bundle', 'myserver', 'server'),
@@ -444,6 +454,7 @@ describe('createProfileImportService portable unpack', () => {
     const projectDir = path.join(root, 'workspace');
     const folderSource = path.join(root, 'folder-profile');
     await mkdir(projectDir, { recursive: true });
+    process.env.BRAINCTL_HOME = projectDir;
     await mkdir(folderSource, { recursive: true });
 
     await writeFile(
