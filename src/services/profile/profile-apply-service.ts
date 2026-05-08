@@ -1,4 +1,5 @@
-import { readFile } from 'node:fs/promises';
+import { readFile, rm } from 'node:fs/promises';
+import { homedir } from 'node:os';
 import path from 'node:path';
 
 import YAML from 'yaml';
@@ -11,6 +12,11 @@ import type {
   SyncResult,
 } from '../../types.js';
 import { installPlugin, installUserSkill } from '../agent/agent-asset-installer.js';
+import {
+  createAgentConfigService,
+  type AgentConfigService,
+} from '../agent/agent-config-service.js';
+import { createPluginInstallService } from '../plugin/plugin-install-service.js';
 import {
   createProfileSnapshotService,
   defaultBackupProfileName,
@@ -49,6 +55,7 @@ export interface ProfileApplyService {
 interface ProfileApplyDependencies {
   profileService?: ProfileService;
   snapshotService?: ProfileSnapshotService;
+  agentConfigService?: AgentConfigService;
   writers?: Partial<Record<AgentName, AgentConfigWriter>>;
 }
 
@@ -57,6 +64,8 @@ export function createProfileApplyService(
 ): ProfileApplyService {
   const profileService = deps.profileService ?? createProfileService();
   const snapshotService = deps.snapshotService ?? createProfileSnapshotService();
+  const agentConfigService = deps.agentConfigService ?? createAgentConfigService();
+  const pluginInstallService = createPluginInstallService();
 
   const defaultWriters: Partial<Record<AgentName, AgentConfigWriter>> = {
     claude: createClaudeWriter(),
@@ -144,6 +153,21 @@ export function createProfileApplyService(
           userSkillsInstalled.push(skill.name);
         }
 
+        const pluginsRemoved: string[] = [];
+        const userSkillsRemoved: string[] = [];
+        if (options.items === undefined) {
+          const cleanup = await cleanupExtras({
+            agent,
+            cwd,
+            keepPlugins: new Set(pluginsByName.keys()),
+            keepSkills: new Set(skillsByName.keys()),
+            agentConfigService,
+            pluginInstallService,
+          });
+          pluginsRemoved.push(...cleanup.pluginsRemoved);
+          userSkillsRemoved.push(...cleanup.userSkillsRemoved);
+        }
+
         applied.push({
           agent,
           configPath: mcpResult.configPath,
@@ -151,12 +175,57 @@ export function createProfileApplyService(
           mcpCount: Object.keys(filteredMcps).length,
           ...(pluginsInstalled.length > 0 ? { pluginsInstalled } : {}),
           ...(userSkillsInstalled.length > 0 ? { userSkillsInstalled } : {}),
+          ...(pluginsRemoved.length > 0 ? { pluginsRemoved } : {}),
+          ...(userSkillsRemoved.length > 0 ? { userSkillsRemoved } : {}),
         });
       }
 
       return { backups, applied };
     },
   };
+}
+
+async function cleanupExtras(options: {
+  agent: AgentName;
+  cwd: string;
+  keepPlugins: Set<string>;
+  keepSkills: Set<string>;
+  agentConfigService: AgentConfigService;
+  pluginInstallService: ReturnType<typeof createPluginInstallService>;
+}): Promise<{ pluginsRemoved: string[]; userSkillsRemoved: string[] }> {
+  const pluginsRemoved: string[] = [];
+  const userSkillsRemoved: string[] = [];
+
+  const live = await options.agentConfigService.readAll({ cwd: options.cwd });
+  const agentConfig = live.find((c) => c.agent === options.agent);
+  if (!agentConfig?.exists) return { pluginsRemoved, userSkillsRemoved };
+
+  for (const entry of agentConfig.skills) {
+    if (entry.kind === 'plugin') {
+      if (options.keepPlugins.has(entry.name)) continue;
+      try {
+        await options.pluginInstallService.remove({
+          cwd: options.cwd,
+          targetAgent: options.agent,
+          plugin: entry,
+        });
+        pluginsRemoved.push(entry.name);
+      } catch {
+        // best-effort cleanup
+      }
+    } else {
+      if (options.keepSkills.has(entry.name)) continue;
+      const skillDir = path.join(homedir(), `.${options.agent}`, 'skills', entry.name);
+      try {
+        await rm(skillDir, { recursive: true, force: true });
+        userSkillsRemoved.push(entry.name);
+      } catch {
+        // best-effort cleanup
+      }
+    }
+  }
+
+  return { pluginsRemoved, userSkillsRemoved };
 }
 
 function matches(

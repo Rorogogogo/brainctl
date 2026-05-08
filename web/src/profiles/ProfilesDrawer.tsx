@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react';
 import {
   Check,
   ChevronDown,
@@ -8,13 +8,17 @@ import {
   Loader2,
   PencilLine,
   RefreshCw,
+  Settings2,
   Trash2,
+  Wand2,
   X,
 } from 'lucide-react';
 
 import { AgentLogo } from '../components/agent-brand';
 import ConfirmDialog from '../components/ConfirmDialog';
 import { Tooltip } from '../components/Tooltip';
+import ApplyProfileModal from './ApplyProfileModal';
+import EditProfileModal from './EditProfileModal';
 
 const AGENTS = ['claude', 'codex', 'gemini'] as const;
 type Agent = typeof AGENTS[number];
@@ -22,6 +26,7 @@ type ItemType = 'mcp' | 'plugin' | 'skill';
 
 interface ProfileSummary {
   name: string;
+  sourceAgent?: Agent;
 }
 
 interface ProfileContents {
@@ -60,12 +65,64 @@ export default function ProfilesDrawer() {
   const [renameTarget, setRenameTarget] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
   const [renaming, setRenaming] = useState(false);
+  const [applyModalOpen, setApplyModalOpen] = useState(false);
+  const [applyModalProfile, setApplyModalProfile] = useState<string | null>(null);
+  const [editModalProfile, setEditModalProfile] = useState<string | null>(null);
+  const [drawerWidth, setDrawerWidth] = useState<number>(() => {
+    if (typeof window === 'undefined') return 224;
+    const saved = window.localStorage.getItem('brainctl:profiles-drawer-width');
+    const parsed = saved ? Number.parseInt(saved, 10) : NaN;
+    return Number.isFinite(parsed) ? clampWidth(parsed) : 224;
+  });
+  const draggingRef = useRef<{ startX: number; startWidth: number } | null>(null);
+
+  useEffect(() => {
+    function onMove(e: MouseEvent) {
+      const drag = draggingRef.current;
+      if (!drag) return;
+      const next = clampWidth(drag.startWidth + (e.clientX - drag.startX));
+      setDrawerWidth(next);
+    }
+    function onUp() {
+      if (!draggingRef.current) return;
+      draggingRef.current = null;
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+      try {
+        window.localStorage.setItem(
+          'brainctl:profiles-drawer-width',
+          String(drawerWidth)
+        );
+      } catch {
+        // storage may be unavailable
+      }
+    }
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+    return () => {
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+    };
+  }, [drawerWidth]);
+
+  function startResize(e: ReactMouseEvent): void {
+    draggingRef.current = { startX: e.clientX, startWidth: drawerWidth };
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+    e.preventDefault();
+  }
 
   const loadProfiles = useCallback(async () => {
     try {
       const r = await fetch('/api/profiles');
-      const data = (await r.json()) as { profiles: string[] };
-      setProfiles(data.profiles.map((name) => ({ name })));
+      const data = (await r.json()) as {
+        profiles: Array<string | { name: string; sourceAgent?: Agent }>;
+      };
+      setProfiles(
+        data.profiles.map((entry) =>
+          typeof entry === 'string' ? { name: entry } : entry
+        )
+      );
     } catch {
       setProfiles([]);
     }
@@ -249,14 +306,21 @@ export default function ProfilesDrawer() {
 
   if (loading) {
     return (
-      <aside className="flex w-56 flex-col gap-2 border-r border-zinc-200 bg-[#fcfcfc] p-2 text-xs">
+      <aside
+        className="relative flex shrink-0 flex-col gap-2 border-r border-zinc-200 bg-[#fcfcfc] p-2 text-xs"
+        style={{ width: drawerWidth }}
+      >
         <Loader2 className="size-4 animate-spin text-zinc-400" />
+        <ResizeHandle onMouseDown={startResize} />
       </aside>
     );
   }
 
   return (
-    <aside className="flex w-56 flex-col gap-2 border-r border-zinc-200 bg-[#fcfcfc] p-2 text-xs">
+    <aside
+      className="relative flex shrink-0 flex-col gap-2 border-r border-zinc-200 bg-[#fcfcfc] p-2 text-xs"
+      style={{ width: drawerWidth }}
+    >
       <div className="flex items-center justify-between px-1">
         <h2 className="text-[10px] font-semibold uppercase tracking-wide text-zinc-500">
           Profiles
@@ -331,9 +395,45 @@ export default function ProfilesDrawer() {
                   ) : (
                     <ChevronRight size={12} />
                   )}
-                  <Folder size={12} className="text-zinc-500" />
+                  {p.sourceAgent ? (
+                    <span
+                      className="grid size-3.5 shrink-0 place-items-center overflow-hidden"
+                      title={`Snapshot of ${p.sourceAgent}`}
+                    >
+                      <AgentLogo agent={p.sourceAgent} className="size-full object-contain" />
+                    </span>
+                  ) : (
+                    <Folder size={12} className="text-zinc-500" />
+                  )}
                   <span className="truncate">{p.name}</span>
                 </button>
+              )}
+              {renameTarget !== p.name && (
+                <Tooltip label="Apply profile…">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setApplyModalProfile(p.name);
+                    setApplyModalOpen(true);
+                  }}
+                  disabled={deleting || renaming}
+                  className="grid size-5 place-items-center rounded text-zinc-500 transition hover:bg-emerald-100 hover:text-emerald-700 disabled:opacity-50"
+                >
+                  <Wand2 size={11} />
+                </button>
+                </Tooltip>
+              )}
+              {renameTarget !== p.name && (
+                <Tooltip label="Edit profile contents…">
+                <button
+                  type="button"
+                  onClick={() => setEditModalProfile(p.name)}
+                  disabled={deleting || renaming}
+                  className="grid size-5 place-items-center rounded text-zinc-500 transition hover:bg-zinc-100 disabled:opacity-50"
+                >
+                  <Settings2 size={11} />
+                </button>
+                </Tooltip>
               )}
               {renameTarget === p.name ? (
                 <Tooltip label="Cancel rename">
@@ -398,6 +498,28 @@ export default function ProfilesDrawer() {
           </li>
         ))}
       </ul>
+      <ApplyProfileModal
+        open={applyModalOpen}
+        onOpenChange={(open) => {
+          setApplyModalOpen(open);
+          if (!open) setApplyModalProfile(null);
+        }}
+        profiles={profiles.map((p) => p.name)}
+        initialProfile={applyModalProfile}
+        onApplied={() => {
+          window.dispatchEvent(new CustomEvent('brainctl:profiles-changed'));
+        }}
+      />
+      <EditProfileModal
+        open={editModalProfile !== null}
+        onOpenChange={(open) => {
+          if (!open) setEditModalProfile(null);
+        }}
+        profileName={editModalProfile}
+        onChanged={() => {
+          window.dispatchEvent(new CustomEvent('brainctl:profiles-changed'));
+        }}
+      />
       <ConfirmDialog
         open={deleteTarget !== null}
         onOpenChange={(open) => {
@@ -412,7 +534,34 @@ export default function ProfilesDrawer() {
           if (deleteTarget) void deleteProfile(deleteTarget);
         }}
       />
+      <ResizeHandle onMouseDown={startResize} />
     </aside>
+  );
+}
+
+const MIN_DRAWER_WIDTH = 180;
+const MAX_DRAWER_WIDTH = 520;
+
+function clampWidth(value: number): number {
+  if (!Number.isFinite(value)) return 224;
+  return Math.max(MIN_DRAWER_WIDTH, Math.min(MAX_DRAWER_WIDTH, Math.round(value)));
+}
+
+function ResizeHandle({
+  onMouseDown,
+}: {
+  onMouseDown: (event: ReactMouseEvent) => void;
+}) {
+  return (
+    <div
+      role="separator"
+      aria-orientation="vertical"
+      onMouseDown={onMouseDown}
+      className="group absolute right-0 top-0 z-10 h-full w-1.5 -mr-0.5 cursor-col-resize"
+      title="Drag to resize"
+    >
+      <div className="absolute inset-y-0 right-0 w-px bg-transparent transition-colors group-hover:bg-zinc-300" />
+    </div>
   );
 }
 
@@ -441,6 +590,22 @@ function ProfileItems({
 
   return (
     <div className="flex flex-col gap-2">
+      {skills.length > 0 && (
+        <Group label="Skills">
+          {dedupeByName(skills).map((s) => (
+            <Item
+              key={`skill-${s.name}`}
+              label={s.name}
+              applyState={applyState}
+              applyKeyPrefix={`${profileName}::skill:${s.name}`}
+              onApply={(agent) =>
+                onApply(profileName, { type: 'skill', name: s.name, agent }, agent)
+              }
+              dragPayload={{ profileName, type: 'skill', name: s.name }}
+            />
+          ))}
+        </Group>
+      )}
       {mcps.length > 0 && (
         <Group label="MCPs">
           {mcps.map((name) => (
@@ -467,22 +632,6 @@ function ProfileItems({
                 onApply(profileName, { type: 'plugin', name: p.name, agent: p.agent }, agent)
               }
               dragPayload={{ profileName, type: 'plugin', name: p.name, agent: p.agent }}
-            />
-          ))}
-        </Group>
-      )}
-      {skills.length > 0 && (
-        <Group label="Skills">
-          {dedupeByName(skills).map((s) => (
-            <Item
-              key={`skill-${s.name}`}
-              label={s.name}
-              applyState={applyState}
-              applyKeyPrefix={`${profileName}::skill:${s.name}`}
-              onApply={(agent) =>
-                onApply(profileName, { type: 'skill', name: s.name, agent }, agent)
-              }
-              dragPayload={{ profileName, type: 'skill', name: s.name }}
             />
           ))}
         </Group>

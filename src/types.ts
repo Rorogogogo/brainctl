@@ -113,6 +113,8 @@ export interface SyncAgentResult {
   mcpCount: number;
   pluginsInstalled?: string[];
   userSkillsInstalled?: string[];
+  pluginsRemoved?: string[];
+  userSkillsRemoved?: string[];
 }
 
 export type SyncResult = SyncAgentResult[];
