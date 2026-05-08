@@ -164,14 +164,6 @@ function resolveDeclaredNpxPackage(args: string[]): string | null {
   return packageName;
 }
 
-function resolveProjectLocalPath(cwd: string, candidate: string, key: string): string {
-  const resolved = path.resolve(cwd, candidate);
-  const relative = path.relative(cwd, resolved);
-  if (relative.startsWith(`..${path.sep}`) || relative === '..' || path.isAbsolute(relative)) {
-    throw new PortableMcpClassificationError(
-      `MCP "${key}" cannot be packed: path "${candidate}" is outside the project directory.`
-    );
-  }
-
-  return resolved;
+function resolveProjectLocalPath(cwd: string, candidate: string, _key: string): string {
+  return path.resolve(cwd, candidate);
 }

@@ -302,16 +302,21 @@ describe('classifyPortableMcp', () => {
     );
   });
 
-  it('rejects absolute command-path launchers instead of treating them as bundled', () => {
-    expect(() =>
-      classifyPortableMcp({
-        cwd: '/workspace/project',
-        key: 'system-tool',
-        entry: {
-          command: '/usr/local/bin/tool',
-        },
-      })
-    ).toThrowError('cannot be packed: path "/usr/local/bin" is outside the project directory');
+  it('classifies absolute command-path launchers outside cwd as bundled with the absolute directory', () => {
+    const result = classifyPortableMcp({
+      cwd: '/workspace/project',
+      key: 'system-tool',
+      entry: {
+        command: '/usr/local/bin/tool',
+      },
+    });
+    expect(result).toEqual({
+      kind: 'local',
+      source: 'bundled',
+      runtime: 'binary',
+      path: '/usr/local/bin',
+      command: '/usr/local/bin/tool',
+    });
   });
 
   it('classifies relative path commands as bundled binary', () => {
