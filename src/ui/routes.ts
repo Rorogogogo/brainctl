@@ -12,7 +12,14 @@ import { createMcpPreflightService } from '../services/platform/mcp-preflight-se
 import { createPluginInstallService } from '../services/plugin/plugin-install-service.js';
 import { createProfileExportService } from '../services/profile/profile-export-service.js';
 import { createProfileImportService } from '../services/profile/profile-import-service.js';
-import { createProfileService } from '../services/profile/profile-service.js';
+import {
+  brainctlHome,
+  createProfileService,
+} from '../services/profile/profile-service.js';
+import {
+  createProfileEditService,
+  type ProfileItemType,
+} from '../services/profile/profile-edit-service.js';
 import { createSkillPreflightService } from '../services/plugin/skill-preflight-service.js';
 import { createStatusService } from '../services/platform/status-service.js';
 import type { StatusService } from '../services/platform/status-service.js';
@@ -75,6 +82,10 @@ export function createUiRouteHandler(
   const profileApplyService = createProfileApplyService({ profileService });
   const profileSnapshotService = createProfileSnapshotService();
   const agentConfigService = createAgentConfigService();
+  const profileEditService = createProfileEditService({
+    profileService,
+    agentConfigService,
+  });
   const mcpPreflightService = createMcpPreflightService();
   const pluginInstallService = createPluginInstallService();
   const skillPreflightService = createSkillPreflightService();
@@ -147,7 +158,31 @@ export function createUiRouteHandler(
       case '/api/profiles': {
         if (request.method === 'GET') {
           const result = await profileService.list({ cwd: dependencies.cwd });
-          return sendJson(response, 200, result);
+          const enriched = await Promise.all(
+            result.profiles.map(async (name) => {
+              const manifestPath = path.join(
+                brainctlHome(),
+                '.brainctl',
+                'profiles',
+                name,
+                'manifest.yaml'
+              );
+              try {
+                const { readFile: rf } = await import('node:fs/promises');
+                const yamlMod = await import('yaml');
+                const parsed = yamlMod.default.parse(
+                  await rf(manifestPath, 'utf8')
+                ) as { source?: { kind?: string; agent?: AgentName } } | null;
+                const source = parsed?.source;
+                return source?.kind === 'agent' && source.agent
+                  ? { name, sourceAgent: source.agent }
+                  : { name };
+              } catch {
+                return { name };
+              }
+            })
+          );
+          return sendJson(response, 200, { profiles: enriched });
         }
 
         if (request.method === 'POST') {
@@ -360,7 +395,7 @@ export function createUiRouteHandler(
             return sendJson(response, 405, { error: 'Method not allowed' });
           }
           const profileName = decodeURIComponent(openFolderMatch[1]);
-          const folderPath = path.join(os.homedir(), '.brainctl', 'profiles', profileName);
+          const folderPath = path.join(brainctlHome(), '.brainctl', 'profiles', profileName);
           if (!existsSync(folderPath)) {
             return sendJson(response, 404, { error: `Profile folder not found: ${folderPath}` });
           }
@@ -372,6 +407,71 @@ export function createUiRouteHandler(
               error: error instanceof Error ? error.message : 'Failed to open folder',
             });
           }
+        }
+
+        // Profile item add/remove: /api/profiles/:name/items
+        const itemsMatch = url.pathname.match(/^\/api\/profiles\/([^/]+)\/items$/);
+        if (itemsMatch) {
+          const profileName = decodeURIComponent(itemsMatch[1]);
+          if (request.method === 'POST') {
+            const body = await readJsonBody(request);
+            if (!body.ok) {
+              return sendJson(response, 400, { error: 'Invalid JSON body' });
+            }
+            const data = (body.value ?? {}) as {
+              type?: ProfileItemType;
+              agent?: AgentName;
+              name?: string;
+            };
+            if (
+              !data.type ||
+              !data.name ||
+              !data.agent ||
+              !['mcp', 'plugin', 'skill'].includes(data.type) ||
+              !['claude', 'codex', 'gemini'].includes(data.agent)
+            ) {
+              return sendJson(response, 400, {
+                error: 'type, agent, and name are required',
+              });
+            }
+            try {
+              await profileEditService.addItem({
+                cwd: dependencies.cwd,
+                profileName,
+                type: data.type,
+                agent: data.agent,
+                name: data.name,
+              });
+              return sendJson(response, 200, { ok: true });
+            } catch (error) {
+              return sendProfileError(response, error);
+            }
+          }
+          if (request.method === 'DELETE') {
+            const type = url.searchParams.get('type') as ProfileItemType | null;
+            const name = url.searchParams.get('name');
+            const agentParam = url.searchParams.get('agent');
+            if (!type || !name || !['mcp', 'plugin', 'skill'].includes(type)) {
+              return sendJson(response, 400, { error: 'type and name are required' });
+            }
+            const agent =
+              agentParam && ['claude', 'codex', 'gemini'].includes(agentParam)
+                ? (agentParam as AgentName)
+                : undefined;
+            try {
+              await profileEditService.removeItem({
+                cwd: dependencies.cwd,
+                profileName,
+                type,
+                name,
+                agent,
+              });
+              return sendJson(response, 200, { ok: true });
+            } catch (error) {
+              return sendProfileError(response, error);
+            }
+          }
+          return sendJson(response, 405, { error: 'Method not allowed' });
         }
 
         // Profile apply: POST /api/profiles/:name/apply
@@ -687,7 +787,7 @@ export function createUiRouteHandler(
           try {
             const profile = await profileService.get({ cwd: dependencies.cwd, name: profileName });
             const manifestPath = path.join(
-              dependencies.cwd,
+              brainctlHome(),
               '.brainctl',
               'profiles',
               profileName,

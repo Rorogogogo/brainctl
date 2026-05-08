@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Clipboard, Folder, FolderOpen, Layers } from 'lucide-react';
+import { Clipboard, Folder, FolderOpen } from 'lucide-react';
 import { fetchJson } from '../../lib/fetch-json.js';
 import FolderPicker from '../../components/FolderPicker.js';
 import { Dropdown, type DropdownSection } from '../../components/ui/Dropdown.js';
@@ -26,12 +26,6 @@ export function buildPickerSections(input: {
     recents: input.recents.slice(),
     claudeOnly: input.claudeProjects.filter((p) => !exclude.has(p)),
   };
-}
-
-interface ProfileApplyState {
-  status: 'idle' | 'pending' | 'success' | 'error';
-  name?: string;
-  message?: string;
 }
 
 function basename(p: string): string {
@@ -61,9 +55,6 @@ export function ProjectBar({
   const [pastedPath, setPastedPath] = useState('');
   const [pasteError, setPasteError] = useState<string | null>(null);
 
-  const [profiles, setProfiles] = useState<string[]>([]);
-  const [profileApply, setProfileApply] = useState<ProfileApplyState>({ status: 'idle' });
-
   useEffect(() => {
     void (async () => {
       try {
@@ -80,24 +71,6 @@ export function ProjectBar({
     })();
   }, []);
 
-  const loadProfiles = async (): Promise<void> => {
-    try {
-      const res = await fetchJson<{ profiles: string[] }>('/api/profiles');
-      setProfiles(res.profiles);
-    } catch {
-      setProfiles([]);
-    }
-  };
-
-  useEffect(() => {
-    void loadProfiles();
-    const refresh = (): void => {
-      void loadProfiles();
-    };
-    window.addEventListener('brainctl:profiles-changed', refresh);
-    return () => window.removeEventListener('brainctl:profiles-changed', refresh);
-  }, []);
-
   function pick(path: string): void {
     onActiveProjectChange(path);
     if (scope === 'global') {
@@ -107,25 +80,6 @@ export function ProjectBar({
       method: 'POST',
       body: JSON.stringify({ cwd: path }),
     }).catch(() => {});
-  }
-
-  async function applyProfile(name: string): Promise<void> {
-    setProfileApply({ status: 'pending', name });
-    try {
-      await fetchJson(`/api/profiles/${encodeURIComponent(name)}/apply`, {
-        method: 'POST',
-        body: JSON.stringify({}),
-      });
-      setProfileApply({ status: 'success', name });
-      window.dispatchEvent(new CustomEvent('brainctl:profiles-changed'));
-      setTimeout(() => setProfileApply({ status: 'idle' }), 2000);
-    } catch (err) {
-      setProfileApply({
-        status: 'error',
-        name,
-        message: err instanceof Error ? err.message : 'Apply failed',
-      });
-    }
   }
 
   const sections = buildPickerSections({
@@ -155,26 +109,6 @@ export function ProjectBar({
       })),
     });
   }
-
-  const profileSections: DropdownSection[] = [
-    {
-      title: profiles.length > 0 ? 'Apply profile' : undefined,
-      items: profiles.map((name) => ({
-        value: name,
-        label: name,
-        description: 'Apply across all agents',
-      })),
-    },
-  ];
-
-  const profileTriggerLabel =
-    profileApply.status === 'pending'
-      ? `Applying ${profileApply.name}…`
-      : profileApply.status === 'success'
-        ? `Applied ${profileApply.name}`
-        : profileApply.status === 'error'
-          ? `Failed: ${profileApply.name}`
-          : 'Choose profile…';
 
   return (
     <div className="flex items-center gap-3 border-b border-zinc-200 bg-zinc-50 px-4 py-2">
@@ -231,20 +165,6 @@ export function ProjectBar({
               <Folder size={14} className="text-zinc-500" /> Browse folder…
             </button>
           </div>
-        }
-      />
-
-      <Dropdown
-        leftIcon={<Layers size={13} />}
-        triggerLabel={profileTriggerLabel}
-        sections={profileSections}
-        onSelect={(name) => void applyProfile(name)}
-        emptyLabel="No profiles yet"
-        width="w-72"
-        footer={
-          profileApply.status === 'error' ? (
-            <div className="text-[11px] text-red-600">{profileApply.message}</div>
-          ) : undefined
         }
       />
 

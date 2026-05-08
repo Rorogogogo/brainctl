@@ -388,6 +388,16 @@ export function useProfilesBoard() {
     })();
   }, [fetchLiveConfigs, activeProject]);
 
+  useEffect(() => {
+    const onChanged = (): void => {
+      void fetchLiveConfigs({ suppressErrorToast: true });
+    };
+    window.addEventListener('brainctl:profiles-changed', onChanged);
+    return () => {
+      window.removeEventListener('brainctl:profiles-changed', onChanged);
+    };
+  }, [fetchLiveConfigs]);
+
   const previewConfigs = useMemo(
     () => applyPendingChanges(agentConfigs, pendingChanges),
     [agentConfigs, pendingChanges]
