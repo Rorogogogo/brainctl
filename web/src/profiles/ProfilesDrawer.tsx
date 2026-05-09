@@ -128,7 +128,7 @@ export default function ProfilesDrawer({ onApplyProfile }: ProfilesDrawerProps) 
     }
   }, []);
 
-  const handleRefresh = useCallback(async () => {
+  const handleRefresh = useCallback(async (options?: { showToast?: boolean }) => {
     setRefreshState('loading');
     try {
       await loadProfiles();
@@ -147,11 +147,15 @@ export default function ProfilesDrawer({ onApplyProfile }: ProfilesDrawerProps) 
       );
       setContents((prev) => ({ ...prev, ...fresh }));
       setRefreshState('success');
-      toast.success('Profiles refreshed');
+      if (options?.showToast !== false) {
+        toast.success('Profiles refreshed');
+      }
       setTimeout(() => setRefreshState('idle'), 1200);
     } catch (err) {
       setRefreshState('idle');
-      toast.error(`Failed to refresh profiles: ${err instanceof Error ? err.message : String(err)}`);
+      if (options?.showToast !== false) {
+        toast.error(`Failed to refresh profiles: ${err instanceof Error ? err.message : String(err)}`);
+      }
     }
   }, [expanded, loadProfiles]);
 
@@ -163,7 +167,7 @@ export default function ProfilesDrawer({ onApplyProfile }: ProfilesDrawerProps) 
   }, [loadProfiles]);
 
   useEffect(() => {
-    const onChanged = () => void handleRefresh();
+    const onChanged = () => void handleRefresh({ showToast: false });
     window.addEventListener('brainctl:profiles-changed', onChanged);
     return () => window.removeEventListener('brainctl:profiles-changed', onChanged);
   }, [handleRefresh]);
