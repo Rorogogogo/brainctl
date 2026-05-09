@@ -17,7 +17,7 @@ import {
 import { AgentLogo } from '../components/agent-brand';
 import ConfirmDialog from '../components/ConfirmDialog';
 import { Tooltip } from '../components/Tooltip';
-import ApplyProfileModal from './ApplyProfileModal';
+import { toast } from '../components/ui/toast.js';
 import EditProfileModal from './EditProfileModal';
 
 const AGENTS = ['claude', 'codex', 'gemini'] as const;
@@ -51,9 +51,11 @@ interface ApplyState {
   status: 'idle' | 'pending' | 'success' | 'error';
   message?: string;
 }
+export interface ProfilesDrawerProps {
+  onApplyProfile?: (profileName: string) => void;
+}
 
-
-export default function ProfilesDrawer() {
+export default function ProfilesDrawer({ onApplyProfile }: ProfilesDrawerProps) {
   const [profiles, setProfiles] = useState<ProfileSummary[]>([]);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [contents, setContents] = useState<Record<string, ProfileContents>>({});
@@ -65,8 +67,6 @@ export default function ProfilesDrawer() {
   const [renameTarget, setRenameTarget] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
   const [renaming, setRenaming] = useState(false);
-  const [applyModalOpen, setApplyModalOpen] = useState(false);
-  const [applyModalProfile, setApplyModalProfile] = useState<string | null>(null);
   const [editModalProfile, setEditModalProfile] = useState<string | null>(null);
   const [drawerWidth, setDrawerWidth] = useState<number>(() => {
     if (typeof window === 'undefined') return 224;
@@ -130,23 +130,29 @@ export default function ProfilesDrawer() {
 
   const handleRefresh = useCallback(async () => {
     setRefreshState('loading');
-    await loadProfiles();
-    // refetch contents for any expanded profile
-    const expandedNames = Array.from(expanded);
-    const fresh: Record<string, ProfileContents> = {};
-    await Promise.all(
-      expandedNames.map(async (name) => {
-        try {
-          const r = await fetch(`/api/profiles/${encodeURIComponent(name)}/contents`);
-          fresh[name] = (await r.json()) as ProfileContents;
-        } catch {
-          // skip
-        }
-      })
-    );
-    setContents((prev) => ({ ...prev, ...fresh }));
-    setRefreshState('success');
-    setTimeout(() => setRefreshState('idle'), 1200);
+    try {
+      await loadProfiles();
+      // refetch contents for any expanded profile
+      const expandedNames = Array.from(expanded);
+      const fresh: Record<string, ProfileContents> = {};
+      await Promise.all(
+        expandedNames.map(async (name) => {
+          try {
+            const r = await fetch(`/api/profiles/${encodeURIComponent(name)}/contents`);
+            fresh[name] = (await r.json()) as ProfileContents;
+          } catch {
+            // skip
+          }
+        })
+      );
+      setContents((prev) => ({ ...prev, ...fresh }));
+      setRefreshState('success');
+      toast.success('Profiles refreshed');
+      setTimeout(() => setRefreshState('idle'), 1200);
+    } catch (err) {
+      setRefreshState('idle');
+      toast.error(`Failed to refresh profiles: ${err instanceof Error ? err.message : String(err)}`);
+    }
   }, [expanded, loadProfiles]);
 
   useEffect(() => {
@@ -307,7 +313,7 @@ export default function ProfilesDrawer() {
   if (loading) {
     return (
       <aside
-        className="relative flex shrink-0 flex-col gap-2 border-r border-zinc-200 bg-[#fcfcfc] p-2 text-xs"
+        className="relative flex h-full min-h-0 shrink-0 flex-col gap-2 border-r border-zinc-200 bg-[#fcfcfc] p-2 text-xs"
         style={{ width: drawerWidth }}
       >
         <Loader2 className="size-4 animate-spin text-zinc-400" />
@@ -318,7 +324,7 @@ export default function ProfilesDrawer() {
 
   return (
     <aside
-      className="relative flex shrink-0 flex-col gap-2 border-r border-zinc-200 bg-[#fcfcfc] p-2 text-xs"
+      className="relative flex h-full min-h-0 shrink-0 flex-col gap-2 border-r border-zinc-200 bg-[#fcfcfc] p-2 text-xs"
       style={{ width: drawerWidth }}
     >
       <div className="flex items-center justify-between px-1">
@@ -359,7 +365,7 @@ export default function ProfilesDrawer() {
           </ul>
         </div>
       )}
-      <ul className="flex flex-col gap-1">
+      <ul className="min-h-0 flex-1 overflow-y-auto pr-1 flex flex-col gap-1">
         {profiles.map((p) => (
           <li key={p.name} className="rounded-lg border border-zinc-200 bg-zinc-50">
             <div className="flex items-center gap-1 px-1 py-1">
@@ -413,8 +419,7 @@ export default function ProfilesDrawer() {
                 <button
                   type="button"
                   onClick={() => {
-                    setApplyModalProfile(p.name);
-                    setApplyModalOpen(true);
+                    onApplyProfile?.(p.name);
                   }}
                   disabled={deleting || renaming}
                   className="grid size-5 place-items-center rounded text-zinc-500 transition hover:bg-emerald-100 hover:text-emerald-700 disabled:opacity-50"
@@ -498,18 +503,6 @@ export default function ProfilesDrawer() {
           </li>
         ))}
       </ul>
-      <ApplyProfileModal
-        open={applyModalOpen}
-        onOpenChange={(open) => {
-          setApplyModalOpen(open);
-          if (!open) setApplyModalProfile(null);
-        }}
-        profiles={profiles.map((p) => p.name)}
-        initialProfile={applyModalProfile}
-        onApplied={() => {
-          window.dispatchEvent(new CustomEvent('brainctl:profiles-changed'));
-        }}
-      />
       <EditProfileModal
         open={editModalProfile !== null}
         onOpenChange={(open) => {

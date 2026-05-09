@@ -111,17 +111,27 @@ export function ProjectBar({
   }
 
   return (
-    <div className="flex items-center gap-3 border-b border-zinc-200 bg-zinc-50 px-4 py-2">
+    <div className="flex min-w-0 flex-1 flex-nowrap items-center gap-2">
       <Dropdown
-        leftIcon={<FolderOpen size={13} />}
+        leftIcon={<FolderOpen size={12} />}
         triggerLabel={basename(activeProject) || '—'}
         sections={projectSections}
         value={activeProject}
         onSelect={pick}
         emptyLabel="No recent projects"
         width="w-96"
+        triggerClassName="inline-flex h-7 items-center gap-1.5 rounded-lg border border-zinc-300 bg-white px-2.5 text-[12px] font-medium text-zinc-800 shadow-sm transition-colors hover:bg-zinc-50 disabled:opacity-50"
+        labelClassName="max-w-[150px] truncate"
         footer={
           <div className="space-y-2">
+            <div className="rounded-md border border-zinc-200 bg-white px-2 py-1.5">
+              <div className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
+                Current path
+              </div>
+              <div className="mt-0.5 break-all font-mono text-[11px] leading-snug text-zinc-700">
+                {activeProject}
+              </div>
+            </div>
             <div>
               <label className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
                 Paste absolute path
@@ -169,14 +179,14 @@ export function ProjectBar({
       />
 
       <div
-        className="ml-auto flex items-center gap-2 rounded-md bg-zinc-200 p-0.5"
+        className="flex h-7 items-center gap-1 rounded-lg bg-zinc-200 p-0.5"
         title="Global = MCPs/skills shared across all projects. Project = scoped to the selected project folder."
       >
         <button
           type="button"
           onClick={() => onScopeChange('global')}
           title="Show config shared across all projects"
-          className={`rounded-md px-2.5 py-1 text-[11px] font-medium transition-colors ${
+          className={`h-6 rounded-md px-2 text-[11px] font-medium leading-6 transition-colors ${
             scope === 'global' ? 'bg-white text-zinc-900 shadow-sm' : 'text-zinc-500 hover:text-zinc-700'
           }`}
         >
@@ -186,7 +196,7 @@ export function ProjectBar({
           type="button"
           onClick={() => onScopeChange('project')}
           title="Show config scoped to the selected project"
-          className={`rounded-md px-2.5 py-1 text-[11px] font-medium transition-colors ${
+          className={`h-6 rounded-md px-2 text-[11px] font-medium leading-6 transition-colors ${
             scope === 'project' ? 'bg-white text-zinc-900 shadow-sm' : 'text-zinc-500 hover:text-zinc-700'
           }`}
         >
@@ -195,8 +205,18 @@ export function ProjectBar({
       </div>
 
       {scope === 'project' && (
-        <div className="font-mono text-[11px] text-zinc-500" title={activeProject}>
-          {activeProject}
+        <div className="relative group min-w-0">
+          <div
+            className="min-w-0 max-w-[clamp(10rem,24vw,26rem)] truncate font-mono text-[11px] text-zinc-500"
+            tabIndex={0}
+          >
+            {activeProject}
+          </div>
+          <span
+            className="pointer-events-none absolute left-0 top-full z-10 mt-1.5 w-max whitespace-nowrap rounded bg-zinc-900 px-1.5 py-0.5 text-left font-mono text-[10px] font-medium text-white opacity-0 shadow-md transition-opacity duration-150 group-hover:opacity-100 group-focus-within:opacity-100"
+          >
+            {activeProject}
+          </span>
         </div>
       )}
 

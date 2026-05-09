@@ -92,21 +92,23 @@ export default function ProfilesView() {
 
   return (
     <div className="grid gap-4 w-full">
-      <ProjectBar
-        scope={boardScope}
-        onScopeChange={setBoardScope}
-        activeProject={activeProject}
-        onActiveProjectChange={requestSwitch}
-      />
-      <div className="flex flex-col items-stretch gap-4 pb-4 border-b border-zinc-200/60 lg:flex-row lg:items-end lg:justify-between">
-        <div className="grid gap-1">
-          <h3 className="text-xl font-semibold tracking-tight text-zinc-900 m-0">Local agents</h3>
+      <div className="flex flex-col items-stretch gap-4 pb-4 border-b border-zinc-200/60 lg:flex-row lg:items-start lg:justify-between">
+        <div className="grid min-w-0 flex-1 gap-1">
+          <div className="flex min-w-0 flex-nowrap items-center gap-3">
+            <h3 className="m-0 shrink-0 text-xl font-semibold tracking-tight text-zinc-900">Local agents</h3>
+            <ProjectBar
+              scope={boardScope}
+              onScopeChange={setBoardScope}
+              activeProject={activeProject}
+              onActiveProjectChange={requestSwitch}
+            />
+          </div>
           <span className="text-[13px] font-medium text-zinc-500">
             Drag skills, MCPs, and plugins across columns.
           </span>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
           <span className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-2.5 py-1 text-[11px] font-medium text-zinc-700 shadow-sm">
             <ArrowRightLeft size={12} className="text-zinc-400" /> {liveAgentCount} agents
           </span>
