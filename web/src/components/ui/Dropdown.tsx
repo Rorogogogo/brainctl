@@ -22,6 +22,8 @@ export interface DropdownProps {
   emptyLabel?: string;
   footer?: ReactNode;
   width?: string;
+  triggerClassName?: string;
+  labelClassName?: string;
   align?: 'start' | 'end';
   disabled?: boolean;
 }
@@ -36,6 +38,8 @@ export function Dropdown({
   emptyLabel,
   footer,
   width = 'w-80',
+  triggerClassName,
+  labelClassName,
   align = 'start',
   disabled = false,
 }: DropdownProps): JSX.Element {
@@ -68,10 +72,13 @@ export function Dropdown({
         type="button"
         disabled={disabled}
         onClick={() => setOpen((o) => !o)}
-        className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-zinc-300 bg-white px-3 text-sm font-medium text-zinc-800 shadow-sm transition-colors hover:bg-zinc-50 disabled:opacity-50"
+        className={
+          triggerClassName ??
+          'inline-flex h-8 items-center gap-1.5 rounded-lg border border-zinc-300 bg-white px-3 text-sm font-medium text-zinc-800 shadow-sm transition-colors hover:bg-zinc-50 disabled:opacity-50'
+        }
       >
         {leftIcon && <span className="text-zinc-500">{leftIcon}</span>}
-        <span className="max-w-[260px] truncate">{triggerLabel ?? placeholder}</span>
+        <span className={labelClassName ?? 'max-w-[260px] truncate'}>{triggerLabel ?? placeholder}</span>
         <ChevronDown
           size={13}
           className={`text-zinc-400 transition-transform duration-200 ${open ? 'rotate-180' : ''}`}

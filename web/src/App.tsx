@@ -1,8 +1,10 @@
 import { useState } from 'react';
-import { Check, Download, Loader2 } from 'lucide-react';
+import { Bell, Check, Download, Loader2 } from 'lucide-react';
 
 import { AgentLogo } from './components/agent-brand';
 import CreateProfileButton from './components/CreateProfileButton';
+import { toast } from './components/ui/toast.js';
+import ApplyProfilePanel from './profiles/ApplyProfilePanel';
 import ProfilesDrawer from './profiles/ProfilesDrawer';
 import ProfilesView from './profiles/ProfilesView';
 
@@ -99,11 +101,34 @@ function SnapshotButtons() {
   );
 }
 
-export default function App() {
+function ToastTestButton() {
+  function showTestToasts() {
+    toast.message({ text: 'Normal message toast' });
+    toast.success('Success toast');
+    toast.warning('Warning toast');
+    toast.error('Error toast');
+  }
+
   return (
-    <main className="min-h-screen overflow-x-hidden bg-[#fcfcfc] p-4 text-zinc-900">
-      <div className="mx-auto grid w-full gap-4">
-        <header className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
+    <button
+      type="button"
+      onClick={showTestToasts}
+      className="inline-flex h-9 items-center gap-2 rounded-xl border border-zinc-200 bg-white px-4 text-sm font-medium text-zinc-700 shadow-sm transition-colors hover:bg-zinc-50 hover:text-zinc-900"
+      title="Show message, success, warning, and error toasts"
+    >
+      <Bell size={16} />
+      <span>Test toasts</span>
+    </button>
+  );
+}
+
+export default function App() {
+  const [applyProfileName, setApplyProfileName] = useState<string | null>(null);
+
+  return (
+    <main className="h-screen overflow-hidden bg-[#fcfcfc] p-4 text-zinc-900">
+      <div className="mx-auto grid h-full w-full grid-rows-[auto_minmax(0,1fr)] gap-4">
+        <header className="flex min-h-0 shrink-0 flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex items-center gap-3">
             <div className="grid size-7 place-items-center rounded-lg bg-zinc-900 text-white shadow-sm">
               <img src="/favicon-light.svg" alt="Brainctl Logo" className="size-4" />
@@ -132,6 +157,7 @@ export default function App() {
 
           <div className="flex flex-wrap items-center gap-2">
             <SnapshotButtons />
+            <ToastTestButton />
             <CreateProfileButton />
             <a
               href="https://www.brainctl.net"
@@ -145,10 +171,20 @@ export default function App() {
           </div>
         </header>
 
-        <section className="flex w-full gap-4 pt-4 -ml-4">
-          <ProfilesDrawer />
-          <div className="flex-1">
-            <ProfilesView />
+        <section className="-ml-4 flex min-h-0 w-full gap-4 overflow-hidden pt-4">
+          <ProfilesDrawer onApplyProfile={setApplyProfileName} />
+          <div className="min-w-0 flex-1 overflow-y-auto pr-1">
+            {applyProfileName ? (
+              <ApplyProfilePanel
+                initialProfile={applyProfileName}
+                onCancel={() => setApplyProfileName(null)}
+                onApplied={() => {
+                  window.dispatchEvent(new CustomEvent('brainctl:profiles-changed'));
+                }}
+              />
+            ) : (
+              <ProfilesView />
+            )}
           </div>
         </section>
       </div>

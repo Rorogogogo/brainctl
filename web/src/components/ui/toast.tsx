@@ -28,7 +28,7 @@ type ToastType = 'message' | 'success' | 'warning' | 'error';
 
 type Toast = {
   id: number;
-  text: ReactNode;
+  text: string | ReactNode;
   measuredHeight?: number;
   timeout?: ReturnType<typeof setTimeout>;
   remaining?: number;
@@ -52,7 +52,7 @@ type ToastOptions = {
 };
 
 type Message = ToastOptions & {
-  text: ReactNode;
+  text: string | ReactNode;
 };
 
 let root: Root | null = null;
@@ -73,7 +73,11 @@ const toastStore = {
   toasts: [] as Toast[],
   listeners: new Set<() => void>(),
 
-  add(text: ReactNode, type: ToastType, options: ToastOptions = {}) {
+  add(
+    text: string | ReactNode,
+    type: ToastType,
+    options: ToastOptions = {}
+  ) {
     const id = toastId++;
     const toast: Toast = {
       id,
@@ -175,10 +179,10 @@ function ToastContainer() {
   const getFinalTransform = (index: number, length: number) => {
     if (index === length - 1) return 'none';
     const offset = length - 1 - index;
-    let translateY = toasts[length - 1]?.measuredHeight || 63;
+    let translateY = 0;
     for (let i = length - 1; i > index; i--) {
       if (isHovered) {
-        translateY += (toasts[i - 1]?.measuredHeight || 63) + 10;
+        translateY += (toasts[i]?.measuredHeight || 63) + 10;
       } else {
         translateY += 20;
       }
@@ -199,11 +203,13 @@ function ToastContainer() {
   };
 
   const visibleToasts = toasts.slice(lastVisibleStart);
-  const containerHeight = visibleToasts.reduce((acc, toast) => acc + (toast.measuredHeight ?? 63), 0);
+  const containerHeight =
+    visibleToasts.reduce((acc, toast) => acc + (toast.measuredHeight ?? 63), 0) +
+    (isHovered && visibleToasts.length > 1 ? (visibleToasts.length - 1) * 10 : 0);
 
   return (
     <div
-      className="pointer-events-none fixed bottom-4 right-4 z-[9999] w-[min(420px,calc(100vw-2rem))]"
+      className="pointer-events-none fixed right-4 top-4 z-[9999] w-[min(420px,calc(100vw-2rem))]"
       style={{ height: containerHeight }}
     >
       <div
@@ -219,10 +225,10 @@ function ToastContainer() {
               key={toast.id}
               ref={measureRef(toast)}
               className={clsx(
-                'shadow-menu absolute bottom-0 right-0 h-fit rounded-xl p-4 leading-[21px]',
+                'shadow-menu absolute right-0 top-0 h-fit rounded-xl p-4 leading-[21px]',
                 {
                   message: 'bg-geist-background text-gray-1000',
-                  success: 'bg-blue-700 text-contrast-fg',
+                  success: 'bg-emerald-600 text-contrast-fg',
                   warning: 'bg-amber-800 text-gray-1000 dark:text-gray-100',
                   error: 'bg-red-800 text-contrast-fg',
                 }[toast.type],
@@ -234,10 +240,10 @@ function ToastContainer() {
                 transition: 'all .35s cubic-bezier(.25,.75,.6,.98)',
                 transform: shownIds.includes(toast.id)
                   ? getFinalTransform(index, toasts.length)
-                  : 'translate3d(0, 100%, 150px) scale(1)',
+                  : 'translate3d(0, -100%, 150px) scale(1)',
               }}
             >
-              <div className="flex flex-col items-center justify-between text-[.875rem]">
+              <div className="flex flex-col items-center justify-between text-[.875rem] font-semibold">
                 <div className="flex h-full w-full items-center justify-between gap-4">
                   <span className="min-w-0">{toast.text}</span>
                   {!toast.action && (
@@ -305,7 +311,7 @@ function ToastContainer() {
 function mountContainer() {
   if (root || typeof document === 'undefined') return;
   mountEl = document.createElement('div');
-  mountEl.className = 'fixed bottom-4 right-4 z-[9999]';
+  mountEl.className = 'fixed right-4 top-4 z-[9999]';
   document.body.appendChild(mountEl);
   root = createRoot(mountEl);
   root.render(<ToastContainer />);
@@ -316,15 +322,15 @@ export const toast = {
     mountContainer();
     toastStore.add(text, 'message', options);
   },
-  success(text: ReactNode, options?: ToastOptions) {
+  success(text: string | ReactNode, options?: ToastOptions) {
     mountContainer();
     toastStore.add(text, 'success', options);
   },
-  warning(text: ReactNode, options?: ToastOptions) {
+  warning(text: string | ReactNode, options?: ToastOptions) {
     mountContainer();
     toastStore.add(text, 'warning', options);
   },
-  error(text: ReactNode, options?: ToastOptions) {
+  error(text: string | ReactNode, options?: ToastOptions) {
     mountContainer();
     toastStore.add(text, 'error', options);
   },
