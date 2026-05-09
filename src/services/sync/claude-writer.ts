@@ -29,17 +29,19 @@ export function createClaudeWriter(): AgentConfigWriter {
         backedUpTo = backupPath;
       }
 
-      // Build mcpServers for this project
-      const mcpServers: Record<string, unknown> = {};
-
-      for (const [name, config] of Object.entries(options.mcpServers)) {
-        mcpServers[name] = toClaudeFormat(config);
-      }
-
       // Merge into existing config (preserve other projects)
       const projects = (existing.projects ?? {}) as Record<string, Record<string, unknown>>;
       const projectConfig = projects[options.cwd] ?? {};
-      projectConfig.mcpServers = mcpServers;
+      const baselineMcpServers =
+        options.merge && projectConfig.mcpServers && typeof projectConfig.mcpServers === 'object'
+          ? { ...(projectConfig.mcpServers as Record<string, unknown>) }
+          : {};
+
+      for (const [name, config] of Object.entries(options.mcpServers)) {
+        baselineMcpServers[name] = toClaudeFormat(config);
+      }
+
+      projectConfig.mcpServers = baselineMcpServers;
       projects[options.cwd] = projectConfig;
       existing.projects = projects;
 

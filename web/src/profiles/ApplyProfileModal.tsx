@@ -47,6 +47,7 @@ export default function ApplyProfileModal({
   const [loadingContents, setLoadingContents] = useState(false);
   const [agents, setAgents] = useState<Set<Agent>>(new Set(ALL_AGENTS));
   const [excluded, setExcluded] = useState<Set<string>>(new Set());
+  const [replace, setReplace] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<{
@@ -63,6 +64,7 @@ export default function ApplyProfileModal({
     setSelectedProfile(initialProfile);
     setAgents(new Set(ALL_AGENTS));
     setExcluded(new Set());
+    setReplace(false);
     setSuccess(null);
   }, [open, initialProfile]);
 
@@ -195,6 +197,7 @@ export default function ApplyProfileModal({
           body: JSON.stringify({
             agents: Array.from(agents),
             ...(itemsPayload ? { items: itemsPayload } : {}),
+            ...(replace ? { replace: true } : {}),
           }),
         }
       );
@@ -338,6 +341,45 @@ export default function ApplyProfileModal({
               ) : (
                 <div className="mt-1">No prior agent state to back up.</div>
               )}
+            </div>
+          )}
+
+          {!success && selectedProfile && (
+            <div className="mt-4">
+              <div className="mb-1.5 text-[11px] font-medium uppercase tracking-wide text-zinc-500">
+                How to apply
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setReplace(false)}
+                  className={`flex flex-col items-start gap-1 rounded-lg border px-3 py-2.5 text-left text-xs transition-all ${
+                    !replace
+                      ? 'border-zinc-900 bg-zinc-900 text-white shadow-sm'
+                      : 'border-zinc-200 bg-white text-zinc-700 hover:border-zinc-300'
+                  }`}
+                >
+                  <span className="text-sm font-medium">Add to what I have</span>
+                  <span className={`text-[11px] leading-relaxed ${!replace ? 'text-zinc-300' : 'text-zinc-500'}`}>
+                    Install everything in this profile. Anything else you've already
+                    installed stays.
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setReplace(true)}
+                  className={`flex flex-col items-start gap-1 rounded-lg border px-3 py-2.5 text-left text-xs transition-all ${
+                    replace
+                      ? 'border-rose-500 bg-rose-50 text-rose-900 shadow-sm'
+                      : 'border-zinc-200 bg-white text-zinc-700 hover:border-zinc-300'
+                  }`}
+                >
+                  <span className="text-sm font-medium">Match this profile exactly</span>
+                  <span className={`text-[11px] leading-relaxed ${replace ? 'text-rose-700' : 'text-zinc-500'}`}>
+                    Anything you already have that isn't in this profile will be removed.
+                  </span>
+                </button>
+              </div>
             </div>
           )}
 

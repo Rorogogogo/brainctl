@@ -17,6 +17,7 @@ export interface ProfileExportService {
     outputPath?: string;
     format?: PortablePackFormat;
     credentialsMode?: PortableCredentialsMode;
+    onProgress?: (message: string) => void;
   }): Promise<{ archivePath: string; format: PortablePackFormat; warnings: string[] }>;
 }
 
@@ -43,6 +44,7 @@ export function createProfileExportService(
         outputPath: options.outputPath,
         format: options.format,
         credentialsMode: options.credentialsMode,
+        onProgress: options.onProgress,
       });
     },
   };

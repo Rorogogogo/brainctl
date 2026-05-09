@@ -96,6 +96,12 @@ export function createMcpServer(
         .boolean()
         .optional()
         .describe('Force backup on/off (default: on for full apply, off for partial)'),
+      replace: z
+        .boolean()
+        .optional()
+        .describe(
+          'DESTRUCTIVE: when true, uninstall live plugins/skills not present in the profile so the agent matches it exactly. Default false (additive apply).'
+        ),
     }),
     execute: async (args) => {
       const applyService = createProfileApplyService();
@@ -105,6 +111,7 @@ export function createMcpServer(
         agents: (args.agents as AgentName[] | undefined) ?? ALL_AGENTS,
         items: args.items as ItemSelector[] | undefined,
         backup: args.backup,
+        replace: args.replace,
       });
       return JSON.stringify(result, null, 2);
     },
@@ -121,13 +128,22 @@ export function createMcpServer(
         .optional()
         .describe('Profile name to write into (default: backup-<agent>-<timestamp>)'),
     }),
-    execute: async (args) => {
+    execute: async (args, context) => {
       const snapshotService = createProfileSnapshotService();
       const profileName = args.as ?? defaultBackupProfileName(args.agent as AgentName);
+      const onProgress = (message: string) => {
+        console.error(`[brainctl_snapshot_agent] ${message}`);
+        try {
+          context?.log?.info(message);
+        } catch {
+          // best-effort
+        }
+      };
       const result = await snapshotService.execute({
         cwd,
         agent: args.agent as AgentName,
         profileName,
+        onProgress,
       });
       return JSON.stringify({ profileName, ...result }, null, 2);
     },
@@ -239,11 +255,19 @@ export function createMcpServer(
       agent: z.enum(['claude', 'codex', 'gemini']).optional().describe('Pack a live agent config instead of a saved profile'),
       output_path: z.string().optional().describe('Output file path (defaults to <name>.tar.gz in cwd)'),
     }),
-    execute: async (args) => {
+    execute: async (args, context) => {
       if (!args.name && !args.agent) {
         return JSON.stringify({ error: 'Provide name or agent.' }, null, 2);
       }
 
+      const onProgress = (message: string) => {
+        console.error(`[brainctl_export_profile] ${message}`);
+        try {
+          context?.log?.info(message);
+        } catch {
+          // best-effort
+        }
+      };
       const exportService = createProfileExportService();
       const result = await exportService.execute({
         cwd,
@@ -251,6 +275,7 @@ export function createMcpServer(
           ? { source: 'agent', agent: args.agent, cwd }
           : { source: 'profile', name: args.name as string },
         outputPath: args.output_path,
+        onProgress,
       });
       return JSON.stringify(result, null, 2);
     },

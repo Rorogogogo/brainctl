@@ -3,6 +3,9 @@ import type { McpServerConfig } from '../../types.js';
 export interface AgentWriteOptions {
   mcpServers: Record<string, McpServerConfig>;
   cwd: string;
+  // When true, preserve existing live MCP entries that aren't in mcpServers
+  // (additive overlay). When false/undefined, replace the entire MCP block.
+  merge?: boolean;
 }
 
 export interface AgentWriteResult {

@@ -35,6 +35,8 @@ export type PortablePackSource =
 export type PortablePackFormat = 'tarball' | 'folder';
 export type PortableCredentialsMode = 'redact' | 'keep';
 
+export type PortablePackProgress = (message: string) => void;
+
 export interface PortableProfilePackService {
   execute(options: {
     cwd?: string;
@@ -42,6 +44,7 @@ export interface PortableProfilePackService {
     outputPath?: string;
     format?: PortablePackFormat;
     credentialsMode?: PortableCredentialsMode;
+    onProgress?: PortablePackProgress;
   }): Promise<{ archivePath: string; format: PortablePackFormat; warnings: string[] }>;
 }
 
@@ -60,19 +63,34 @@ export function createPortableProfilePackService(
     async execute(options) {
       const cwd = options.source.source === 'agent' ? options.source.cwd : options.cwd ?? process.cwd();
       const stagingDir = await mkdtemp(path.join(tmpdir(), 'brainctl-pack-'));
+      const report = options.onProgress ?? (() => {});
 
       try {
+        report(
+          options.source.source === 'agent'
+            ? `Reading ${options.source.agent} config and skills…`
+            : `Loading profile "${options.source.name}"…`
+        );
         const packed = await buildPackedProfile({
           cwd,
           source: options.source,
           profileService,
           agentConfigService,
         });
+        report(
+          `Found ${Object.keys(packed.profile.mcps).length} MCP(s), ${packed.bundledPlugins.size} plugin dir(s), ${packed.bundledUserSkills.size} user-skill dir(s).`
+        );
 
         await writeFile(path.join(stagingDir, 'manifest.yaml'), YAML.stringify(packed.manifest), 'utf8');
         await writeFile(path.join(stagingDir, 'profile.yaml'), YAML.stringify(packed.profile), 'utf8');
 
+        if (packed.bundledSources.size > 0) {
+          report(`Bundling ${packed.bundledSources.size} MCP source dir(s)…`);
+        }
+        let mcpIndex = 0;
         for (const [key, sourcePath] of packed.bundledSources) {
+          mcpIndex += 1;
+          report(`  [${mcpIndex}/${packed.bundledSources.size}] copying MCP "${key}"`);
           const destPath = path.join(stagingDir, 'mcps', key);
           await mkdir(destPath, { recursive: true });
           const excludePatterns = getExcludePatternsForMcp(packed.profile.mcps[key]);
@@ -82,6 +100,9 @@ export function createPortableProfilePackService(
           });
         }
 
+        if (packed.bundledPlugins.size > 0) {
+          report(`Bundling ${packed.bundledPlugins.size} plugin dir(s)…`);
+        }
         for (const [archivePath, sourcePath] of packed.bundledPlugins) {
           const destPath = path.join(stagingDir, archivePath);
           await mkdir(path.dirname(destPath), { recursive: true });
@@ -91,6 +112,9 @@ export function createPortableProfilePackService(
           });
         }
 
+        if (packed.bundledUserSkills.size > 0) {
+          report(`Bundling ${packed.bundledUserSkills.size} user-skill dir(s)…`);
+        }
         for (const [archivePath, sourcePath] of packed.bundledUserSkills) {
           const destPath = path.join(stagingDir, archivePath);
           await mkdir(path.dirname(destPath), { recursive: true });
@@ -119,16 +143,20 @@ export function createPortableProfilePackService(
           await writeRepoReadyFiles(stagingDir, packed);
           const outputPath =
             options.outputPath ?? path.join(cwd, packed.profile.name);
+          report(`Writing folder profile to ${outputPath}…`);
           await rm(outputPath, { recursive: true, force: true });
           await mkdir(path.dirname(outputPath), { recursive: true });
           await cp(stagingDir, outputPath, { recursive: true });
+          report('Done.');
           return { archivePath: outputPath, format, warnings };
         }
 
         const outputPath = options.outputPath ?? path.join(cwd, `${packed.profile.name}.tar.gz`);
+        report(`Compressing tarball to ${outputPath}…`);
         execSync(`tar -czf "${outputPath}" -C "${stagingDir}" .`, {
           stdio: 'pipe',
         });
+        report('Done.');
 
         return { archivePath: outputPath, format, warnings };
       } finally {

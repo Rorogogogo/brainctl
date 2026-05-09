@@ -12,6 +12,7 @@ export interface ProfileSnapshotService {
     cwd: string;
     agent: AgentName;
     profileName: string;
+    onProgress?: (message: string) => void;
   }): Promise<{ profilePath: string }>;
 }
 
@@ -27,7 +28,9 @@ export function createProfileSnapshotService(): ProfileSnapshotService {
         outputPath,
         format: 'folder',
         credentialsMode: 'keep',
+        onProgress: options.onProgress,
       });
+      options.onProgress?.(`Naming profile "${options.profileName}"…`);
       await renameInsideProfile(outputPath, options.profileName);
       return { profilePath: result.archivePath };
     },
