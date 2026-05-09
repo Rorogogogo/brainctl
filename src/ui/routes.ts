@@ -31,6 +31,7 @@ import {
   createProfileSnapshotService,
   defaultBackupProfileName,
 } from '../services/profile/profile-snapshot-service.js';
+import { normalizePortableProfileManifest } from '../services/profile/profile-manifest-normalizer.js';
 import { createRecentProjectsService } from '../services/platform/recent-projects-service.js';
 import type { AgentName } from '../types.js';
 import path from 'node:path';
@@ -376,6 +377,30 @@ export function createUiRouteHandler(
           return sendJson(response, 400, { error: 'Invalid agent' });
         }
         const profileName = data.as ?? defaultBackupProfileName(data.agent);
+        if (acceptsNdjson(request)) {
+          response.statusCode = 200;
+          response.setHeader('Content-Type', 'application/x-ndjson; charset=utf-8');
+          response.setHeader('Cache-Control', 'no-cache');
+          try {
+            const result = await profileSnapshotService.execute({
+              cwd: dependencies.cwd,
+              agent: data.agent,
+              profileName,
+              onProgress: (message) => {
+                writeNdjson(response, { type: 'progress', message });
+              },
+            });
+            writeNdjson(response, { type: 'result', profileName, ...result });
+          } catch (error) {
+            writeNdjson(response, {
+              type: 'error',
+              error: error instanceof Error ? error.message : 'Internal server error',
+            });
+          } finally {
+            response.end();
+          }
+          return;
+        }
         try {
           const result = await profileSnapshotService.execute({
             cwd: dependencies.cwd,
@@ -799,7 +824,10 @@ export function createUiRouteHandler(
             try {
               const { readFile: readManifest } = await import('node:fs/promises');
               const yamlMod = await import('yaml');
-              manifest = yamlMod.default.parse(await readManifest(manifestPath, 'utf8'));
+              const parsedManifest = yamlMod.default.parse(await readManifest(manifestPath, 'utf8'));
+              manifest = parsedManifest && typeof parsedManifest === 'object' && !Array.isArray(parsedManifest)
+                ? normalizePortableProfileManifest(parsedManifest as import('../types.js').PortableProfileManifest)
+                : parsedManifest;
             } catch {
               manifest = null;
             }
@@ -991,6 +1019,16 @@ function sendJson(
   response.statusCode = statusCode;
   response.setHeader('Content-Type', 'application/json; charset=utf-8');
   response.end(JSON.stringify(body));
+}
+
+function acceptsNdjson(request: IncomingMessage): boolean {
+  return String(request.headers.accept ?? '')
+    .split(',')
+    .some((value) => value.trim().toLowerCase().startsWith('application/x-ndjson'));
+}
+
+function writeNdjson(response: ServerResponse, body: unknown): void {
+  response.write(`${JSON.stringify(body)}\n`);
 }
 
 async function serveUiResponse(pathname: string, response: ServerResponse): Promise<void> {

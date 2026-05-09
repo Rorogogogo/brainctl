@@ -1,5 +1,5 @@
 import { execSync } from 'node:child_process';
-import { copyFile, cp, mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
+import { cp, mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
@@ -15,6 +15,7 @@ import type {
 import { installPlugin, installUserSkill } from '../agent/agent-asset-installer.js';
 import { resolvePortableMcpCredentials } from '../credential/credential-resolution-service.js';
 import { createMcpPreflightService, type McpPreflightService } from '../platform/mcp-preflight-service.js';
+import { normalizePortableProfileManifest } from './profile-manifest-normalizer.js';
 import { brainctlHome, parseProfile } from './profile-service.js';
 
 function profilesRoot(_cwd: string): string {
@@ -77,7 +78,7 @@ export function createProfileImportService(
           });
         }
 
-        const manifest = await readPortableManifest(extractDir);
+        const manifest = normalizePortableProfileManifest(await readPortableManifest(extractDir));
         const profileSource = await readFile(
           path.join(extractDir, 'profile.yaml'),
           'utf8'
@@ -205,9 +206,11 @@ export function createProfileImportService(
 
         // retain manifest in profile folder so sync can reapply assets
         try {
-          await copyFile(
-            path.join(extractDir, 'manifest.yaml'),
-            path.join(profilesRoot(cwd), profileName, 'manifest.yaml')
+          await mkdir(path.join(profilesRoot(cwd), profileName), { recursive: true });
+          await writeFile(
+            path.join(profilesRoot(cwd), profileName, 'manifest.yaml'),
+            YAML.stringify(manifest),
+            'utf8'
           );
         } catch {
           // best-effort
@@ -383,4 +386,3 @@ function resolveBundledArchivePath(extractDir: string, bundlePath: string): stri
 
   return resolved;
 }
-

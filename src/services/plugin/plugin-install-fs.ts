@@ -46,7 +46,10 @@ export async function defaultInstallCommand(options: {
   if (options.targetAgent === 'codex') {
     const skillDir = getSkillDir('codex', options.command.name);
     await mkdir(skillDir, { recursive: true });
-    const { skillMarkdown } = claudeCommandMdToCodexSkill(options.command.content);
+    const { skillMarkdown } = claudeCommandMdToCodexSkill(
+      options.command.content,
+      options.command.name
+    );
     await writeFile(path.join(skillDir, 'SKILL.md'), skillMarkdown, 'utf8');
     return;
   }

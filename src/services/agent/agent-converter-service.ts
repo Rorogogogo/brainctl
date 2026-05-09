@@ -67,27 +67,33 @@ export function codexAgentTomlToClaudeMd(source: string): string {
   return serializeMarkdownWithFrontmatter(frontmatter, `\n${parsed.developerInstructions.trim()}\n`);
 }
 
-export function claudeCommandMdToCodexSkill(source: string): {
+export function claudeCommandMdToCodexSkill(source: string, commandName?: string): {
   frontmatter: Record<string, unknown>;
   skillMarkdown: string;
 } {
   const { frontmatter, body } = parseMarkdownWithFrontmatter(source);
-  const description = String(frontmatter.description ?? '').trim();
-  if (!description) {
-    throw new Error('Claude command is missing required "description" frontmatter field.');
-  }
+  const description =
+    String(frontmatter.description ?? '').trim() ||
+    `Run the ${commandName?.trim() || 'Claude'} command.`;
 
   const skillFrontmatter: Record<string, unknown> = {
     description,
   };
   if (frontmatter['argument-hint']) {
-    skillFrontmatter['argument-hint'] = frontmatter['argument-hint'];
+    skillFrontmatter['argument-hint'] = formatArgumentHint(frontmatter['argument-hint']);
   }
 
   return {
     frontmatter: skillFrontmatter,
     skillMarkdown: serializeMarkdownWithFrontmatter(skillFrontmatter, body.startsWith('\n') ? body : `\n${body}`),
   };
+}
+
+function formatArgumentHint(value: unknown): string {
+  if (Array.isArray(value)) {
+    return value.map((item) => `[${String(item)}]`).join(' ');
+  }
+  return String(value);
 }
 
 function inferSandboxModeFromClaudeTools(rawTools: unknown): string | undefined {

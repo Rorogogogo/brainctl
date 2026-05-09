@@ -3,6 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 import { afterEach, describe, expect, it } from 'vitest';
+import YAML from 'yaml';
 
 import { ProfileError } from '../../src/errors.js';
 import { createProfileApplyService } from '../../src/services/profile/profile-apply-service.js';
@@ -235,5 +236,101 @@ describe('createProfileApplyService', () => {
 
     expect(snapshotCalls.map((c) => c.agent)).toEqual(['claude', 'codex']);
     expect(result.backups).toHaveLength(2);
+  });
+
+  it('does not install plugin commands as standalone user skills when applying to Codex', async () => {
+    const tempHome = await mkdtemp(path.join(os.tmpdir(), 'brainctl-apply-home-'));
+    const tempProject = await mkdtemp(path.join(os.tmpdir(), 'brainctl-apply-proj-'));
+    tempDirs.push(tempHome, tempProject);
+    const originalHome = process.env.HOME;
+    const originalBrainctlHome = process.env.BRAINCTL_HOME;
+    process.env.HOME = tempHome;
+    process.env.BRAINCTL_HOME = tempProject;
+
+    try {
+      const folder = path.join(tempProject, '.brainctl', 'profiles', 'shared');
+      await mkdir(path.join(folder, 'plugins', 'demo', 'commands'), { recursive: true });
+      await mkdir(path.join(folder, 'skills', 'ship-it'), { recursive: true });
+      await writeFile(path.join(folder, 'plugins', 'demo', 'plugin.json'), '{}', 'utf8');
+      await writeFile(
+        path.join(folder, 'plugins', 'demo', 'commands', 'ship-it.md'),
+        ['---', 'description: Ship a target', '---', '', 'Ship it.'].join('\n'),
+        'utf8'
+      );
+      await writeFile(
+        path.join(folder, 'skills', 'ship-it', 'SKILL.md'),
+        ['---', 'description: Standalone duplicate', '---', '', 'Duplicate.'].join('\n'),
+        'utf8'
+      );
+      await writeFile(
+        path.join(folder, 'manifest.yaml'),
+        YAML.stringify({
+          schemaVersion: 3,
+          profileName: 'shared',
+          plugins: [
+            {
+              agent: 'claude',
+              name: 'demo',
+              source: 'market',
+              archivePath: 'plugins/demo',
+              pluginCommands: ['ship-it'],
+            },
+          ],
+          userSkills: [
+            { agent: 'claude', name: 'ship-it', archivePath: 'skills/ship-it' },
+          ],
+        }),
+        'utf8'
+      );
+
+      const profileService: ProfileService = {
+        async list() {
+          return { profiles: ['shared'] };
+        },
+        async get() {
+          return { name: 'shared', skills: {}, mcps: {}, memory: { paths: [] } };
+        },
+        async create() {
+          return { profilePath: '' };
+        },
+        async update() {},
+        async delete() {},
+        async getMetaConfig() {
+          return { agents: ['codex'] };
+        },
+      };
+
+      const writer: AgentConfigWriter = {
+        async write() {
+          return { configPath: '/tmp/c', backedUpTo: null };
+        },
+        async restore() {
+          return { restoredFrom: '' };
+        },
+      };
+
+      const service = createProfileApplyService({
+        profileService,
+        writers: { codex: writer },
+      });
+
+      const result = await service.execute({
+        cwd: tempProject,
+        profileName: 'shared',
+        agents: ['codex'],
+        backup: false,
+      });
+
+      expect(result.applied[0].pluginsInstalled).toEqual(['demo']);
+      expect(result.applied[0].userSkillsInstalled).toBeUndefined();
+      await expect(
+        readFile(path.join(tempHome, '.codex', 'skills', 'ship-it', 'SKILL.md'), 'utf8')
+      ).resolves.toContain('Ship a target');
+    } finally {
+      if (originalHome === undefined) delete process.env.HOME;
+      else process.env.HOME = originalHome;
+      if (originalBrainctlHome === undefined) delete process.env.BRAINCTL_HOME;
+      else process.env.BRAINCTL_HOME = originalBrainctlHome;
+    }
   });
 });

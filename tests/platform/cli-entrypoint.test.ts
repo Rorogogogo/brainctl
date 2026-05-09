@@ -70,3 +70,35 @@ describe('createProgram version output', () => {
     writeSpy.mockRestore();
   });
 });
+
+describe('profile snapshot command', () => {
+  it('prints snapshot progress messages while creating a profile', async () => {
+    const progressWrites: string[] = [];
+    const outputWrites: string[] = [];
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation((message?: unknown) => {
+      progressWrites.push(String(message));
+    });
+    const logSpy = vi.spyOn(console, 'log').mockImplementation((message?: unknown) => {
+      outputWrites.push(String(message));
+    });
+    const program = createProgram({
+      profileSnapshotService: {
+        async execute(options) {
+          options.onProgress?.('Reading claude config and skills…');
+          return { profilePath: '/tmp/from-claude/profile.yaml' };
+        },
+      },
+    });
+
+    await program.parseAsync(
+      ['node', 'brainctl', 'profile', 'snapshot', '--agent', 'claude', '--as', 'from-claude'],
+      { from: 'node' }
+    );
+
+    expect(progressWrites).toContain('Reading claude config and skills…');
+    expect(outputWrites).toContain('Snapshotted claude into /tmp/from-claude/profile.yaml');
+
+    errorSpy.mockRestore();
+    logSpy.mockRestore();
+  });
+});

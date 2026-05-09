@@ -27,6 +27,7 @@ import type { AgentConfigWriter } from '../sync/agent-writer.js';
 import { createClaudeWriter } from '../sync/claude-writer.js';
 import { createCodexWriter } from '../sync/codex-writer.js';
 import { createGeminiWriter } from '../sync/gemini-writer.js';
+import { normalizePortableProfileManifest } from './profile-manifest-normalizer.js';
 
 export type ItemType = 'mcp' | 'plugin' | 'skill';
 
@@ -249,7 +250,7 @@ async function readProfileManifest(
     const source = await readFile(path.join(folder, 'manifest.yaml'), 'utf8');
     const parsed = YAML.parse(source);
     if (!parsed || typeof parsed !== 'object') return null;
-    return parsed as PortableProfileManifest;
+    return normalizePortableProfileManifest(parsed as PortableProfileManifest);
   } catch {
     return null;
   }

@@ -4,14 +4,17 @@ import { act, createElement, useEffect } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-vi.mock('sonner', () => ({
+vi.mock('../../web/src/components/ui/toast.js', () => ({
   toast: {
     success: vi.fn(),
     error: vi.fn(),
+    warning: vi.fn(),
+    message: vi.fn(),
   },
+  useToasts: vi.fn(),
 }));
 
-import { toast } from 'sonner';
+import { toast } from '../../web/src/components/ui/toast.js';
 
 import {
   useProfilesBoard,

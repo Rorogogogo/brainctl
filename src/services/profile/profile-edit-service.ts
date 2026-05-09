@@ -22,6 +22,7 @@ import {
   profileFile,
   type ProfileService,
 } from './profile-service.js';
+import { normalizePortableProfileManifest } from './profile-manifest-normalizer.js';
 
 export type ProfileItemType = 'mcp' | 'plugin' | 'skill';
 
@@ -220,9 +221,30 @@ export function createProfileEditService(deps: Deps = {}): ProfileEditService {
         }
         const remaining = before.filter((p) => !removed.includes(p));
         manifest.plugins = remaining;
+        const pluginOwnedSkills = new Set(
+          removed.flatMap((plugin) =>
+            (plugin.pluginSkills ?? []).map((skillName) => `${plugin.agent}:${skillName}`)
+          )
+        );
+        const removedPluginSkills = (manifest.userSkills ?? []).filter((skill) =>
+          pluginOwnedSkills.has(`${skill.agent}:${skill.name}`)
+        );
+        if (removedPluginSkills.length > 0) {
+          manifest.userSkills = (manifest.userSkills ?? []).filter(
+            (skill) => !removedPluginSkills.includes(skill)
+          );
+        }
         for (const r of removed) {
           if (!remaining.some((p) => p.archivePath === r.archivePath)) {
             await rm(path.join(profileFolder, r.archivePath), {
+              recursive: true,
+              force: true,
+            });
+          }
+        }
+        for (const skill of removedPluginSkills) {
+          if (!(manifest.userSkills ?? []).some((s) => s.archivePath === skill.archivePath)) {
+            await rm(path.join(profileFolder, skill.archivePath), {
               recursive: true,
               force: true,
             });
@@ -287,7 +309,7 @@ async function writeManifest(
 ): Promise<void> {
   await mkdir(profileFolder, { recursive: true });
   const manifestPath = path.join(profileFolder, 'manifest.yaml');
-  await writeFile(manifestPath, YAML.stringify(manifest), 'utf8');
+  await writeFile(manifestPath, YAML.stringify(normalizePortableProfileManifest(manifest)), 'utf8');
 }
 
 export { ProfileNotFoundError };

@@ -486,4 +486,79 @@ describe('createProfileImportService portable unpack', () => {
     );
     expect(installedProfile.name).toBe('folderimp');
   });
+
+  it('does not install or persist user-skill entries owned by bundled plugins', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'brainctl-unpack-plugin-owned-'));
+    tempDirs.push(root);
+
+    const projectDir = path.join(root, 'workspace');
+    const archiveStageDir = path.join(root, 'archive-stage');
+    const tempHome = path.join(root, 'home');
+    const originalHome = process.env.HOME;
+    await mkdir(projectDir, { recursive: true });
+    await mkdir(tempHome, { recursive: true });
+    process.env.BRAINCTL_HOME = projectDir;
+    process.env.HOME = tempHome;
+
+    try {
+      await mkdir(path.join(archiveStageDir, 'plugins', 'demo', 'skills', 'inner'), {
+        recursive: true,
+      });
+      await mkdir(path.join(archiveStageDir, 'skills', 'inner'), { recursive: true });
+      await mkdir(path.join(archiveStageDir, 'skills', 'personal'), { recursive: true });
+      await writeFile(path.join(archiveStageDir, 'plugins', 'demo', 'plugin.json'), '{}', 'utf8');
+      await writeFile(
+        path.join(archiveStageDir, 'plugins', 'demo', 'skills', 'inner', 'SKILL.md'),
+        '# plugin inner',
+        'utf8'
+      );
+      await writeFile(path.join(archiveStageDir, 'skills', 'inner', 'SKILL.md'), '# duplicate inner', 'utf8');
+      await writeFile(path.join(archiveStageDir, 'skills', 'personal', 'SKILL.md'), '# personal', 'utf8');
+      await writeFile(
+        path.join(archiveStageDir, 'manifest.yaml'),
+        YAML.stringify({
+          schemaVersion: 3,
+          profileName: 'imported',
+          plugins: [
+            {
+              agent: 'codex',
+              name: 'demo',
+              source: 'market',
+              marketplace: 'market',
+              version: '1.0.0',
+              archivePath: 'plugins/demo',
+              pluginSkills: ['inner'],
+            },
+          ],
+          userSkills: [
+            { agent: 'codex', name: 'inner', archivePath: 'skills/inner' },
+            { agent: 'codex', name: 'personal', archivePath: 'skills/personal' },
+          ],
+        }),
+        'utf8'
+      );
+      await writeFile(
+        path.join(archiveStageDir, 'profile.yaml'),
+        ['name: imported', 'mcps: {}'].join('\n'),
+        'utf8'
+      );
+
+      const archivePath = path.join(projectDir, 'imported.tar.gz');
+      execSync(`tar -czf "${archivePath}" -C "${archiveStageDir}" .`);
+
+      const service = createProfileImportService();
+      const result = await service.execute({ cwd: projectDir, archivePath });
+
+      expect(result.installedPlugins).toEqual(['codex:demo']);
+      expect(result.installedUserSkills).toEqual(['codex:personal']);
+
+      const storedManifest = YAML.parse(
+        await readFile(path.join(projectDir, '.brainctl', 'profiles', 'imported', 'manifest.yaml'), 'utf8')
+      ) as { userSkills?: Array<{ name: string }> };
+      expect(storedManifest.userSkills?.map((skill) => skill.name)).toEqual(['personal']);
+    } finally {
+      if (originalHome === undefined) delete process.env.HOME;
+      else process.env.HOME = originalHome;
+    }
+  });
 });

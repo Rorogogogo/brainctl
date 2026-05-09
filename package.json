@@ -40,6 +40,7 @@
     "@radix-ui/react-alert-dialog": "^1.1.15",
     "@radix-ui/react-dialog": "^1.1.15",
     "@radix-ui/react-select": "^2.2.6",
+    "clsx": "^2.1.1",
     "commander": "^14.0.1",
     "fastmcp": "^4.0.0",
     "framer-motion": "^12.38.0",
@@ -48,7 +49,6 @@
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
     "react-fast-marquee": "^1.6.5",
-    "sonner": "^2.0.7",
     "yaml": "^2.8.1",
     "zod": "^4.3.6"
   },
