@@ -489,6 +489,7 @@ export function createUiRouteHandler(
             agents?: AgentName[];
             items?: ItemSelector[];
             backup?: boolean;
+            replace?: boolean;
           };
 
           try {
@@ -498,6 +499,7 @@ export function createUiRouteHandler(
               agents: data.agents ?? (['claude', 'codex', 'gemini'] as AgentName[]),
               items: data.items,
               backup: data.backup,
+              replace: data.replace,
             });
             return sendJson(response, 200, result);
           } catch (error) {

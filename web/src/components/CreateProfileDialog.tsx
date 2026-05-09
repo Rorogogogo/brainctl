@@ -2,6 +2,7 @@ import * as Dialog from '@radix-ui/react-dialog';
 import * as Select from '@radix-ui/react-select';
 import { Check as CheckIcon, ChevronDown, FileText } from 'lucide-react';
 import { useEffect, useState, type ReactNode } from 'react';
+import { toast } from 'sonner';
 
 import { AgentLogo } from './agent-brand';
 
@@ -103,8 +104,15 @@ export default function CreateProfileDialog({
       }
       onCreated(resultName);
       onOpenChange(false);
+      toast.success(
+        source === 'blank'
+          ? `Created empty profile "${resultName}"`
+          : `Snapshotted ${source} into profile "${resultName}"`
+      );
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      const message = err instanceof Error ? err.message : String(err);
+      setError(message);
+      toast.error(`Failed to create profile: ${message}`);
     } finally {
       setBusy(false);
     }

@@ -150,11 +150,16 @@ export function registerProfileCommand(program: Command, services: ProfileComman
       'Comma-separated items to apply (e.g. mcp:github,plugin:demo,skill:reviewer). Default: everything matching.'
     )
     .option('--no-backup', 'Skip auto-backup of live agent state before applying')
+    .option(
+      '--replace',
+      'DESTRUCTIVE: uninstall live plugins/skills not present in the profile so the agent matches it exactly. Default: additive apply.',
+      false
+    )
     .description('Apply a profile (MCPs + plugins + skills) to selected agents')
     .action(
       async (
         name: string,
-        options: { agent: string; items?: string; backup: boolean }
+        options: { agent: string; items?: string; backup: boolean; replace: boolean }
       ) => {
         const agents = parseAgentList(options.agent);
         const items = options.items ? parseItemList(options.items) : undefined;
@@ -165,6 +170,7 @@ export function registerProfileCommand(program: Command, services: ProfileComman
           agents,
           items,
           backup: options.backup,
+          replace: options.replace,
         });
 
         if (backups.length > 0) {

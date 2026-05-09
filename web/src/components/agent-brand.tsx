@@ -1,8 +1,5 @@
 type AgentBrand = 'claude' | 'codex' | 'gemini';
 
-const GEMINI_LOGO_URL =
-  'https://www.gstatic.com/marketing-cms/assets/images/5a/7f/7d72d31140b9bf7e0d6d9d1c71d8/gemini.png=s48-fcrop64=1,00000000ffffffff-rw';
-
 export function AgentLogo({
   agent,
   className = '',
@@ -43,12 +40,16 @@ export function AgentLogo({
   }
 
   return (
-    <img
+    <svg
       className={className}
-      src={GEMINI_LOGO_URL}
-      alt=""
+      viewBox="0 0 24 24"
+      fill="none"
       aria-hidden="true"
-      decoding="async"
-    />
+    >
+      <path
+        d="M12 2C12 7 7 12 2 12C7 12 12 17 12 22C12 17 17 12 22 12C17 12 12 7 12 2Z"
+        fill="currentColor"
+      />
+    </svg>
   );
 }

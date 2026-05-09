@@ -32,10 +32,17 @@ export function createCodexWriter(): AgentConfigWriter {
       // Build MCP servers section
       const mcpToml = buildMcpToml(options.mcpServers);
 
-      // Preserve non-mcp_servers content from existing config
-      const existingNonMcp = stripMcpSections(existingContent);
-      const finalContent = existingNonMcp.trim().length > 0
-        ? `${existingNonMcp.trim()}\n\n${mcpToml}`
+      // In merge mode, preserve existing [mcp_servers.*] entries except those
+      // being overridden by the new MCPs. In replace mode, strip all of them.
+      const baselineContent = options.merge
+        ? Object.keys(options.mcpServers).reduce(
+            (acc, key) => stripMcpSection(acc, key),
+            existingContent
+          )
+        : stripMcpSections(existingContent);
+
+      const finalContent = baselineContent.trim().length > 0
+        ? `${baselineContent.trim()}\n\n${mcpToml}`
         : mcpToml;
 
       // Atomic write
@@ -131,6 +138,29 @@ export function stripPluginSection(content: string, pluginKey: string): string {
       inTarget = false;
     }
 
+    if (!inTarget) {
+      result.push(line);
+    }
+  }
+
+  return result.join('\n');
+}
+
+function stripMcpSection(content: string, mcpKey: string): string {
+  const headerPattern = new RegExp(`^\\[mcp_servers\\.${mcpKey.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(\\.[^\\]]+)?\\]$`);
+  const lines = content.split('\n');
+  const result: string[] = [];
+  let inTarget = false;
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (headerPattern.test(trimmed)) {
+      inTarget = true;
+      continue;
+    }
+    if (inTarget && /^\[/.test(trimmed)) {
+      inTarget = false;
+    }
     if (!inTarget) {
       result.push(line);
     }

@@ -41,6 +41,7 @@ export interface ApplyOptions {
   agents: AgentName[];
   items?: ItemSelector[]; // undefined = everything matching
   backup?: boolean; // default true for full apply, false for partial
+  replace?: boolean; // when true, uninstall live plugins/skills not present in the profile (DESTRUCTIVE; default false)
 }
 
 export interface ApplyResult extends SyncResult {}
@@ -122,7 +123,11 @@ export function createProfileApplyService(
 
         let mcpResult: { configPath: string; backedUpTo: string | null };
         if (Object.keys(filteredMcps).length > 0 || options.items === undefined) {
-          mcpResult = await writer.write({ mcpServers: filteredMcps, cwd });
+          mcpResult = await writer.write({
+            mcpServers: filteredMcps,
+            cwd,
+            merge: options.replace !== true,
+          });
         } else {
           mcpResult = { configPath: '', backedUpTo: null };
         }
@@ -155,7 +160,7 @@ export function createProfileApplyService(
 
         const pluginsRemoved: string[] = [];
         const userSkillsRemoved: string[] = [];
-        if (options.items === undefined) {
+        if (options.items === undefined && options.replace === true) {
           const cleanup = await cleanupExtras({
             agent,
             cwd,

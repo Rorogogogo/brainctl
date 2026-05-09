@@ -31,15 +31,16 @@ export function createGeminiWriter(): AgentConfigWriter {
         backedUpTo = backupPath;
       }
 
-      // Build mcpServers
-      const mcpServers: Record<string, unknown> = {};
+      const baselineMcpServers =
+        options.merge && existing.mcpServers && typeof existing.mcpServers === 'object'
+          ? { ...(existing.mcpServers as Record<string, unknown>) }
+          : {};
 
       for (const [name, config] of Object.entries(options.mcpServers)) {
-        mcpServers[name] = toGeminiFormat(config);
+        baselineMcpServers[name] = toGeminiFormat(config);
       }
 
-      // Merge into existing config (preserve other settings)
-      existing.mcpServers = mcpServers;
+      existing.mcpServers = baselineMcpServers;
 
       // Atomic write
       await mkdir(geminiDir, { recursive: true });
