@@ -117,23 +117,7 @@ export default function ProfilesView() {
             <Save size={12} className="text-zinc-400" /> {pendingChanges.length} staged
           </span>
           <button
-            className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-2.5 text-[12px] font-medium text-zinc-700 shadow-sm transition-all hover:bg-zinc-50"
-            type="button"
-            onClick={() => window.dispatchEvent(new CustomEvent('brainctl:zones-expand'))}
-            title="Expand all sections"
-          >
-            <ChevronsUpDown size={12} className="text-zinc-500" /> Expand all
-          </button>
-          <button
-            className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-2.5 text-[12px] font-medium text-zinc-700 shadow-sm transition-all hover:bg-zinc-50"
-            type="button"
-            onClick={() => window.dispatchEvent(new CustomEvent('brainctl:zones-collapse'))}
-            title="Collapse all sections"
-          >
-            <ChevronsDownUp size={12} className="text-zinc-500" /> Collapse all
-          </button>
-          <button
-            className={`inline-flex h-8 items-center gap-2 rounded-lg px-3 text-[13px] font-medium transition-all disabled:opacity-50 ${isEditMode ? 'bg-zinc-900 text-white shadow-sm' : 'border border-zinc-200 bg-white text-zinc-700 shadow-sm hover:bg-zinc-50'}`}
+            className={`inline-flex h-[26px] items-center gap-1.5 rounded-lg px-2.5 text-[12px] font-medium transition-all disabled:opacity-50 ${isEditMode ? 'bg-zinc-900 text-white shadow-sm' : 'border border-zinc-200 bg-white text-zinc-700 shadow-sm hover:bg-zinc-50'}`}
             type="button"
             onClick={() => setIsEditMode((value) => !value)}
             disabled={saving}
@@ -141,32 +125,64 @@ export default function ProfilesView() {
             {isEditMode ? <Check size={14} /> : <PencilLine size={14} />}
             {isEditMode ? 'Done editing' : 'Edit items'}
           </button>
-          <button
-            className={[
-              'inline-flex h-8 items-center gap-2 rounded-lg border px-3 text-[13px] font-medium shadow-sm transition-all duration-200 disabled:opacity-50',
-              refreshState === 'success'
-                ? 'border-emerald-300 bg-emerald-50 text-emerald-700'
-                : refreshState === 'loading'
-                  ? 'border-zinc-300 bg-zinc-100 text-zinc-700'
-                  : 'border-zinc-200 bg-white text-zinc-700 hover:bg-zinc-50',
-            ].join(' ')}
-            onClick={() => void handleRefresh()}
-            disabled={saving || refreshState === 'loading'}
-          >
-            {refreshState === 'loading' ? (
-              <>
-                <Loader2 size={12} className="animate-spin" /> Refreshing
-              </>
-            ) : refreshState === 'success' ? (
-              <>
-                <Check size={12} className="animate-[ping_400ms_ease-out_1]" /> Up to date
-              </>
-            ) : (
-              <>
-                <RefreshCw size={12} /> Refresh
-              </>
-            )}
-          </button>
+          <div className="inline-flex h-[26px] items-stretch gap-0.5 rounded-lg border border-zinc-200 bg-white px-0.5 shadow-sm">
+            <div className="relative group flex items-stretch">
+              <button
+                className="inline-flex h-full w-7 items-center justify-center rounded text-zinc-700 transition-all hover:bg-zinc-100"
+                type="button"
+                onClick={() => window.dispatchEvent(new CustomEvent('brainctl:zones-expand'))}
+                aria-label="Expand all sections"
+              >
+                <ChevronsUpDown size={14} className="text-zinc-500" />
+              </button>
+              <span className="pointer-events-none absolute left-1/2 top-full z-10 mt-1.5 -translate-x-1/2 whitespace-nowrap rounded bg-zinc-900 px-1.5 py-0.5 text-[10px] font-medium text-white opacity-0 shadow-md transition-opacity duration-150 group-hover:opacity-100">
+                Expand all
+              </span>
+            </div>
+            <div className="relative group flex items-stretch">
+              <button
+                className="inline-flex h-full w-7 items-center justify-center rounded text-zinc-700 transition-all hover:bg-zinc-100"
+                type="button"
+                onClick={() => window.dispatchEvent(new CustomEvent('brainctl:zones-collapse'))}
+                aria-label="Collapse all sections"
+              >
+                <ChevronsDownUp size={14} className="text-zinc-500" />
+              </button>
+              <span className="pointer-events-none absolute left-1/2 top-full z-10 mt-1.5 -translate-x-1/2 whitespace-nowrap rounded bg-zinc-900 px-1.5 py-0.5 text-[10px] font-medium text-white opacity-0 shadow-md transition-opacity duration-150 group-hover:opacity-100">
+                Collapse all
+              </span>
+            </div>
+            <div className="relative group flex items-stretch">
+              <button
+                className={[
+                  'inline-flex h-full w-7 items-center justify-center rounded transition-all duration-200 disabled:opacity-50',
+                  refreshState === 'success'
+                    ? 'bg-emerald-50 text-emerald-700'
+                    : refreshState === 'loading'
+                      ? 'bg-zinc-100 text-zinc-700'
+                      : 'text-zinc-700 hover:bg-zinc-100',
+                ].join(' ')}
+                onClick={() => void handleRefresh()}
+                disabled={saving || refreshState === 'loading'}
+                aria-label="Refresh"
+              >
+                {refreshState === 'loading' ? (
+                  <Loader2 size={14} className="animate-spin" />
+                ) : refreshState === 'success' ? (
+                  <Check size={14} className="animate-[ping_400ms_ease-out_1]" />
+                ) : (
+                  <RefreshCw size={14} />
+                )}
+              </button>
+              <span className="pointer-events-none absolute left-1/2 top-full z-10 mt-1.5 -translate-x-1/2 whitespace-nowrap rounded bg-zinc-900 px-1.5 py-0.5 text-[10px] font-medium text-white opacity-0 shadow-md transition-opacity duration-150 group-hover:opacity-100">
+                {refreshState === 'loading'
+                  ? 'Refreshing'
+                  : refreshState === 'success'
+                    ? 'Up to date'
+                    : 'Refresh'}
+              </span>
+            </div>
+          </div>
         </div>
       </div>
 
