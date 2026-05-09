@@ -92,7 +92,10 @@ export function mergeManagedPluginsIntoSkills(
   managedPlugins: AgentSkillEntry[]
 ): AgentSkillEntry[] {
   const pluginOwnedSkills = new Set(
-    managedPlugins.flatMap((plugin) => plugin.pluginSkills ?? [])
+    managedPlugins.flatMap((plugin) => [
+      ...(plugin.pluginSkills ?? []),
+      ...(plugin.pluginCommands ?? []),
+    ])
   );
 
   const filteredLocalSkills = localSkills.filter((skill) => !pluginOwnedSkills.has(skill.name));

@@ -422,6 +422,10 @@ describe('createPortableProfilePackService', () => {
       await writeFile(path.join(pluginInstallPath, 'skills', 'inner', 'SKILL.md'), '# inner', 'utf8');
       await writeFile(path.join(pluginInstallPath, 'plugin.json'), '{"name":"demo"}', 'utf8');
 
+      const pluginOwnedSkillDir = path.join(fakeHome, '.claude', 'skills', 'inner');
+      await mkdir(pluginOwnedSkillDir, { recursive: true });
+      await writeFile(path.join(pluginOwnedSkillDir, 'SKILL.md'), '# duplicated inner', 'utf8');
+
       const userSkillDir = path.join(fakeHome, '.claude', 'skills', 'personal');
       await mkdir(userSkillDir, { recursive: true });
       await writeFile(path.join(userSkillDir, 'SKILL.md'), '# personal', 'utf8');
@@ -443,6 +447,11 @@ describe('createPortableProfilePackService', () => {
                     kind: 'plugin',
                     installPath: pluginInstallPath,
                     pluginSkills: ['inner'],
+                  },
+                  {
+                    name: 'inner',
+                    source: 'local',
+                    kind: 'skill',
                   },
                   {
                     name: 'personal',

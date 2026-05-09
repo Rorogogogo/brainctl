@@ -11,6 +11,7 @@ export function DroppableZone({
   count,
   children,
   hint,
+  action,
 }: {
   id: string;
   label: string;
@@ -18,6 +19,7 @@ export function DroppableZone({
   count: number;
   children: ReactNode;
   hint?: ReactNode;
+  action?: ReactNode;
 }) {
   const { isOver, setNodeRef } = useDroppable({ id });
   const [expanded, setExpanded] = useState(true);
@@ -60,6 +62,7 @@ export function DroppableZone({
           <p className="text-xs font-semibold text-zinc-600 m-0">{label}</p>
         </div>
         <div className="flex items-center gap-2">
+          {action}
           <span className="inline-flex min-w-[28px] items-center justify-center rounded-full border border-zinc-200 bg-white px-2 py-0.5 text-xs font-medium text-zinc-600 shadow-sm">{count}</span>
           <span className="text-zinc-400">
             {expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}

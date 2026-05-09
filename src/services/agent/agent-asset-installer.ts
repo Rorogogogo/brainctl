@@ -2,6 +2,8 @@ import { copyFile, cp, mkdir, readFile, rename, rm, stat, writeFile } from 'node
 import { homedir } from 'node:os';
 import path from 'node:path';
 
+import YAML from 'yaml';
+
 import { ProfileError } from '../../errors.js';
 import type {
   AgentName,
@@ -134,6 +136,87 @@ export async function installUserSkill(
   await rm(targetDir, { recursive: true, force: true });
   await mkdir(path.dirname(targetDir), { recursive: true });
   await cp(sourceDir, targetDir, { recursive: true });
+  if (agent === 'codex') {
+    await normalizeCodexSkillFrontmatter(targetDir);
+  }
+}
+
+async function normalizeCodexSkillFrontmatter(skillDir: string): Promise<void> {
+  const skillPath = path.join(skillDir, 'SKILL.md');
+  let source: string;
+  try {
+    source = await readFile(skillPath, 'utf8');
+  } catch {
+    return;
+  }
+
+  const normalized = normalizeSkillFrontmatter(source);
+  if (normalized !== source) {
+    await writeFile(skillPath, normalized, 'utf8');
+  }
+}
+
+function normalizeSkillFrontmatter(source: string): string {
+  const newline = source.includes('\r\n') ? '\r\n' : '\n';
+  const lines = source.split(/\r?\n/);
+  if (lines[0]?.trim() !== '---') return source;
+
+  const closingIndex = lines.findIndex((line, index) => index > 0 && line.trim() === '---');
+  if (closingIndex < 0) return source;
+
+  const frontmatterLines = lines.slice(1, closingIndex);
+  const bodyLines = lines.slice(closingIndex + 1);
+  const frontmatter = frontmatterLines.join(newline);
+  try {
+    YAML.parse(frontmatter);
+    return source;
+  } catch {
+    // Normalize only simple scalar frontmatter lines and leave anything complex untouched.
+  }
+
+  const normalizedFrontmatterLines = frontmatterLines.map((line) => {
+    const match = line.match(/^(\s*[A-Za-z0-9_-]+\s*:\s*)(.+?)\s*$/);
+    if (!match) return line;
+
+    const [, prefix, rawValue] = match;
+    const value = rawValue.trim();
+    if (isYamlScalarSafe(value)) return line;
+
+    return `${prefix}${JSON.stringify(value)}`;
+  });
+  const normalizedFrontmatter = normalizedFrontmatterLines.join(newline);
+
+  try {
+    YAML.parse(normalizedFrontmatter);
+  } catch {
+    return source;
+  }
+
+  return ['---', ...normalizedFrontmatterLines, '---', ...bodyLines].join(newline);
+}
+
+function isYamlScalarSafe(value: string): boolean {
+  if (
+    value === '' ||
+    value === 'true' ||
+    value === 'false' ||
+    value === 'null' ||
+    value.startsWith('"') ||
+    value.startsWith("'") ||
+    value.startsWith('|') ||
+    value.startsWith('>') ||
+    value.startsWith('[') ||
+    value.startsWith('{')
+  ) {
+    try {
+      YAML.parse(`value: ${value}`);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  return !/[[\]{}#]/.test(value);
 }
 
 async function registerClaudePlugin(options: {

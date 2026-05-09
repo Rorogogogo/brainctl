@@ -1,5 +1,5 @@
 import * as Dialog from '@radix-ui/react-dialog';
-import { Loader2, Plus, X } from 'lucide-react';
+import { Loader2, Plus, Trash2, X } from 'lucide-react';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 
 import { AgentLogo } from '../components/agent-brand';
@@ -90,20 +90,32 @@ export default function EditProfileModal({
     setBusyKey(k);
     setError(null);
     try {
-      const params = new URLSearchParams({ type: item.type, name: item.name });
-      if (item.agent) params.set('agent', item.agent);
-      const r = await fetch(
-        `/api/profiles/${encodeURIComponent(profileName)}/items?${params.toString()}`,
-        { method: 'DELETE' }
-      );
-      if (!r.ok) {
-        const data = (await r.json().catch(() => ({}))) as { error?: string };
-        throw new Error(data.error ?? `HTTP ${r.status}`);
-      }
+      await deleteProfileItem(profileName, item);
       await loadContents();
       onChanged();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Remove failed');
+    } finally {
+      setBusyKey(null);
+    }
+  }
+
+  async function removeItems(
+    type: ItemType,
+    items: Array<{ type: ItemType; name: string; agent?: Agent }>
+  ) {
+    if (!profileName || items.length === 0) return;
+    const k = `del-all:${type}`;
+    setBusyKey(k);
+    setError(null);
+    try {
+      for (const item of items) {
+        await deleteProfileItem(profileName, item);
+      }
+      await loadContents();
+      onChanged();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Delete all failed');
     } finally {
       setBusyKey(null);
     }
@@ -183,6 +195,17 @@ export default function EditProfileModal({
                     setError(null);
                     setPicker({ type: 'skill' });
                   }}
+                  onRemoveAll={() =>
+                    void removeItems(
+                      'skill',
+                      sections.skills.map((s) => ({
+                        type: 'skill',
+                        name: s.name,
+                        agent: s.agent,
+                      }))
+                    )
+                  }
+                  removeAllBusy={busyKey === 'del-all:skill'}
                   empty="No skills in this profile yet."
                 >
                   {sections.skills.map((s) => (
@@ -205,6 +228,13 @@ export default function EditProfileModal({
                     setError(null);
                     setPicker({ type: 'mcp' });
                   }}
+                  onRemoveAll={() =>
+                    void removeItems(
+                      'mcp',
+                      sections.mcps.map((name) => ({ type: 'mcp', name }))
+                    )
+                  }
+                  removeAllBusy={busyKey === 'del-all:mcp'}
                   empty="No MCPs in this profile yet."
                 >
                   {sections.mcps.map((name) => (
@@ -224,6 +254,17 @@ export default function EditProfileModal({
                     setError(null);
                     setPicker({ type: 'plugin' });
                   }}
+                  onRemoveAll={() =>
+                    void removeItems(
+                      'plugin',
+                      sections.plugins.map((p) => ({
+                        type: 'plugin',
+                        name: p.name,
+                        agent: p.agent,
+                      }))
+                    )
+                  }
+                  removeAllBusy={busyKey === 'del-all:plugin'}
                   empty="No plugins in this profile yet."
                 >
                   {sections.plugins.map((p) => (
@@ -285,16 +326,36 @@ function existingKeys(contents: ProfileContents, type: ItemType): Set<string> {
   );
 }
 
+async function deleteProfileItem(
+  profileName: string,
+  item: { type: ItemType; name: string; agent?: Agent }
+): Promise<void> {
+  const params = new URLSearchParams({ type: item.type, name: item.name });
+  if (item.agent) params.set('agent', item.agent);
+  const r = await fetch(
+    `/api/profiles/${encodeURIComponent(profileName)}/items?${params.toString()}`,
+    { method: 'DELETE' }
+  );
+  if (!r.ok) {
+    const data = (await r.json().catch(() => ({}))) as { error?: string };
+    throw new Error(data.error ?? `HTTP ${r.status}`);
+  }
+}
+
 function Section({
   label,
   count,
   onAdd,
+  onRemoveAll,
+  removeAllBusy,
   children,
   empty,
 }: {
   label: string;
   count: number;
   onAdd: () => void;
+  onRemoveAll: () => void;
+  removeAllBusy?: boolean;
   children: ReactNode;
   empty: string;
 }) {
@@ -304,13 +365,28 @@ function Section({
         <span className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
           {label} ({count})
         </span>
-        <button
-          type="button"
-          onClick={onAdd}
-          className="inline-flex items-center gap-1 rounded-md border border-zinc-200 bg-white px-2 py-1 text-[11px] font-medium text-zinc-700 shadow-sm transition hover:bg-zinc-50"
-        >
-          <Plus size={11} /> Add from live agent
-        </button>
+        <div className="flex items-center gap-1.5">
+          <button
+            type="button"
+            onClick={onRemoveAll}
+            disabled={count === 0 || removeAllBusy}
+            className="inline-flex items-center gap-1 rounded-md border border-rose-200 bg-white px-2 py-1 text-[11px] font-medium text-rose-700 shadow-sm transition hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-45"
+          >
+            {removeAllBusy ? (
+              <Loader2 size={11} className="animate-spin" />
+            ) : (
+              <Trash2 size={11} />
+            )}
+            Delete all
+          </button>
+          <button
+            type="button"
+            onClick={onAdd}
+            className="inline-flex items-center gap-1 rounded-md border border-zinc-200 bg-white px-2 py-1 text-[11px] font-medium text-zinc-700 shadow-sm transition hover:bg-zinc-50"
+          >
+            <Plus size={11} /> Add from live agent
+          </button>
+        </div>
       </div>
       <div className="rounded-lg border border-zinc-200 bg-zinc-50/40 p-2">
         {count === 0 ? (

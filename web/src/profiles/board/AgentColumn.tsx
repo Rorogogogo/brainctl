@@ -1,5 +1,5 @@
 import { useDndContext, useDroppable } from '@dnd-kit/core';
-import { Boxes, FileText, Server } from 'lucide-react';
+import { Boxes, FileText, Server, Trash2 } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
 
 import { AgentLogo } from '../../components/agent-brand.js';
@@ -32,6 +32,41 @@ import { StaticCard } from './StaticCard.js';
 function DropAnchorWrapper({ id, children }: { id: string; children?: ReactNode }) {
   const { setNodeRef } = useDroppable({ id });
   return <div ref={setNodeRef} className={children ? "w-full" : "h-0 w-full"}>{children}</div>;
+}
+
+function isRemovablePlugin(
+  agent: AgentLiveConfig['agent'],
+  plugin: ReturnType<typeof splitAgentSkillEntries>['plugins'][number]
+): boolean {
+  return Boolean(
+    plugin.managed ||
+      ((agent === 'codex' || agent === 'claude') &&
+        typeof plugin.installPath === 'string' &&
+        typeof plugin.source === 'string')
+  );
+}
+
+function DeleteAllButton({
+  disabled,
+  onClick,
+}: {
+  disabled: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={(event) => {
+        event.stopPropagation();
+        onClick();
+      }}
+      disabled={disabled}
+      className="inline-flex h-6 items-center gap-1 rounded-md border border-rose-200 bg-white px-2 text-[11px] font-medium text-rose-700 shadow-sm transition hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-45"
+    >
+      <Trash2 size={11} />
+      Delete all
+    </button>
+  );
 }
 
 export function AgentColumn({
@@ -105,6 +140,7 @@ export function AgentColumn({
     })),
   ];
   const { skills: localSkills, plugins } = splitAgentSkillEntries(config.skills);
+  const removablePlugins = plugins.filter((plugin) => isRemovablePlugin(config.agent, plugin));
 
   return (
     <div
@@ -234,6 +270,18 @@ export function AgentColumn({
         label="Skills"
         icon={<FileText size={16} />}
         count={localSkills.length}
+        action={
+          editable ? (
+            <DeleteAllButton
+              disabled={localSkills.length === 0}
+              onClick={() => {
+                for (const skill of localSkills) {
+                  onStagedRemove(config.agent, 'skill', skill.name, 'global');
+                }
+              }}
+            />
+          ) : undefined
+        }
         hint={
           scope === 'project'
             ? 'Skills are always installed globally — there is no project-scoped location for them.'
@@ -278,6 +326,18 @@ export function AgentColumn({
         label="MCP Servers"
         icon={<Server size={16} />}
         count={mcpEntries.length}
+        action={
+          editable ? (
+            <DeleteAllButton
+              disabled={mcpEntries.length === 0}
+              onClick={() => {
+                for (const entry of mcpEntries) {
+                  onStagedRemove(config.agent, 'mcp', entry.key, scope);
+                }
+              }}
+            />
+          ) : undefined
+        }
       >
         {mcpEntries.map(({ key, sublabel, type, folderPath }, index) => {
           const status = activePendingAdded.has(key)
@@ -322,6 +382,18 @@ export function AgentColumn({
         }
         icon={<Boxes size={16} />}
         count={plugins.length}
+        action={
+          editable ? (
+            <DeleteAllButton
+              disabled={removablePlugins.length === 0}
+              onClick={() => {
+                for (const plugin of removablePlugins) {
+                  onStagedRemove(config.agent, 'plugin', plugin.name, 'global');
+                }
+              }}
+            />
+          ) : undefined
+        }
       >
         {plugins.map((plugin, index) => {
           const status = pendingPluginAdded.has(plugin.name)
@@ -344,11 +416,7 @@ export function AgentColumn({
               ]}
               status={status}
               onRemove={
-                editable &&
-                (plugin.managed ||
-                  ((config.agent === 'codex' || config.agent === 'claude') &&
-                    typeof plugin.installPath === 'string' &&
-                    typeof plugin.source === 'string'))
+                editable && isRemovablePlugin(config.agent, plugin)
                   ? () => onStagedRemove(config.agent, 'plugin', plugin.name, 'global')
                   : undefined
               }

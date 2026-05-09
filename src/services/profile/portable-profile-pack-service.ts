@@ -351,6 +351,11 @@ function collectAgentExtras(agentConfig: AgentLiveConfig): {
   const bundledPlugins = new Map<string, string>();
   const userSkills: PortableUserSkillSnapshot[] = [];
   const bundledUserSkills = new Map<string, string>();
+  const pluginOwnedSkillNames = new Set(
+    agentConfig.skills
+      .filter((skill) => skill.kind === 'plugin')
+      .flatMap((skill) => skill.pluginSkills ?? [])
+  );
 
   for (const skill of agentConfig.skills) {
     if (skill.kind === 'plugin') {
@@ -377,6 +382,7 @@ function collectAgentExtras(agentConfig: AgentLiveConfig): {
     }
 
     if (skill.kind === 'skill' && skill.source === 'local') {
+      if (pluginOwnedSkillNames.has(skill.name)) continue;
       const localSkillDir = path.join(homedir(), `.${agentConfig.agent}`, 'skills', skill.name);
       const archivePath = `skills/${sanitizePackName(skill.name)}`;
       bundledUserSkills.set(archivePath, localSkillDir);

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { type DragEndEvent, type DragStartEvent } from '@dnd-kit/core';
-import { toast } from 'sonner';
 
+import { toast } from '../../components/ui/toast.js';
 import { fetchJson } from '../../lib/fetch-json.js';
 import {
   AGENT_LABELS,

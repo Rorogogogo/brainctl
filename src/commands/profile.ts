@@ -208,6 +208,9 @@ export function registerProfileCommand(program: Command, services: ProfileComman
         cwd: process.cwd(),
         agent,
         profileName,
+        onProgress: (message) => {
+          console.error(message);
+        },
       });
       console.log(`Snapshotted ${agent} into ${result.profilePath}`);
     });

@@ -1,10 +1,11 @@
 import * as Dialog from '@radix-ui/react-dialog';
 import * as Select from '@radix-ui/react-select';
-import { Check as CheckIcon, ChevronDown, FileText } from 'lucide-react';
+import { Check as CheckIcon, ChevronDown, FileText, LoaderCircle } from 'lucide-react';
 import { useEffect, useState, type ReactNode } from 'react';
-import { toast } from 'sonner';
 
 import { AgentLogo } from './agent-brand';
+import { toast } from './ui/toast.js';
+import { snapshotProfile } from '../lib/profile-snapshot';
 
 type Agent = 'claude' | 'codex' | 'gemini';
 type Source = 'blank' | Agent;
@@ -56,6 +57,7 @@ export default function CreateProfileDialog({
   const [source, setSource] = useState<Source>('claude');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [progressMessage, setProgressMessage] = useState<string | null>(null);
 
   useEffect(() => {
     if (!open) {
@@ -63,6 +65,7 @@ export default function CreateProfileDialog({
       setSource('claude');
       setBusy(false);
       setError(null);
+      setProgressMessage(null);
     }
   }, [open]);
 
@@ -74,6 +77,7 @@ export default function CreateProfileDialog({
     }
     setBusy(true);
     setError(null);
+    setProgressMessage(source === 'blank' ? 'Creating empty profile…' : `Reading ${source} config…`);
     try {
       let resultName = trimmed;
       if (source === 'blank') {
@@ -87,19 +91,11 @@ export default function CreateProfileDialog({
           throw new Error(data.error ?? `HTTP ${r.status}`);
         }
       } else {
-        const r = await fetch('/api/profiles/snapshot', {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({
-            agent: source,
-            ...(trimmed ? { as: trimmed } : {}),
-          }),
+        const data = await snapshotProfile({
+          agent: source,
+          ...(trimmed ? { as: trimmed } : {}),
+          onProgress: setProgressMessage,
         });
-        if (!r.ok) {
-          const data = (await r.json().catch(() => ({}))) as { error?: string };
-          throw new Error(data.error ?? `HTTP ${r.status}`);
-        }
-        const data = (await r.json()) as { profileName: string };
         resultName = data.profileName;
       }
       onCreated(resultName);
@@ -203,6 +199,13 @@ export default function CreateProfileDialog({
             {error && (
               <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-800">
                 {error}
+              </div>
+            )}
+
+            {busy && progressMessage && (
+              <div className="flex min-h-8 items-center gap-2 rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-xs text-zinc-600">
+                <LoaderCircle size={14} className="shrink-0 animate-spin text-zinc-500" />
+                <span className="min-w-0 truncate">{progressMessage}</span>
               </div>
             )}
           </div>

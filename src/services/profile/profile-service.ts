@@ -95,13 +95,15 @@ export function createProfileService(): ProfileService {
       await migrateLegacyProfilesFrom(cwd);
 
       const profilesDir = globalProfilesRoot();
-      const names = new Set<string>();
+      const profiles: Array<{ name: string; mtimeMs: number }> = [];
       try {
         const entries = await readdir(profilesDir, { withFileTypes: true });
         for (const entry of entries) {
           if (entry.isDirectory()) {
-            if (await pathExists(path.join(profilesDir, entry.name, PROFILE_FILE))) {
-              names.add(entry.name);
+            const filePath = path.join(profilesDir, entry.name, PROFILE_FILE);
+            if (await pathExists(filePath)) {
+              const info = await stat(filePath);
+              profiles.push({ name: entry.name, mtimeMs: info.mtimeMs });
             }
           }
         }
@@ -110,7 +112,9 @@ export function createProfileService(): ProfileService {
       }
 
       return {
-        profiles: Array.from(names).sort(),
+        profiles: profiles
+          .sort((left, right) => right.mtimeMs - left.mtimeMs || left.name.localeCompare(right.name))
+          .map((profile) => profile.name),
       };
     },
 
