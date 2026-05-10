@@ -16,6 +16,7 @@ import {
   createProfileSnapshotService,
   defaultBackupProfileName,
 } from './services/profile/profile-snapshot-service.js';
+import { createProfileRegistryClient } from './services/profile/profile-registry-client.js';
 import { createStatusService } from './services/platform/status-service.js';
 import type { AgentName, ProfileConfig } from './types.js';
 
@@ -302,6 +303,75 @@ export function createMcpServer(
   });
 
   server.addTool({
+    name: 'brainctl_register_github_profile',
+    description: 'Register a GitHub-hosted profile with the hosted Brainctl registry.',
+    parameters: z.object({
+      repo_url: z.string().describe('GitHub repository URL'),
+      slug: z.string().describe('Registry slug'),
+      title: z.string().describe('Profile title'),
+      summary: z.string().optional().describe('Profile summary'),
+      ref_name: z.string().optional().describe('GitHub ref name, default main'),
+      profile_path: z.string().optional().describe('Profile path in the repository'),
+    }),
+    execute: async (args) => {
+      const token = process.env.BRAINCTL_API_TOKEN;
+      if (!token) {
+        return JSON.stringify({ error: 'BRAINCTL_API_TOKEN is required.' }, null, 2);
+      }
+
+      const client = createProfileRegistryClient({
+        baseUrl: registryApiUrl(),
+        token,
+      });
+      const result = await client.registerGithubProfile({
+        repoUrl: args.repo_url,
+        slug: args.slug,
+        title: args.title,
+        summary: args.summary,
+        refName: args.ref_name,
+        profilePath: args.profile_path,
+        manifestJson: { name: args.slug },
+      });
+
+      return JSON.stringify(result, null, 2);
+    },
+  });
+
+  server.addTool({
+    name: 'brainctl_publish_profile',
+    description: 'Publish a Brainctl-hosted profile to the hosted registry.',
+    parameters: z.object({
+      slug: z.string().describe('Registry slug'),
+    }),
+    execute: async (args) =>
+      JSON.stringify(
+        {
+          slug: args.slug,
+          status: 'pending_package_upload_integration',
+        },
+        null,
+        2
+      ),
+  });
+
+  server.addTool({
+    name: 'brainctl_install_registry_profile',
+    description: 'Read the hosted registry install descriptor for a profile slug.',
+    parameters: z.object({
+      slug: z.string().describe('Registry profile slug'),
+    }),
+    execute: async (args) => {
+      const client = createProfileRegistryClient({
+        baseUrl: registryApiUrl(),
+        token: process.env.BRAINCTL_API_TOKEN,
+      });
+      const descriptor = await client.getInstallDescriptor(args.slug);
+
+      return JSON.stringify(descriptor, null, 2);
+    },
+  });
+
+  server.addTool({
     name: 'brainctl_open_ui',
     description: 'Open the brainctl web dashboard in the default browser. The dashboard auto-starts with the MCP server; this tool just opens the URL. Starts the server on demand if auto-start was skipped or failed.',
     parameters: z.object({
@@ -395,6 +465,10 @@ export function createMcpServer(
   });
 
   return server;
+}
+
+function registryApiUrl(): string {
+  return process.env.BRAINCTL_API_URL ?? 'https://api.brainctl.net';
 }
 
 export async function startMcpServer(options: { cwd?: string } = {}): Promise<void> {
