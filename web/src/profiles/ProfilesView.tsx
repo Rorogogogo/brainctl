@@ -244,7 +244,7 @@ export default function ProfilesView() {
         variant="default"
         onConfirm={() => void handleConfirmSave()}
       >
-        <div className="mt-4 rounded-xl border border-zinc-200 bg-zinc-50 p-4 max-h-64 overflow-y-auto">
+        <div className="scrollbar-none mt-4 rounded-xl border border-zinc-200 bg-zinc-50 p-4 max-h-64 overflow-y-auto">
           <ul className="space-y-2 font-mono text-xs font-medium text-zinc-700">
             {changeSummaryLines.map((line, index) => (
               <li

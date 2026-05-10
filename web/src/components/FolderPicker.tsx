@@ -104,7 +104,7 @@ export default function FolderPicker({
             </div>
           </div>
 
-          <div className="mt-3 h-72 overflow-y-auto rounded-lg border border-zinc-200">
+          <div className="scrollbar-none mt-3 h-72 overflow-y-auto rounded-lg border border-zinc-200">
             {loading && (
               <div className="flex h-full items-center justify-center text-zinc-400">
                 <Loader2 size={18} className="animate-spin" />

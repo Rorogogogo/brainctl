@@ -282,7 +282,7 @@ export default function ApplyProfileModal({
             </div>
           </div>
 
-          <div className="mt-3 min-h-0 flex-1 overflow-y-auto rounded-lg border border-zinc-200 bg-zinc-50/40 p-3 text-sm">
+          <div className="scrollbar-none mt-3 min-h-0 flex-1 overflow-y-auto rounded-lg border border-zinc-200 bg-zinc-50/40 p-3 text-sm">
             {!selectedProfile ? (
               <p className="text-zinc-500">Pick a profile to see its contents.</p>
             ) : loadingContents ? (
