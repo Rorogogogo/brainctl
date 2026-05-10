@@ -124,7 +124,6 @@ export default function App() {
               <h1 className="text-sm font-semibold leading-none tracking-tight">
                 Brainctl <span className="font-normal text-zinc-400">v{__APP_VERSION__}</span>
               </h1>
-              <p className="text-[9px] font-medium leading-tight text-zinc-500">Transfer Board</p>
             </div>
           </div>
 
