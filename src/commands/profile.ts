@@ -6,6 +6,7 @@ import type { ProfileExportService } from '../services/profile/profile-export-se
 import type { ProfileImportService } from '../services/profile/profile-import-service.js';
 import type { ProfileService } from '../services/profile/profile-service.js';
 import type { ProfileSnapshotService } from '../services/profile/profile-snapshot-service.js';
+import { createProfileRegistryClient } from '../services/profile/profile-registry-client.js';
 import type { AgentName } from '../types.js';
 
 const ALL_AGENTS: AgentName[] = ['claude', 'codex', 'gemini'];
@@ -191,6 +192,65 @@ export function registerProfileCommand(program: Command, services: ProfileComman
     );
 
   profileCmd
+    .command('register-github')
+    .argument('<repo-url>', 'GitHub repository URL')
+    .requiredOption('--slug <slug>', 'Registry slug')
+    .requiredOption('--title <title>', 'Profile title')
+    .option('--summary <text>', 'Profile summary')
+    .option('--ref <name>', 'GitHub ref', 'main')
+    .option('--profile-path <path>', 'Profile path in repository', 'profile.yaml')
+    .description('Register a GitHub-hosted profile with brainctl.net')
+    .action(
+      async (
+        repoUrl: string,
+        options: {
+          slug: string;
+          title: string;
+          summary?: string;
+          ref: string;
+          profilePath: string;
+        }
+      ) => {
+        const token = process.env.BRAINCTL_API_TOKEN;
+        if (!token) {
+          throw new Error('BRAINCTL_API_TOKEN is required to register a profile.');
+        }
+
+        const client = createProfileRegistryClient({
+          baseUrl: registryApiUrl(),
+          token,
+        });
+        await client.registerGithubProfile({
+          repoUrl,
+          slug: options.slug,
+          title: options.title,
+          summary: options.summary,
+          refName: options.ref,
+          profilePath: options.profilePath,
+          manifestJson: { name: options.slug },
+        });
+
+        console.log(`Registered GitHub profile "${options.slug}"`);
+      }
+    );
+
+  profileCmd
+    .command('install')
+    .argument('<slug>', 'Registry profile slug')
+    .description('Read the install descriptor for a registry profile')
+    .action(async (slug: string) => {
+      const client = createProfileRegistryClient({
+        baseUrl: registryApiUrl(),
+        token: process.env.BRAINCTL_API_TOKEN,
+      });
+      const descriptor = await client.getInstallDescriptor(slug);
+
+      console.log(`Install descriptor: ${descriptor.source_kind}`);
+      console.log(`  version: ${descriptor.version}`);
+      console.log(`  download: ${descriptor.download_url}`);
+    });
+
+  profileCmd
     .command('snapshot')
     .option('-a, --agent <name>', 'Agent to snapshot (claude, codex, gemini)')
     .option('--as <name>', 'Profile name to write into (default: backup-<agent>-<timestamp>)')
@@ -214,6 +274,10 @@ export function registerProfileCommand(program: Command, services: ProfileComman
       });
       console.log(`Snapshotted ${agent} into ${result.profilePath}`);
     });
+}
+
+function registryApiUrl(): string {
+  return process.env.BRAINCTL_API_URL ?? 'https://api.brainctl.net';
 }
 
 function parseAgentList(value: string): AgentName[] {

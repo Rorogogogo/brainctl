@@ -9,6 +9,9 @@ import { createProgram, shouldRunMain } from '../../src/cli.js';
 
 afterEach(() => {
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
+  delete process.env.BRAINCTL_API_URL;
+  delete process.env.BRAINCTL_API_TOKEN;
 });
 
 const tempDirs: string[] = [];
@@ -100,5 +103,69 @@ describe('profile snapshot command', () => {
 
     errorSpy.mockRestore();
     logSpy.mockRestore();
+  });
+});
+
+describe('registry profile commands', () => {
+  it('registers a github-hosted profile', async () => {
+    process.env.BRAINCTL_API_URL = 'https://api.brainctl.test';
+    process.env.BRAINCTL_API_TOKEN = 'token';
+    const outputWrites: string[] = [];
+    vi.spyOn(console, 'log').mockImplementation((message?: unknown) => {
+      outputWrites.push(String(message));
+    });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response(JSON.stringify({ slug: 'review-profile' }), { status: 200 }))
+    );
+    const program = createProgram();
+
+    await program.parseAsync(
+      [
+        'node',
+        'brainctl',
+        'profile',
+        'register-github',
+        'https://github.com/acme/review-profile',
+        '--slug',
+        'review-profile',
+        '--title',
+        'Review Profile',
+      ],
+      { from: 'node' }
+    );
+
+    expect(outputWrites).toContain('Registered GitHub profile "review-profile"');
+  });
+
+  it('prints a registry install descriptor', async () => {
+    process.env.BRAINCTL_API_URL = 'https://api.brainctl.test';
+    const outputWrites: string[] = [];
+    vi.spyOn(console, 'log').mockImplementation((message?: unknown) => {
+      outputWrites.push(String(message));
+    });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        async () =>
+          new Response(
+            JSON.stringify({
+              slug: 'review-profile',
+              version: '1.0.0',
+              source_kind: 'github',
+              download_url: 'https://github.com/acme/review-profile/archive/refs/heads/main.tar.gz',
+              checksum_sha256: null,
+            }),
+            { status: 200 }
+          )
+      )
+    );
+    const program = createProgram();
+
+    await program.parseAsync(['node', 'brainctl', 'profile', 'install', 'review-profile'], {
+      from: 'node',
+    });
+
+    expect(outputWrites).toContain('Install descriptor: github');
   });
 });
