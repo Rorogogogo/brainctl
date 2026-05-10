@@ -234,8 +234,9 @@ export default function ProfilesDrawer({ onApplyProfile }: ProfilesDrawerProps) 
       });
       window.dispatchEvent(new CustomEvent('brainctl:profiles-changed'));
       await loadProfiles();
+      toast.success(`Deleted profile "${profileName}"`);
     } catch (err) {
-      window.alert(`Delete failed: ${err instanceof Error ? err.message : String(err)}`);
+      toast.error(`Failed to delete profile: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
       setDeleting(false);
       setDeleteTarget(null);
@@ -369,7 +370,7 @@ export default function ProfilesDrawer({ onApplyProfile }: ProfilesDrawerProps) 
           </ul>
         </div>
       )}
-      <ul className="min-h-0 flex-1 overflow-y-auto pr-1 flex flex-col gap-1">
+      <ul className="scrollbar-none min-h-0 flex-1 overflow-y-auto pr-1 flex flex-col gap-1">
         {profiles.map((p) => (
           <li key={p.name} className="rounded-lg border border-zinc-200 bg-zinc-50">
             <div className="flex items-center gap-1 px-1 py-1">

@@ -181,7 +181,7 @@ export default function EditProfileModal({
             </div>
           )}
 
-          <div className="mt-4 min-h-0 flex-1 overflow-y-auto">
+          <div className="scrollbar-none mt-4 min-h-0 flex-1 overflow-y-auto">
             {loading || !sections ? (
               <p className="inline-flex items-center gap-2 text-sm text-zinc-500">
                 <Loader2 size={14} className="animate-spin" /> Loading…
@@ -535,7 +535,7 @@ function AddPicker({
             {error ?? addError}
           </div>
         )}
-        <div className="flex-1 overflow-y-auto">
+        <div className="scrollbar-none flex-1 overflow-y-auto">
           {loading ? (
             <p className="inline-flex items-center gap-2 text-sm text-zinc-500">
               <Loader2 size={14} className="animate-spin" /> Loading…

@@ -215,7 +215,7 @@ describe('useProfilesBoard integration', () => {
     expect(harness.getLatest().previewConfigs[0].skills).toEqual([]);
     expect(toast.error).not.toHaveBeenCalled();
     expect(toast.success).toHaveBeenCalledWith(
-      'Applied 1 change',
+      'Deleted 1 item',
       expect.objectContaining({
         description: expect.stringContaining('Live reload failed: reload failed'),
       })

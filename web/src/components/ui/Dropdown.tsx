@@ -89,7 +89,7 @@ export function Dropdown({
         <div
           className={`absolute z-20 mt-1.5 ${width} ${align === 'end' ? 'right-0' : 'left-0'} overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-xl`}
         >
-          <div className="max-h-80 overflow-y-auto">
+          <div className="scrollbar-none max-h-80 overflow-y-auto">
             {totalItems === 0 ? (
               <div className="px-4 py-6 text-center text-sm text-zinc-400">
                 {emptyLabel ?? 'No options'}

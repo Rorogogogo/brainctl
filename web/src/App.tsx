@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Bell, Check, Download, Loader2 } from 'lucide-react';
+import { Check, Download, Loader2 } from 'lucide-react';
 
 import { AgentLogo } from './components/agent-brand';
 import CreateProfileButton from './components/CreateProfileButton';
@@ -10,6 +10,12 @@ import ProfilesView from './profiles/ProfilesView';
 
 const AGENTS = ['claude', 'codex', 'gemini'] as const;
 type Agent = typeof AGENTS[number];
+
+const AGENT_LABELS: Record<Agent, string> = {
+  claude: 'Claude',
+  codex: 'Codex',
+  gemini: 'Gemini',
+};
 
 interface SnapshotState {
   status: 'idle' | 'pending' | 'success' | 'error';
@@ -40,6 +46,7 @@ function SnapshotButtons() {
         ...prev,
         [agent]: { status: 'success', message: data.profileName },
       }));
+      toast.success(`Created profile "${data.profileName}" from ${AGENT_LABELS[agent]}`);
       window.dispatchEvent(new CustomEvent('brainctl:profiles-changed'));
       setTimeout(() => {
         setState((prev) => ({ ...prev, [agent]: { status: 'idle' } }));
@@ -52,6 +59,7 @@ function SnapshotButtons() {
           message: err instanceof Error ? err.message : 'Snapshot failed',
         },
       }));
+      toast.error(`Failed to create snapshot: ${err instanceof Error ? err.message : 'Snapshot failed'}`);
     }
   }
 
@@ -101,27 +109,6 @@ function SnapshotButtons() {
   );
 }
 
-function ToastTestButton() {
-  function showTestToasts() {
-    toast.message({ text: 'Normal message toast' });
-    toast.success('Success toast');
-    toast.warning('Warning toast');
-    toast.error('Error toast');
-  }
-
-  return (
-    <button
-      type="button"
-      onClick={showTestToasts}
-      className="inline-flex h-9 items-center gap-2 rounded-xl border border-zinc-200 bg-white px-4 text-sm font-medium text-zinc-700 shadow-sm transition-colors hover:bg-zinc-50 hover:text-zinc-900"
-      title="Show message, success, warning, and error toasts"
-    >
-      <Bell size={16} />
-      <span>Test toasts</span>
-    </button>
-  );
-}
-
 export default function App() {
   const [applyProfileName, setApplyProfileName] = useState<string | null>(null);
 
@@ -141,23 +128,8 @@ export default function App() {
             </div>
           </div>
 
-          <div className="hidden items-center gap-1.5 lg:flex">
-            {AGENTS.map((agent) => (
-              <span
-                key={agent}
-                className="inline-flex h-8 flex-none items-center gap-1.5 rounded-xl border border-zinc-200 bg-white px-3 text-[10px] font-medium text-zinc-600 shadow-sm"
-              >
-                <span className="grid size-3.5 place-items-center overflow-hidden text-zinc-900">
-                  <AgentLogo agent={agent} className="size-full object-contain" />
-                </span>
-                {agent.charAt(0).toUpperCase() + agent.slice(1)}
-              </span>
-            ))}
-          </div>
-
           <div className="flex flex-wrap items-center gap-2">
             <SnapshotButtons />
-            <ToastTestButton />
             <CreateProfileButton />
             <a
               href="https://www.brainctl.net"
@@ -173,7 +145,7 @@ export default function App() {
 
         <section className="-ml-4 flex min-h-0 w-full gap-4 overflow-hidden pt-4">
           <ProfilesDrawer onApplyProfile={setApplyProfileName} />
-          <div className="min-w-0 flex-1 overflow-y-auto pr-1">
+          <div className="scrollbar-none min-w-0 flex-1 overflow-y-auto pr-1">
             {applyProfileName ? (
               <ApplyProfilePanel
                 initialProfile={applyProfileName}

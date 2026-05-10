@@ -70,6 +70,17 @@ function nextChangeId(): string {
   return `change-${++changeIdCounter}`;
 }
 
+function formatAppliedChangesTitle(changes: PendingChange[]): string {
+  const count = changes.length;
+  if (changes.every((change) => change.type === 'remove')) {
+    return `Deleted ${count} item${count > 1 ? 's' : ''}`;
+  }
+  if (changes.every((change) => change.type === 'add')) {
+    return `Added ${count} item${count > 1 ? 's' : ''}`;
+  }
+  return `Applied ${count} change${count > 1 ? 's' : ''}`;
+}
+
 export function applyPendingChanges(
   configs: AgentLiveConfig[],
   changes: PendingChange[]
@@ -580,7 +591,7 @@ export function useProfilesBoard() {
           ? `${restartMessage ? `${restartMessage} ` : ''}Live reload failed: ${reloadError.message}`
           : restartMessage;
 
-        toast.success(`Applied ${result.applied.length} change${result.applied.length > 1 ? 's' : ''}`, {
+        toast.success(formatAppliedChangesTitle(result.applied), {
           description,
           duration: 8000,
         });

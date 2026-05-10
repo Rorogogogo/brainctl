@@ -374,7 +374,7 @@ export default function ApplyProfilePanel({
                 : null}
             </div>
           </div>
-          <div className="min-h-0 flex-1 overflow-y-auto p-4 text-sm">
+          <div className="scrollbar-none min-h-0 flex-1 overflow-y-auto p-4 text-sm">
             {!selectedProfile ? (
               <p className="text-zinc-500">Pick a profile to see its contents.</p>
             ) : loadingContents ? (
