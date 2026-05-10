@@ -12,6 +12,18 @@ async function main() {
   await client.connect(transport);
 
   const result = await client.listTools();
+  const toolNames = new Set(result.tools.map((tool) => tool.name));
+  const expectedTools = [
+    'brainctl_register_github_profile',
+    'brainctl_publish_profile',
+    'brainctl_install_registry_profile',
+  ];
+
+  for (const expectedTool of expectedTools) {
+    if (!toolNames.has(expectedTool)) {
+      throw new Error(`Missing MCP tool: ${expectedTool}`);
+    }
+  }
 
   console.log(`\nMCP Tools registered: ${result.tools.length}\n`);
   for (const tool of result.tools) {

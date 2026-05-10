@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { FastMCP } from 'fastmcp';
 import { createMcpServer } from '../../src/mcp-server.js';
 
 vi.mock('../src/config.js', () => ({
@@ -61,5 +62,24 @@ describe('MCP server', () => {
   it('creates a server with expected tools', () => {
     const server = createMcpServer({ cwd: '/test' });
     expect(server).toBeDefined();
+  });
+
+  it('registers registry publishing tools', () => {
+    const toolNames: string[] = [];
+    const originalAddTool = FastMCP.prototype.addTool;
+    const addToolSpy = vi
+      .spyOn(FastMCP.prototype, 'addTool')
+      .mockImplementation(function (this: FastMCP, tool) {
+        toolNames.push(tool.name);
+        return originalAddTool.call(this, tool);
+      });
+
+    createMcpServer({ cwd: '/test' });
+
+    expect(toolNames).toContain('brainctl_register_github_profile');
+    expect(toolNames).toContain('brainctl_publish_profile');
+    expect(toolNames).toContain('brainctl_install_registry_profile');
+
+    addToolSpy.mockRestore();
   });
 });
