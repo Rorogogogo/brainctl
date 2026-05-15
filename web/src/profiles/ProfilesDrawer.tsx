@@ -5,6 +5,7 @@ import {
   ChevronRight,
   Folder,
   FolderOpen,
+  UploadCloud,
   Loader2,
   PencilLine,
   RefreshCw,
@@ -16,6 +17,7 @@ import {
 
 import { AgentLogo } from '../components/agent-brand';
 import ConfirmDialog from '../components/ConfirmDialog';
+import PublishProfileDialog from '../components/PublishProfileDialog';
 import { Tooltip } from '../components/Tooltip';
 import { toast } from '../components/ui/toast.js';
 import EditProfileModal from './EditProfileModal';
@@ -68,6 +70,7 @@ export default function ProfilesDrawer({ onApplyProfile }: ProfilesDrawerProps) 
   const [renameValue, setRenameValue] = useState('');
   const [renaming, setRenaming] = useState(false);
   const [editModalProfile, setEditModalProfile] = useState<string | null>(null);
+  const [publishTarget, setPublishTarget] = useState<string | null>(null);
   const [drawerWidth, setDrawerWidth] = useState<number>(() => {
     if (typeof window === 'undefined') return 224;
     const saved = window.localStorage.getItem('brainctl:profiles-drawer-width');
@@ -484,6 +487,16 @@ export default function ProfilesDrawer({ onApplyProfile }: ProfilesDrawerProps) 
                 <FolderOpen size={11} />
               </button>
               </Tooltip>
+              <Tooltip label="Publish to GitHub registry">
+              <button
+                type="button"
+                onClick={() => setPublishTarget(p.name)}
+                disabled={deleting || renaming}
+                className="grid size-5 place-items-center rounded text-zinc-500 transition hover:bg-zinc-100 disabled:opacity-50"
+              >
+                <UploadCloud size={11} />
+              </button>
+              </Tooltip>
               <Tooltip label="Delete profile">
               <button
                 type="button"
@@ -530,6 +543,13 @@ export default function ProfilesDrawer({ onApplyProfile }: ProfilesDrawerProps) 
         variant="danger"
         onConfirm={() => {
           if (deleteTarget) void deleteProfile(deleteTarget);
+        }}
+      />
+      <PublishProfileDialog
+        open={publishTarget !== null}
+        profileName={publishTarget}
+        onOpenChange={(open) => {
+          if (!open) setPublishTarget(null);
         }}
       />
       <ResizeHandle onMouseDown={startResize} />

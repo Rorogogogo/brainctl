@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Clipboard, Folder, FolderOpen } from 'lucide-react';
+import { Clipboard, Folder, FolderOpen, Globe } from 'lucide-react';
 import { fetchJson } from '../../lib/fetch-json.js';
 import FolderPicker from '../../components/FolderPicker.js';
 import { Dropdown, type DropdownSection } from '../../components/ui/Dropdown.js';
@@ -72,6 +72,10 @@ export function ProjectBar({
   }, []);
 
   function pick(path: string): void {
+    if (path === '__global__') {
+      onScopeChange('global');
+      return;
+    }
     onActiveProjectChange(path);
     if (scope === 'global') {
       onScopeChange('project');
@@ -88,7 +92,17 @@ export function ProjectBar({
     recents,
   });
 
-  const projectSections: DropdownSection[] = [];
+  const projectSections: DropdownSection[] = [
+    {
+      items: [
+        {
+          value: '__global__',
+          label: 'Global',
+          description: 'Shared across all projects',
+        },
+      ],
+    },
+  ];
   if (sections.recents.length > 0) {
     projectSections.push({
       title: 'Recents',
@@ -113,10 +127,10 @@ export function ProjectBar({
   return (
     <div className="flex min-w-0 flex-1 flex-nowrap items-center gap-2">
       <Dropdown
-        leftIcon={<FolderOpen size={12} />}
-        triggerLabel={basename(activeProject) || '—'}
+        leftIcon={scope === 'global' ? <Globe size={12} /> : <FolderOpen size={12} />}
+        triggerLabel={scope === 'global' ? 'Global' : basename(activeProject) || '—'}
         sections={projectSections}
-        value={activeProject}
+        value={scope === 'global' ? '__global__' : activeProject}
         onSelect={pick}
         emptyLabel="No recent projects"
         width="w-96"
@@ -177,32 +191,6 @@ export function ProjectBar({
           </div>
         }
       />
-
-      <div
-        className="flex h-7 items-center gap-1 rounded-lg bg-zinc-200 p-0.5"
-        title="Global = MCPs/skills shared across all projects. Project = scoped to the selected project folder."
-      >
-        <button
-          type="button"
-          onClick={() => onScopeChange('global')}
-          title="Show config shared across all projects"
-          className={`h-6 rounded-md px-2 text-[11px] font-medium leading-6 transition-colors ${
-            scope === 'global' ? 'bg-white text-zinc-900 shadow-sm' : 'text-zinc-500 hover:text-zinc-700'
-          }`}
-        >
-          Global
-        </button>
-        <button
-          type="button"
-          onClick={() => onScopeChange('project')}
-          title="Show config scoped to the selected project"
-          className={`h-6 rounded-md px-2 text-[11px] font-medium leading-6 transition-colors ${
-            scope === 'project' ? 'bg-white text-zinc-900 shadow-sm' : 'text-zinc-500 hover:text-zinc-700'
-          }`}
-        >
-          Project
-        </button>
-      </div>
 
       {scope === 'project' && (
         <div className="relative group min-w-0">

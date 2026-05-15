@@ -2,7 +2,9 @@ import { useState } from 'react';
 import { Check, Download, Loader2 } from 'lucide-react';
 
 import { AgentLogo } from './components/agent-brand';
+import ApiModeBadge from './components/ApiModeBadge';
 import CreateProfileButton from './components/CreateProfileButton';
+import SignInButton from './components/SignInButton';
 import { toast } from './components/ui/toast.js';
 import ApplyProfilePanel from './profiles/ApplyProfilePanel';
 import ProfilesDrawer from './profiles/ProfilesDrawer';
@@ -120,16 +122,18 @@ export default function App() {
             <div className="grid size-7 place-items-center rounded-lg bg-zinc-900 text-white shadow-sm">
               <img src="/favicon-light.svg" alt="Brainctl Logo" className="size-4" />
             </div>
-            <div>
+            <div className="flex items-center gap-2">
               <h1 className="text-sm font-semibold leading-none tracking-tight">
                 Brainctl <span className="font-normal text-zinc-400">v{__APP_VERSION__}</span>
               </h1>
+              <ApiModeBadge />
             </div>
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
             <SnapshotButtons />
             <CreateProfileButton />
+            <SignInButton />
             <a
               href="https://www.brainctl.net"
               target="_blank"

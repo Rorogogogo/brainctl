@@ -17,6 +17,12 @@ import {
   defaultBackupProfileName,
 } from './services/profile/profile-snapshot-service.js';
 import { createProfileRegistryClient } from './services/profile/profile-registry-client.js';
+import { createProfilePublishService } from './services/profile/profile-publish-service.js';
+import {
+  resolveBrainctlApiBaseUrl,
+  resolveBrainctlApiTarget,
+  resolveBrainctlApiToken,
+} from './services/platform/brainctl-config-service.js';
 import { createStatusService } from './services/platform/status-service.js';
 import type { AgentName, ProfileConfig } from './types.js';
 
@@ -31,10 +37,11 @@ export interface UiServerState {
 }
 
 export function createMcpServer(
-  options: { cwd?: string; uiServerState?: UiServerState } = {}
+  options: { cwd?: string; uiServerState?: UiServerState; apiBaseUrl?: string } = {}
 ): FastMCP {
   const cwd = options.cwd ?? process.cwd();
   const uiState: UiServerState = options.uiServerState ?? { current: null };
+  const apiBaseUrl = options.apiBaseUrl;
 
   const server = new FastMCP({
     name: 'brainctl',
@@ -60,6 +67,17 @@ export function createMcpServer(
       const doctorService = createDoctorService();
       const result = await doctorService.execute({ cwd });
       return JSON.stringify(result, null, 2);
+    },
+  });
+
+  server.addTool({
+    name: 'brainctl_config_status',
+    description:
+      'Show which Brainctl platform API target the CLI/MCP will use for registry publish/register/install operations.',
+    parameters: z.object({}),
+    execute: async () => {
+      const target = await resolveBrainctlApiTarget({ apiBaseUrl });
+      return JSON.stringify(target, null, 2);
     },
   });
 
@@ -314,13 +332,18 @@ export function createMcpServer(
       profile_path: z.string().optional().describe('Profile path in the repository'),
     }),
     execute: async (args) => {
-      const token = process.env.BRAINCTL_API_TOKEN;
-      if (!token) {
-        return JSON.stringify({ error: 'BRAINCTL_API_TOKEN is required.' }, null, 2);
+      const resolved = await resolveBrainctlApiToken();
+      if (!resolved) {
+        return JSON.stringify(
+          { error: 'No brainctl API token configured. Sign in via the UI or set BRAINCTL_API_TOKEN.' },
+          null,
+          2
+        );
       }
+      const token = resolved.token;
 
       const client = createProfileRegistryClient({
-        baseUrl: registryApiUrl(),
+        baseUrl: await registryApiUrl(apiBaseUrl),
         token,
       });
       const result = await client.registerGithubProfile({
@@ -339,19 +362,53 @@ export function createMcpServer(
 
   server.addTool({
     name: 'brainctl_publish_profile',
-    description: 'Publish a Brainctl-hosted profile to the hosted registry.',
+    description:
+      'Package a local Brainctl profile and upload it as a new version to the hosted registry.',
     parameters: z.object({
+      profile_name: z.string().describe('Local profile name (in .brainctl/profiles/)'),
       slug: z.string().describe('Registry slug'),
+      title: z.string().describe('Profile title'),
+      summary: z.string().optional().describe('Profile summary'),
+      version: z.string().optional().describe('Semantic version, default 1.0.0'),
+      changelog: z.string().optional().describe('Changelog for this version'),
+      visibility: z
+        .enum(['public', 'private'])
+        .optional()
+        .describe('Visibility when creating a new profile, default public'),
     }),
-    execute: async (args) =>
-      JSON.stringify(
-        {
+    execute: async (args) => {
+      const resolved = await resolveBrainctlApiToken();
+      if (!resolved) {
+        return JSON.stringify(
+          { error: 'No brainctl API token configured. Sign in via the UI or set BRAINCTL_API_TOKEN.' },
+          null,
+          2
+        );
+      }
+      const token = resolved.token;
+
+      try {
+        const publishService = createProfilePublishService({
+          profileExportService: createProfileExportService(),
+        });
+        const result = await publishService.execute({
+          cwd,
+          profileName: args.profile_name,
           slug: args.slug,
-          status: 'pending_package_upload_integration',
-        },
-        null,
-        2
-      ),
+          title: args.title,
+          summary: args.summary,
+          version: args.version,
+          changelog: args.changelog,
+          visibility: args.visibility,
+          apiBaseUrl: await registryApiUrl(apiBaseUrl),
+          token,
+        });
+        return JSON.stringify({ ok: true, ...result }, null, 2);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        return JSON.stringify({ error: message }, null, 2);
+      }
+    },
   });
 
   server.addTool({
@@ -361,9 +418,10 @@ export function createMcpServer(
       slug: z.string().describe('Registry profile slug'),
     }),
     execute: async (args) => {
+      const resolved = await resolveBrainctlApiToken();
       const client = createProfileRegistryClient({
-        baseUrl: registryApiUrl(),
-        token: process.env.BRAINCTL_API_TOKEN,
+        baseUrl: await registryApiUrl(apiBaseUrl),
+        token: resolved?.token,
       });
       const descriptor = await client.getInstallDescriptor(args.slug);
 
@@ -451,6 +509,32 @@ export function createMcpServer(
   });
 
   server.addTool({
+    name: 'brainctl_move_agent_mcp_scope',
+    description: 'Move an MCP server entry between global and project scope in a specific agent config (e.g., move from ~/.claude.json top-level mcpServers to projects[cwd].mcpServers, or vice versa).',
+    parameters: z.object({
+      agent: z.enum(['claude', 'codex', 'gemini']).describe('Target agent'),
+      key: z.string().describe('MCP server name/key to move'),
+      fromScope: z.enum(['global', 'project']).describe('Current scope of the MCP'),
+      toScope: z.enum(['global', 'project']).describe('Destination scope'),
+      fromProjectPath: z.string().optional().describe('When fromScope=project, the source project path (defaults to cwd)'),
+      toProjectPath: z.string().optional().describe('When toScope=project, the destination project path (defaults to cwd)'),
+    }),
+    execute: async (args) => {
+      const agentConfigService = createAgentConfigService();
+      await agentConfigService.moveMcpScope({
+        cwd,
+        agent: args.agent,
+        key: args.key,
+        fromScope: args.fromScope,
+        toScope: args.toScope,
+        fromProjectPath: args.fromProjectPath,
+        toProjectPath: args.toProjectPath,
+      });
+      return JSON.stringify({ ok: true, agent: args.agent, key: args.key, fromScope: args.fromScope, toScope: args.toScope });
+    },
+  });
+
+  server.addTool({
     name: 'brainctl_remove_agent_mcp',
     description: 'Remove an MCP server entry from a specific agent config.',
     parameters: z.object({
@@ -467,11 +551,11 @@ export function createMcpServer(
   return server;
 }
 
-function registryApiUrl(): string {
-  return process.env.BRAINCTL_API_URL ?? 'https://api.brainctl.net';
+function registryApiUrl(apiBaseUrl?: string): Promise<string> {
+  return resolveBrainctlApiBaseUrl({ apiBaseUrl });
 }
 
-export async function startMcpServer(options: { cwd?: string } = {}): Promise<void> {
+export async function startMcpServer(options: { cwd?: string; apiBaseUrl?: string } = {}): Promise<void> {
   const cwd = options.cwd ?? process.cwd();
   const uiServerState: UiServerState = { current: null };
 
@@ -479,7 +563,7 @@ export async function startMcpServer(options: { cwd?: string } = {}): Promise<vo
     uiServerState.current = await tryAutoStartUi(cwd, 3333);
   }
 
-  const server = createMcpServer({ cwd, uiServerState });
+  const server = createMcpServer({ cwd, uiServerState, apiBaseUrl: options.apiBaseUrl });
   await server.start({ transportType: 'stdio' });
 }
 

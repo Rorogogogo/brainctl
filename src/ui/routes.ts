@@ -12,6 +12,17 @@ import { createMcpPreflightService } from '../services/platform/mcp-preflight-se
 import { createPluginInstallService } from '../services/plugin/plugin-install-service.js';
 import { createProfileExportService } from '../services/profile/profile-export-service.js';
 import { createProfileImportService } from '../services/profile/profile-import-service.js';
+import { createProfileRegistryClient } from '../services/profile/profile-registry-client.js';
+import { createProfilePublishService } from '../services/profile/profile-publish-service.js';
+import {
+  createBrainctlConfigService,
+  resolveBrainctlApiBaseUrl,
+  resolveBrainctlApiTarget,
+  resolveBrainctlApiToken,
+  resolveBrainctlFrontendUrl,
+} from '../services/platform/brainctl-config-service.js';
+import { createBrainctlTokenManager } from '../services/platform/brainctl-token-manager.js';
+import { randomBytes } from 'node:crypto';
 import {
   brainctlHome,
   createProfileService,
@@ -94,6 +105,53 @@ export function createUiRouteHandler(
   const claudeJsonPath = dependencies.claudeJsonPath ?? path.join(os.homedir(), '.claude.json');
   const recentProjectsService = createRecentProjectsService({ filePath: recentsFilePath });
 
+  const brainctlConfigService = createBrainctlConfigService();
+  const tokenManager = createBrainctlTokenManager({ configService: brainctlConfigService });
+  type AuthOutcome =
+    | { status: 'pending' }
+    | { status: 'success'; at: number }
+    | { status: 'error'; message: string; at: number };
+  type AuthStateEntry = { expiresAt: number; outcome: AuthOutcome };
+  const pendingAuthStates = new Map<string, AuthStateEntry>();
+  const OUTCOME_RETENTION_MS = 60 * 1000;
+
+  function sweepAuthStates(): void {
+    const now = Date.now();
+    for (const [key, entry] of pendingAuthStates) {
+      if (entry.expiresAt < now) pendingAuthStates.delete(key);
+    }
+  }
+
+  function newAuthState(): string {
+    const state = randomBytes(16).toString('hex');
+    pendingAuthStates.set(state, {
+      expiresAt: Date.now() + 10 * 60 * 1000,
+      outcome: { status: 'pending' },
+    });
+    sweepAuthStates();
+    return state;
+  }
+
+  function validateAuthState(state: string | null): AuthStateEntry | null {
+    if (!state) return null;
+    const entry = pendingAuthStates.get(state);
+    if (!entry) return null;
+    if (entry.expiresAt < Date.now()) {
+      pendingAuthStates.delete(state);
+      return null;
+    }
+    return entry;
+  }
+
+  function markAuthOutcome(state: string, outcome: AuthOutcome): void {
+    const entry = pendingAuthStates.get(state);
+    if (!entry) return;
+    entry.outcome = outcome;
+    if (outcome.status !== 'pending') {
+      entry.expiresAt = Date.now() + OUTCOME_RETENTION_MS;
+    }
+  }
+
   async function readClaudeProjectPaths(): Promise<string[]> {
     try {
       const raw = await readFile(claudeJsonPath, 'utf8');
@@ -108,6 +166,159 @@ export function createUiRouteHandler(
     const url = new URL(request.url ?? '/', 'http://localhost');
 
     switch (url.pathname) {
+      case '/api/auth/status': {
+        if (request.method !== 'GET') {
+          return sendJson(response, 405, { error: 'Method not allowed' });
+        }
+        const target = await resolveBrainctlApiTarget();
+        const apiInfo = {
+          apiBaseUrl: target.apiBaseUrl,
+          apiMode: target.mode,
+          apiSource: target.source,
+        };
+        const resolved = await resolveBrainctlApiToken({ configService: brainctlConfigService });
+        if (!resolved) {
+          return sendJson(response, 200, { signedIn: false, ...apiInfo });
+        }
+        try {
+          const me = await tokenManager.authenticatedFetch('/me');
+          if (!me.ok) {
+            return sendJson(response, 200, {
+              signedIn: false,
+              source: resolved.source,
+              error: `HTTP ${me.status}`,
+              ...apiInfo,
+            });
+          }
+          const user = (await me.json()) as { email?: string; display_name?: string; avatar_url?: string | null };
+          return sendJson(response, 200, {
+            signedIn: true,
+            source: resolved.source,
+            user: {
+              email: user.email,
+              displayName: user.display_name,
+              avatarUrl: user.avatar_url ?? undefined,
+            },
+            ...apiInfo,
+          });
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          return sendJson(response, 200, {
+            signedIn: false,
+            source: resolved.source,
+            error: message,
+            ...apiInfo,
+          });
+        }
+      }
+
+      case '/api/auth/start': {
+        if (request.method !== 'POST') {
+          return sendJson(response, 405, { error: 'Method not allowed' });
+        }
+        const state = newAuthState();
+        const apiBase = await resolveBrainctlApiBaseUrl();
+        const frontendBase = await resolveBrainctlFrontendUrl({ apiBaseUrl: apiBase });
+        const host = request.headers.host ?? '127.0.0.1:3333';
+        const port = host.includes(':') ? host.split(':')[1] : '3333';
+        const callback = `http://127.0.0.1:${port}/auth/finish?state=${encodeURIComponent(state)}`;
+        const url = `${frontendBase.replace(/\/$/, '')}/cli-login?state=${encodeURIComponent(state)}&callback=${encodeURIComponent(callback)}`;
+        return sendJson(response, 200, { url, state });
+      }
+
+      case '/auth/finish': {
+        if (request.method !== 'GET') {
+          return sendJson(response, 405, { error: 'Method not allowed' });
+        }
+        const state = url.searchParams.get('state');
+        const token = url.searchParams.get('token');
+        const refreshToken = url.searchParams.get('refresh_token');
+        const errorParam = url.searchParams.get('error');
+        if (!validateAuthState(state)) {
+          response.statusCode = 400;
+          response.setHeader('content-type', 'text/html; charset=utf-8');
+          response.end(authResultHtml('error', 'Invalid or expired sign-in request.'));
+          return;
+        }
+        if (errorParam) {
+          markAuthOutcome(state as string, {
+            status: 'error',
+            message: errorParam,
+            at: Date.now(),
+          });
+          response.statusCode = 400;
+          response.setHeader('content-type', 'text/html; charset=utf-8');
+          response.end(authResultHtml('error', errorParam));
+          return;
+        }
+        if (!token || token.trim().length === 0) {
+          const message = 'No token returned by the brainctl platform.';
+          markAuthOutcome(state as string, { status: 'error', message, at: Date.now() });
+          response.statusCode = 400;
+          response.setHeader('content-type', 'text/html; charset=utf-8');
+          response.end(authResultHtml('error', message));
+          return;
+        }
+        try {
+          await tokenManager.saveTokens({
+            accessToken: token.trim(),
+            refreshToken: refreshToken?.trim() || undefined,
+          });
+          const verify = await tokenManager.authenticatedFetch('/me');
+          if (!verify.ok) {
+            await tokenManager.clear();
+            const apiBase = await resolveBrainctlApiBaseUrl();
+            const message =
+              verify.status === 401
+                ? `Token was rejected by the brainctl API at ${apiBase}. The platform you signed in through likely targets a different backend.`
+                : `brainctl API at ${apiBase} returned HTTP ${verify.status} when verifying the token.`;
+            markAuthOutcome(state as string, { status: 'error', message, at: Date.now() });
+            response.statusCode = 401;
+            response.setHeader('content-type', 'text/html; charset=utf-8');
+            response.end(authResultHtml('error', message));
+            return;
+          }
+          markAuthOutcome(state as string, { status: 'success', at: Date.now() });
+          response.statusCode = 200;
+          response.setHeader('content-type', 'text/html; charset=utf-8');
+          response.end(authResultHtml('ok', 'You are signed in. You can close this tab.'));
+        } catch (error) {
+          const message = `Failed to save token: ${error instanceof Error ? error.message : String(error)}`;
+          markAuthOutcome(state as string, { status: 'error', message, at: Date.now() });
+          response.statusCode = 500;
+          response.setHeader('content-type', 'text/html; charset=utf-8');
+          response.end(authResultHtml('error', message));
+        }
+        return;
+      }
+
+      case '/api/auth/outcome': {
+        if (request.method !== 'GET') {
+          return sendJson(response, 405, { error: 'Method not allowed' });
+        }
+        const state = url.searchParams.get('state');
+        const entry = validateAuthState(state);
+        if (!entry) {
+          return sendJson(response, 404, { status: 'unknown' });
+        }
+        const outcome = entry.outcome;
+        if (outcome.status !== 'pending' && state) {
+          pendingAuthStates.delete(state);
+        }
+        if (outcome.status === 'error') {
+          return sendJson(response, 200, { status: 'error', message: outcome.message });
+        }
+        return sendJson(response, 200, { status: outcome.status });
+      }
+
+      case '/api/auth/logout': {
+        if (request.method !== 'POST') {
+          return sendJson(response, 405, { error: 'Method not allowed' });
+        }
+        await tokenManager.clear();
+        return sendJson(response, 200, { ok: true });
+      }
+
       case '/api/overview': {
         if (request.method !== 'GET') {
           return sendJson(response, 405, { error: 'Method not allowed' });
@@ -131,6 +342,13 @@ export function createUiRouteHandler(
 
         const configs = await agentConfigService.readAll({ cwd: resolveCwd(request, dependencies.cwd) });
         return sendJson(response, 200, configs);
+      }
+      case '/api/agents/claude/projects': {
+        if (request.method !== 'GET') {
+          return sendJson(response, 405, { error: 'Method not allowed' });
+        }
+        const projects = await agentConfigService.listClaudeProjects();
+        return sendJson(response, 200, { projects });
       }
       case '/api/open-folder': {
         if (request.method !== 'POST') {
@@ -288,6 +506,132 @@ export function createUiRouteHandler(
           return sendJson(response, 200, result);
         } catch (error) {
           return sendProfileError(response, error);
+        }
+      }
+      case '/api/profiles/publish': {
+        if (request.method !== 'POST') {
+          return sendJson(response, 405, { error: 'Method not allowed' });
+        }
+
+        const body = await readJsonBody(request);
+        if (!body.ok) {
+          return sendJson(response, 400, { error: 'Invalid JSON body' });
+        }
+
+        const data = body.value as {
+          profileName?: string;
+          slug?: string;
+          title?: string;
+          summary?: string;
+          version?: string;
+          changelog?: string;
+          visibility?: 'public' | 'private';
+          apiBaseUrl?: string;
+          token?: string;
+        };
+
+        const profileName =
+          typeof data.profileName === 'string' ? data.profileName.trim() : '';
+        const slug = typeof data.slug === 'string' ? data.slug.trim() : '';
+        const title = typeof data.title === 'string' ? data.title.trim() : '';
+        if (!profileName || !slug || !title) {
+          return sendJson(response, 400, {
+            error: 'profileName, slug, and title are required',
+          });
+        }
+
+        const hasToken = (await tokenManager.getAccessToken()) !== null;
+        if (!hasToken) {
+          return sendJson(response, 401, {
+            error: 'No brainctl API token configured. Sign in or set BRAINCTL_API_TOKEN.',
+          });
+        }
+
+        try {
+          const publishService = createProfilePublishService({
+            profileExportService,
+          });
+          const result = await publishService.execute({
+            cwd: dependencies.cwd,
+            profileName,
+            slug,
+            title,
+            summary: data.summary,
+            version: data.version,
+            changelog: data.changelog,
+            visibility: data.visibility,
+            apiBaseUrl: await resolveBrainctlApiBaseUrl({ apiBaseUrl: data.apiBaseUrl }),
+            fetch: (input, init) =>
+              tokenManager.authenticatedFetch(
+                typeof input === 'string' ? input : input.toString(),
+                init
+              ),
+          });
+          return sendJson(response, 200, { ok: true, ...result });
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          return sendJson(response, 502, { error: message });
+        }
+      }
+      case '/api/profiles/register-github': {
+        if (request.method !== 'POST') {
+          return sendJson(response, 405, { error: 'Method not allowed' });
+        }
+
+        const body = await readJsonBody(request);
+        if (!body.ok) {
+          return sendJson(response, 400, { error: 'Invalid JSON body' });
+        }
+
+        const data = body.value as {
+          repoUrl?: string;
+          slug?: string;
+          title?: string;
+          summary?: string;
+          refName?: string;
+          profilePath?: string;
+          apiBaseUrl?: string;
+          token?: string;
+        };
+
+        const repoUrl = typeof data.repoUrl === 'string' ? data.repoUrl.trim() : '';
+        const slug = typeof data.slug === 'string' ? data.slug.trim() : '';
+        const title = typeof data.title === 'string' ? data.title.trim() : '';
+        if (!repoUrl || !slug || !title) {
+          return sendJson(response, 400, {
+            error: 'repoUrl, slug, and title are required',
+          });
+        }
+
+        const hasToken = (await tokenManager.getAccessToken()) !== null;
+        if (!hasToken) {
+          return sendJson(response, 401, {
+            error: 'No brainctl API token configured. Sign in or set BRAINCTL_API_TOKEN.',
+          });
+        }
+
+        try {
+          const client = createProfileRegistryClient({
+            fetch: (input, init) =>
+              tokenManager.authenticatedFetch(
+                typeof input === 'string' ? input : input.toString(),
+                init
+              ),
+            baseUrl: await resolveBrainctlApiBaseUrl({ apiBaseUrl: data.apiBaseUrl }),
+          });
+          const result = await client.registerGithubProfile({
+            repoUrl,
+            slug,
+            title,
+            summary: data.summary,
+            refName: data.refName,
+            profilePath: data.profilePath,
+            manifestJson: { name: slug },
+          });
+          return sendJson(response, 200, { ok: true, result });
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          return sendJson(response, 502, { error: message });
         }
       }
       case '/api/projects': {
@@ -596,6 +940,43 @@ export function createUiRouteHandler(
               return sendJson(response, 200, { ok: true });
             } catch (error) {
               return sendHandledError(response, error, 'Failed to add MCP');
+            }
+          }
+
+          if (request.method === 'PATCH' && mcpKey) {
+            const body = await readJsonBody(request);
+            if (!body.ok) {
+              return sendJson(response, 400, { error: 'Invalid JSON body' });
+            }
+            const data = body.value as {
+              fromScope?: string;
+              toScope?: string;
+              fromProjectPath?: string;
+              toProjectPath?: string;
+            };
+            const fromScope = data.fromScope === 'project' ? 'project' : 'global';
+            const toScope = data.toScope === 'project' ? 'project' : 'global';
+            const fromProjectPath = typeof data.fromProjectPath === 'string' ? data.fromProjectPath : undefined;
+            const toProjectPath = typeof data.toProjectPath === 'string' ? data.toProjectPath : undefined;
+            const sameLocation =
+              fromScope === toScope &&
+              (fromScope === 'global' || (fromProjectPath ?? '') === (toProjectPath ?? ''));
+            if (sameLocation) {
+              return sendJson(response, 400, { error: 'Source and destination must differ' });
+            }
+            try {
+              await agentConfigService.moveMcpScope({
+                cwd: resolveCwd(request, dependencies.cwd),
+                agent: agentName,
+                key: mcpKey,
+                fromScope,
+                toScope,
+                fromProjectPath,
+                toProjectPath,
+              });
+              return sendJson(response, 200, { ok: true });
+            } catch (error) {
+              return sendHandledError(response, error, 'Failed to move MCP scope');
             }
           }
 
@@ -1019,6 +1400,45 @@ function sendJson(
   response.statusCode = statusCode;
   response.setHeader('Content-Type', 'application/json; charset=utf-8');
   response.end(JSON.stringify(body));
+}
+
+function authResultHtml(kind: 'ok' | 'error', message: string): string {
+  const color = kind === 'ok' ? '#16a34a' : '#dc2626';
+  const title = kind === 'ok' ? 'Signed in to brainctl' : 'Sign-in failed';
+  const safe = message.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  const autoCloseScript =
+    kind === 'ok'
+      ? `<script>(function(){
+    var seconds=3;
+    var label=document.getElementById('countdown');
+    var btn=document.getElementById('close-btn');
+    function tryClose(){try{window.close();}catch(_){}}
+    btn&&btn.addEventListener('click',tryClose);
+    var timer=setInterval(function(){
+      seconds-=1;
+      if(label)label.textContent=String(seconds);
+      if(seconds<=0){clearInterval(timer);tryClose();}
+    },1000);
+  })();</script>`
+      : '';
+  const body =
+    kind === 'ok'
+      ? `<div class="card"><h1><span class="dot"></span>${title}</h1>
+    <p>${safe}</p>
+    <p class="hint">Return to the brainctl dashboard to continue. This tab will close in <span id="countdown">3</span>s.</p>
+    <button id="close-btn" type="button" class="btn">Close this tab</button>
+  </div>`
+      : `<div class="card"><h1><span class="dot"></span>${title}</h1><p>${safe}</p></div>`;
+  return `<!doctype html><html><head><meta charset="utf-8"><title>${title}</title><style>
+    body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;display:grid;place-items:center;min-height:100vh;margin:0;color:#18181b;background:#fafafa}
+    .card{max-width:420px;text-align:center;padding:32px;border:1px solid #e4e4e7;border-radius:16px;background:white;box-shadow:0 1px 2px rgba(0,0,0,.04)}
+    h1{margin:0 0 8px;font-size:18px}
+    p{margin:0;color:#52525b;font-size:14px}
+    .hint{margin-top:12px}
+    .btn{margin-top:20px;padding:8px 16px;font-size:14px;border:1px solid #d4d4d8;border-radius:8px;background:white;color:#18181b;cursor:pointer}
+    .btn:hover{background:#f4f4f5}
+    .dot{display:inline-block;width:10px;height:10px;border-radius:50%;background:${color};margin-right:8px;vertical-align:middle}
+  </style></head><body>${body}${autoCloseScript}</body></html>`;
 }
 
 function acceptsNdjson(request: IncomingMessage): boolean {

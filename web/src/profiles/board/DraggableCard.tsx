@@ -1,5 +1,5 @@
 import { useDraggable } from '@dnd-kit/core';
-import { FolderOpen, Trash2 } from 'lucide-react';
+import { ArrowLeftRight, FolderOpen, Trash2 } from 'lucide-react';
 import type { ReactNode } from 'react';
 
 function openFolder(folderPath: string) {
@@ -17,8 +17,11 @@ export function DraggableCard({
   icon,
   status,
   onRemove,
+  onMoveScope,
+  moveScopeTarget,
   editable,
   folderPath,
+  expandedContent,
 }: {
   id: string;
   label: string;
@@ -26,11 +29,14 @@ export function DraggableCard({
   icon?: ReactNode;
   status?: 'added' | 'removed';
   onRemove?: () => void;
+  onMoveScope?: () => void;
+  moveScopeTarget?: 'global' | 'project';
   editable: boolean;
   folderPath?: string;
+  expandedContent?: ReactNode;
 }) {
   const { attributes, listeners, setNodeRef, isDragging } =
-    useDraggable({ id, disabled: !editable });
+    useDraggable({ id, disabled: !editable || Boolean(expandedContent) });
 
   const statusClass =
     status === 'added'
@@ -43,12 +49,12 @@ export function DraggableCard({
     ? ' cursor-grab active:cursor-grabbing hover:shadow-sm'
     : '';
 
-  const dragProps = editable ? { ...listeners, ...attributes } : {};
+  const dragProps = editable && !expandedContent ? { ...listeners, ...attributes } : {};
 
   return (
     <div
       ref={setNodeRef}
-      className={`flex items-start gap-3 rounded-xl border p-3 transition-all duration-200 group ${isDragging ? 'opacity-50' : ''}${statusClass}${editableClass}`}
+      className={`flex flex-col rounded-xl border p-3 transition-all duration-200 group ${isDragging ? 'opacity-50' : ''}${statusClass}${expandedContent ? ' border-zinc-300 shadow-sm' : editableClass}`}
       {...dragProps}
     >
       <div className="flex w-full items-start gap-3">
@@ -73,6 +79,17 @@ export function DraggableCard({
             <FolderOpen size={15} />
           </button>
         )}
+        {onMoveScope && moveScopeTarget && !status && (
+          <button
+            className="grid size-8 shrink-0 place-items-center rounded-lg border border-zinc-200 bg-white text-zinc-500 transition-colors hover:bg-zinc-50 hover:text-zinc-900"
+            type="button"
+            onPointerDown={(event) => event.stopPropagation()}
+            onClick={onMoveScope}
+            title={`Move to ${moveScopeTarget} scope`}
+          >
+            <ArrowLeftRight size={15} />
+          </button>
+        )}
         {onRemove && !status && (
           <button
             className="grid size-8 shrink-0 place-items-center rounded-lg border border-transparent text-zinc-400 transition-colors hover:bg-red-50 hover:text-red-600"
@@ -85,6 +102,7 @@ export function DraggableCard({
           </button>
         )}
       </div>
+      {expandedContent}
     </div>
   );
 }

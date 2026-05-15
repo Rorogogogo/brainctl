@@ -11,7 +11,9 @@ afterEach(() => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
   delete process.env.BRAINCTL_API_URL;
+  delete process.env.BRAINCTL_API_BASE_URL;
   delete process.env.BRAINCTL_API_TOKEN;
+  delete process.env.BRAINCTL_CONFIG_PATH;
 });
 
 const tempDirs: string[] = [];
@@ -107,6 +109,38 @@ describe('profile snapshot command', () => {
 });
 
 describe('registry profile commands', () => {
+  it('manages the shared apiBaseUrl config value', async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), 'brainctl-cli-config-'));
+    tempDirs.push(tempDir);
+    process.env.BRAINCTL_CONFIG_PATH = path.join(tempDir, 'config.json');
+    const outputWrites: string[] = [];
+    vi.spyOn(console, 'log').mockImplementation((message?: unknown) => {
+      outputWrites.push(String(message));
+    });
+    const program = createProgram();
+
+    await program.parseAsync(
+      ['node', 'brainctl', 'config', 'set', 'apiBaseUrl', 'http://127.0.0.1:3877/'],
+      { from: 'node' }
+    );
+    await program.parseAsync(['node', 'brainctl', 'config', 'get', 'apiBaseUrl'], {
+      from: 'node',
+    });
+    await program.parseAsync(['node', 'brainctl', 'config', 'status'], {
+      from: 'node',
+    });
+    await program.parseAsync(['node', 'brainctl', 'config', 'unset', 'apiBaseUrl'], {
+      from: 'node',
+    });
+
+    expect(outputWrites).toContain('apiBaseUrl=http://127.0.0.1:3877');
+    expect(outputWrites).toContain('apiBaseUrl=http://127.0.0.1:3877');
+    expect(outputWrites).toContain('source=config');
+    expect(outputWrites).toContain('mode=local');
+    expect(outputWrites).toContain('unset apiBaseUrl');
+    expect(await readFile(process.env.BRAINCTL_CONFIG_PATH, 'utf8')).toContain('{}');
+  });
+
   it('registers a github-hosted profile', async () => {
     process.env.BRAINCTL_API_URL = 'https://api.brainctl.test';
     process.env.BRAINCTL_API_TOKEN = 'token';
@@ -139,15 +173,26 @@ describe('registry profile commands', () => {
   });
 
   it('prints a registry install descriptor', async () => {
-    process.env.BRAINCTL_API_URL = 'https://api.brainctl.test';
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), 'brainctl-registry-config-'));
+    tempDirs.push(tempDir);
+    process.env.BRAINCTL_CONFIG_PATH = path.join(tempDir, 'config.json');
+    await mkdir(tempDir, { recursive: true });
+    await writeFile(
+      process.env.BRAINCTL_CONFIG_PATH,
+      JSON.stringify({ apiBaseUrl: 'https://api.brainctl.test' }),
+      'utf8'
+    );
     const outputWrites: string[] = [];
+    const calls: string[] = [];
     vi.spyOn(console, 'log').mockImplementation((message?: unknown) => {
       outputWrites.push(String(message));
     });
     vi.stubGlobal(
       'fetch',
       vi.fn(
-        async () =>
+        async (url) => {
+          calls.push(String(url));
+          return (
           new Response(
             JSON.stringify({
               slug: 'review-profile',
@@ -158,6 +203,8 @@ describe('registry profile commands', () => {
             }),
             { status: 200 }
           )
+          );
+        }
       )
     );
     const program = createProgram();
@@ -167,5 +214,6 @@ describe('registry profile commands', () => {
     });
 
     expect(outputWrites).toContain('Install descriptor: github');
+    expect(calls[0]).toBe('https://api.brainctl.test/profiles/review-profile/install');
   });
 });

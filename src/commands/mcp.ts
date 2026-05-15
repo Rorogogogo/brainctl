@@ -8,13 +8,14 @@ import { createUpdateCheckService } from '../services/platform/update-check-serv
 export function registerMcpCommand(program: Command): void {
   program
     .command('mcp')
+    .option('--api-base-url <url>', 'Brainctl platform API base URL')
     .description('Start the brainctl MCP server (stdio transport)')
-    .action(async () => {
+    .action(async (options: { apiBaseUrl?: string }) => {
       killPriorMcpServers();
       await autoUpdateAndRelaunch();
       process.stdin.on('end', () => process.exit(0));
       process.stdin.on('close', () => process.exit(0));
-      await startMcpServer({ cwd: process.cwd() });
+      await startMcpServer({ cwd: process.cwd(), apiBaseUrl: options.apiBaseUrl });
       if (!process.env.BRAINCTL_NO_UPDATE_CHECK) {
         void notifyIfOutdated();
       }

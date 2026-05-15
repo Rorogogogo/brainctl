@@ -36,7 +36,7 @@ export interface AgentLiveConfig {
 
 export interface PendingChange {
   id: string;
-  type: 'add' | 'remove';
+  type: 'add' | 'remove' | 'move';
   category: 'mcp' | 'skill' | 'plugin';
   agent: string;
   scope: 'global' | 'project';
@@ -46,6 +46,12 @@ export interface PendingChange {
   skillEntry?: AgentSkillEntry;
   pluginEntry?: AgentSkillEntry;
   sourceAgent?: string;
+  // Move-only fields. For type='move', `scope` mirrors `toScope` (so existing
+  // dedupe/preview helpers that key on scope keep working for the destination).
+  fromScope?: 'global' | 'project';
+  toScope?: 'global' | 'project';
+  fromProjectPath?: string;
+  toProjectPath?: string;
 }
 
 export interface PendingChangeFailure {
