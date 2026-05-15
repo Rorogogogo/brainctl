@@ -53,6 +53,10 @@ export default function ProfilesView() {
     totalPortableItems,
     handleRefresh,
     handleStagedRemove,
+    handleMoveMcpScope,
+    moveScopeRequest,
+    cancelMoveScope,
+    confirmMoveScope,
     handleUndoChange,
     handleDiscardAll,
     handleSave,
@@ -221,6 +225,11 @@ export default function ProfilesView() {
                 pendingPluginAdded={pendingPluginAddedMap.get(config.agent) ?? new Set()}
                 pendingPluginRemoved={pendingPluginRemovedMap.get(config.agent) ?? new Set()}
                 onStagedRemove={handleStagedRemove}
+                onMoveMcpScope={handleMoveMcpScope}
+                moveScopeRequest={moveScopeRequest}
+                activeProjectPath={activeProject}
+                onConfirmMoveScope={confirmMoveScope}
+                onCancelMoveScope={cancelMoveScope}
                 editable={isEditMode}
               />
             </div>

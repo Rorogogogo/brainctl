@@ -7,6 +7,7 @@ import type { ProfileImportService } from '../services/profile/profile-import-se
 import type { ProfileService } from '../services/profile/profile-service.js';
 import type { ProfileSnapshotService } from '../services/profile/profile-snapshot-service.js';
 import { createProfileRegistryClient } from '../services/profile/profile-registry-client.js';
+import { resolveBrainctlApiBaseUrl } from '../services/platform/brainctl-config-service.js';
 import type { AgentName } from '../types.js';
 
 const ALL_AGENTS: AgentName[] = ['claude', 'codex', 'gemini'];
@@ -199,6 +200,7 @@ export function registerProfileCommand(program: Command, services: ProfileComman
     .option('--summary <text>', 'Profile summary')
     .option('--ref <name>', 'GitHub ref', 'main')
     .option('--profile-path <path>', 'Profile path in repository', 'profile.yaml')
+    .option('--api-base-url <url>', 'Brainctl platform API base URL')
     .description('Register a GitHub-hosted profile with brainctl.net')
     .action(
       async (
@@ -209,6 +211,7 @@ export function registerProfileCommand(program: Command, services: ProfileComman
           summary?: string;
           ref: string;
           profilePath: string;
+          apiBaseUrl?: string;
         }
       ) => {
         const token = process.env.BRAINCTL_API_TOKEN;
@@ -217,7 +220,7 @@ export function registerProfileCommand(program: Command, services: ProfileComman
         }
 
         const client = createProfileRegistryClient({
-          baseUrl: registryApiUrl(),
+          baseUrl: await registryApiUrl(options.apiBaseUrl),
           token,
         });
         await client.registerGithubProfile({
@@ -237,10 +240,11 @@ export function registerProfileCommand(program: Command, services: ProfileComman
   profileCmd
     .command('install')
     .argument('<slug>', 'Registry profile slug')
+    .option('--api-base-url <url>', 'Brainctl platform API base URL')
     .description('Read the install descriptor for a registry profile')
-    .action(async (slug: string) => {
+    .action(async (slug: string, options: { apiBaseUrl?: string }) => {
       const client = createProfileRegistryClient({
-        baseUrl: registryApiUrl(),
+        baseUrl: await registryApiUrl(options.apiBaseUrl),
         token: process.env.BRAINCTL_API_TOKEN,
       });
       const descriptor = await client.getInstallDescriptor(slug);
@@ -276,8 +280,8 @@ export function registerProfileCommand(program: Command, services: ProfileComman
     });
 }
 
-function registryApiUrl(): string {
-  return process.env.BRAINCTL_API_URL ?? 'https://api.brainctl.net';
+function registryApiUrl(apiBaseUrl?: string): Promise<string> {
+  return resolveBrainctlApiBaseUrl({ apiBaseUrl });
 }
 
 function parseAgentList(value: string): AgentName[] {

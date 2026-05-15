@@ -37,6 +37,16 @@ export interface AgentConfigService {
     key: string;
     scope?: 'global' | 'project';
   }): Promise<void>;
+  moveMcpScope(options: {
+    cwd: string;
+    agent: AgentName;
+    key: string;
+    fromScope: 'global' | 'project';
+    toScope: 'global' | 'project';
+    fromProjectPath?: string;
+    toProjectPath?: string;
+  }): Promise<void>;
+  listClaudeProjects(): Promise<string[]>;
   copySkill(options: {
     sourceAgent: AgentName;
     targetAgent: AgentName;
@@ -138,6 +148,45 @@ export function createAgentConfigService(
       }
     },
 
+    async moveMcpScope(options) {
+      const { cwd, agent, key, fromScope, toScope, fromProjectPath, toProjectPath } = options;
+      const fromCwd = fromScope === 'project' ? (fromProjectPath ?? cwd) : cwd;
+      const toCwd = toScope === 'project' ? (toProjectPath ?? cwd) : cwd;
+      if (fromScope === toScope && fromCwd === toCwd) return;
+
+      if (agent === 'claude') {
+        await moveClaudeMcpScope(key, fromScope, toScope, fromCwd, toCwd);
+        return;
+      }
+
+      // Codex + Gemini: read live entry from source scope, then add to target, remove from source.
+      // Both already route 'project' to .brainctl/project-mcps.json via add/removeMcp.
+      const live = await readers[agent].read({ cwd: fromCwd });
+      const sourceLocal = fromScope === 'project' ? (live.projectMcpServers ?? {}) : live.mcpServers;
+      const sourceRemote =
+        fromScope === 'project' ? (live.projectRemoteMcpServers ?? {}) : live.remoteMcpServers;
+      const entry = sourceLocal[key];
+      const remoteEntry = sourceRemote[key];
+      if (!entry && !remoteEntry) {
+        throw new ValidationError(
+          `MCP "${key}" not found in ${agent} ${fromScope} scope; cannot move.`
+        );
+      }
+      await this.addMcp({ cwd: toCwd, agent, key, entry, remoteEntry, scope: toScope });
+      await this.removeMcp({ cwd: fromCwd, agent, key, scope: fromScope });
+    },
+
+    async listClaudeProjects() {
+      const configPath = path.join(homedir(), '.claude.json');
+      try {
+        const raw = JSON.parse(await readFile(configPath, 'utf8')) as Record<string, unknown>;
+        const projects = (raw.projects ?? {}) as Record<string, unknown>;
+        return Object.keys(projects).sort();
+      } catch {
+        return [];
+      }
+    },
+
     async copySkill(options) {
       const { sourceAgent, targetAgent, skillName } = options;
       const preflight = await skillPreflightService.execute({
@@ -197,6 +246,57 @@ async function mutateClaudeConfig(
     projects[cwd] = projectConfig;
     existing.projects = projects;
   }
+
+  await atomicWriteJson(configPath, existing);
+}
+
+async function moveClaudeMcpScope(
+  key: string,
+  fromScope: 'global' | 'project',
+  toScope: 'global' | 'project',
+  fromCwd: string,
+  toCwd: string
+): Promise<void> {
+  const configPath = path.join(homedir(), '.claude.json');
+  let existing: Record<string, unknown>;
+  try {
+    existing = JSON.parse(await readFile(configPath, 'utf8')) as Record<string, unknown>;
+  } catch {
+    throw new ValidationError(
+      `Cannot move MCP "${key}": ~/.claude.json does not exist or is unreadable.`
+    );
+  }
+  await backupFile(configPath);
+
+  const globalServers = (existing.mcpServers ?? {}) as Record<string, unknown>;
+  const projects = (existing.projects ?? {}) as Record<string, Record<string, unknown>>;
+
+  const getProjectServers = (cwd: string): Record<string, unknown> => {
+    const projectConfig = (projects[cwd] ?? {}) as Record<string, unknown>;
+    return (projectConfig.mcpServers ?? {}) as Record<string, unknown>;
+  };
+  const setProjectServers = (cwd: string, servers: Record<string, unknown>): void => {
+    const projectConfig = (projects[cwd] ?? {}) as Record<string, unknown>;
+    projectConfig.mcpServers = servers;
+    projects[cwd] = projectConfig;
+  };
+
+  const source = fromScope === 'project' ? getProjectServers(fromCwd) : globalServers;
+  const target = toScope === 'project' ? getProjectServers(toCwd) : globalServers;
+
+  if (!(key in source)) {
+    throw new ValidationError(
+      `MCP "${key}" not found in Claude ${fromScope} scope${fromScope === 'project' ? ` (${fromCwd})` : ''}; cannot move.`
+    );
+  }
+  const rawEntry = source[key];
+  target[key] = rawEntry;
+  delete source[key];
+
+  existing.mcpServers = globalServers;
+  if (fromScope === 'project') setProjectServers(fromCwd, source);
+  if (toScope === 'project') setProjectServers(toCwd, target);
+  existing.projects = projects;
 
   await atomicWriteJson(configPath, existing);
 }

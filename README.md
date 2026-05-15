@@ -124,6 +124,27 @@ brainctl ui         # launch the dashboard from your terminal
 
 The CLI is entirely optional — everything it does is also available through the MCP tools and the dashboard.
 
+### Local platform development
+
+Registry commands and MCP registry tools use the hosted API by default:
+
+```text
+https://api.brainctl.net
+```
+
+When testing against a local `brainctl-platform` backend, set the shared API target once:
+
+```bash
+brainctl config set apiBaseUrl http://127.0.0.1:3877
+brainctl config status
+```
+
+That value is saved in `~/.brainctl/config.json` and is used by both CLI commands and MCP sessions. Clear it to return to production:
+
+```bash
+brainctl config unset apiBaseUrl
+```
+
 ---
 
 ## ✨ Features
@@ -182,6 +203,7 @@ brainctl ui
 | Command | What it does |
 |---|---|
 | `brainctl init` | Scaffold `ai-stack.yaml` and `memory/` |
+| `brainctl config get / set / unset apiBaseUrl` | Configure the shared platform API URL for CLI and MCP |
 | `brainctl status` | Memory, skills, MCPs, and agent availability |
 | `brainctl doctor` | Validate config, paths, and agent CLIs |
 | `brainctl run <skill> <file> --with <agent>` | Execute a skill |

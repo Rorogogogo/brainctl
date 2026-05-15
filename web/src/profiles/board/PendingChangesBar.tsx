@@ -1,7 +1,18 @@
-import { Loader2, Plus, Save, Undo2, X } from 'lucide-react';
+import { ArrowRight, Loader2, Plus, Save, Shuffle, Undo2, X } from 'lucide-react';
 
 import { AGENT_LABELS } from '../profiles-view.js';
 import type { PendingChange } from '../profiles-view.js';
+
+function leafName(p: string): string {
+  const trimmed = p.replace(/\/+$/, '');
+  const idx = trimmed.lastIndexOf('/');
+  return idx >= 0 ? trimmed.slice(idx + 1) || trimmed : trimmed;
+}
+
+function scopeLabel(scope: 'global' | 'project', projectPath?: string): string {
+  if (scope === 'global') return 'global';
+  return projectPath ? `project · ${leafName(projectPath)}` : 'project';
+}
 
 export function PendingChangesBar({
   changes,
@@ -35,17 +46,43 @@ export function PendingChangesBar({
         </div>
       </div>
       <div className="grid gap-2">
-        {changes.map((change) => (
+        {changes.map((change) => {
+          const isMove = change.type === 'move';
+          const isAdd = change.type === 'add';
+          const containerClass = isMove
+            ? 'border-zinc-200 bg-white text-zinc-900'
+            : isAdd
+              ? 'border-zinc-200 bg-zinc-50 text-zinc-900'
+              : 'border-red-200 bg-red-50 text-red-900';
+          const badgeClass = isMove
+            ? 'bg-white border border-zinc-200 text-zinc-600'
+            : isAdd
+              ? 'bg-white border border-zinc-200 text-zinc-600'
+              : 'bg-white border border-red-200 text-red-600';
+          const fromScope = change.fromScope ?? 'global';
+          const toScope = change.toScope ?? change.scope;
+          return (
           <div
             key={change.id}
-            className={`flex items-center gap-3 rounded-xl border p-3 text-sm font-medium ${change.type === 'add' ? 'border-zinc-200 bg-zinc-50 text-zinc-900' : 'border-red-200 bg-red-50 text-red-900'}`}
+            className={`flex items-center gap-3 rounded-xl border p-3 text-sm font-medium ${containerClass}`}
           >
-            <span className={`grid size-8 place-items-center shrink-0 rounded-lg ${change.type === 'add' ? 'bg-white border border-zinc-200 text-zinc-600' : 'bg-white border border-red-200 text-red-600'}`}>
-              {change.type === 'add' ? <Plus size={16} /> : <X size={16} />}
+            <span className={`grid size-8 place-items-center shrink-0 rounded-lg ${badgeClass}`}>
+              {isMove ? <Shuffle size={16} /> : isAdd ? <Plus size={16} /> : <X size={16} />}
             </span>
             <span className="flex-1 min-w-0 truncate">
               <strong className="text-zinc-900">[{change.category}] {change.key}</strong>
-              {change.type === 'add' ? (
+              {isMove ? (
+                <span className="ml-1 inline-flex items-center gap-1.5 text-zinc-600">
+                  on {AGENT_LABELS[change.agent]}:
+                  <span className="font-mono text-[12px] text-zinc-700" title={change.fromProjectPath}>
+                    {scopeLabel(fromScope, change.fromProjectPath)}
+                  </span>
+                  <ArrowRight size={12} className="text-zinc-400" />
+                  <span className="font-mono text-[12px] text-zinc-900" title={change.toProjectPath}>
+                    {scopeLabel(toScope, change.toProjectPath)}
+                  </span>
+                </span>
+              ) : isAdd ? (
                 <>
                   {' '}→ {AGENT_LABELS[change.agent]}
                   {change.sourceAgent ? ` (from ${AGENT_LABELS[change.sourceAgent]})` : ''}
@@ -63,7 +100,8 @@ export function PendingChangesBar({
               <Undo2 size={14} />
             </button>
           </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );

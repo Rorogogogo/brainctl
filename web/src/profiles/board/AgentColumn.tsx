@@ -26,6 +26,7 @@ function getMcpFolderPath(entry: AgentMcpEntry): string | undefined {
   return undefined;
 }
 import { DraggableCard } from './DraggableCard.js';
+import { MoveMcpScopePicker } from './MoveMcpScopePicker.js';
 import { DroppableZone } from './DroppableZone.js';
 import { StaticCard } from './StaticCard.js';
 
@@ -81,6 +82,11 @@ export function AgentColumn({
   pendingPluginAdded,
   pendingPluginRemoved,
   onStagedRemove,
+  onMoveMcpScope,
+  moveScopeRequest,
+  activeProjectPath,
+  onConfirmMoveScope,
+  onCancelMoveScope,
   editable,
 }: {
   config: AgentLiveConfig;
@@ -94,6 +100,16 @@ export function AgentColumn({
   pendingPluginAdded: Set<string>;
   pendingPluginRemoved: Set<string>;
   onStagedRemove: (agent: string, category: 'mcp' | 'skill' | 'plugin', key: string, scope: 'global' | 'project') => void;
+  onMoveMcpScope?: (agent: string, key: string, fromScope: 'global' | 'project', toScope: 'global' | 'project') => void;
+  moveScopeRequest?: {
+    agent: string;
+    key: string;
+    fromScope: 'global' | 'project';
+    fromProjectPath?: string;
+  } | null;
+  activeProjectPath?: string;
+  onConfirmMoveScope?: (selection: { toScope: 'global' | 'project'; toProjectPath?: string }) => void;
+  onCancelMoveScope?: () => void;
   editable: boolean;
 }) {
   const { setNodeRef } = useDroppable({ id: `${config.agent}:column` });
@@ -346,6 +362,12 @@ export function AgentColumn({
             ? ('removed' as const)
             : undefined;
 
+          const otherScope = scope === 'global' ? ('project' as const) : ('global' as const);
+          const canMove = config.agent === 'claude' && editable && onMoveMcpScope;
+          const isPickingMove =
+            !!moveScopeRequest &&
+            moveScopeRequest.agent === config.agent &&
+            moveScopeRequest.key === key;
           const card = (
             <DraggableCard
               key={key}
@@ -355,8 +377,22 @@ export function AgentColumn({
               icon={<Server size={16} />}
               status={status}
               onRemove={editable ? () => onStagedRemove(config.agent, 'mcp', key, scope) : undefined}
+              onMoveScope={canMove ? () => onMoveMcpScope(config.agent, key, scope, otherScope) : undefined}
+              moveScopeTarget={canMove ? otherScope : undefined}
               editable={editable}
               folderPath={folderPath}
+              expandedContent={
+                isPickingMove && onConfirmMoveScope && onCancelMoveScope ? (
+                  <MoveMcpScopePicker
+                    agent={moveScopeRequest!.agent}
+                    fromScope={moveScopeRequest!.fromScope}
+                    fromProjectPath={moveScopeRequest!.fromProjectPath}
+                    activeProjectPath={activeProjectPath}
+                    onConfirm={onConfirmMoveScope}
+                    onCancel={onCancelMoveScope}
+                  />
+                ) : undefined
+              }
             />
           );
 

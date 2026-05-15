@@ -70,6 +70,12 @@ function nextChangeId(): string {
   return `change-${++changeIdCounter}`;
 }
 
+export function shortenProjectPath(projectPath: string): string {
+  const trimmed = projectPath.replace(/\/+$/, '');
+  const idx = trimmed.lastIndexOf('/');
+  return idx >= 0 ? trimmed.slice(idx + 1) || trimmed : trimmed;
+}
+
 function formatAppliedChangesTitle(changes: PendingChange[]): string {
   const count = changes.length;
   if (changes.every((change) => change.type === 'remove')) {
@@ -77,6 +83,9 @@ function formatAppliedChangesTitle(changes: PendingChange[]): string {
   }
   if (changes.every((change) => change.type === 'add')) {
     return `Added ${count} item${count > 1 ? 's' : ''}`;
+  }
+  if (changes.every((change) => change.type === 'move')) {
+    return `Moved ${count} item${count > 1 ? 's' : ''}`;
   }
   return `Applied ${count} change${count > 1 ? 's' : ''}`;
 }
@@ -99,6 +108,25 @@ export function applyPendingChanges(
     if (!config) continue;
 
     if (change.category === 'mcp') {
+      if (change.type === 'move') {
+        const fromScope = change.fromScope ?? 'global';
+        const toScope = change.toScope ?? change.scope;
+        const fromLocal = fromScope === 'project' ? config.projectMcpServers : config.mcpServers;
+        const fromRemote = fromScope === 'project' ? config.projectRemoteMcpServers : config.remoteMcpServers;
+        const toLocal = toScope === 'project' ? config.projectMcpServers : config.mcpServers;
+        const toRemote = toScope === 'project' ? config.projectRemoteMcpServers : config.remoteMcpServers;
+        // Move whichever variant exists in source (prefer staged snapshot if provided).
+        const localEntry = change.entry ?? fromLocal[change.key];
+        const remoteEntry = change.remoteEntry ?? fromRemote[change.key];
+        delete fromLocal[change.key];
+        delete fromRemote[change.key];
+        if (remoteEntry) {
+          toRemote[change.key] = remoteEntry;
+        } else if (localEntry) {
+          toLocal[change.key] = localEntry;
+        }
+        continue;
+      }
       const mcpTarget = change.scope === 'project' ? config.projectMcpServers : config.mcpServers;
       const remoteMcpTarget = change.scope === 'project' ? config.projectRemoteMcpServers : config.remoteMcpServers;
       if (change.type === 'add' && change.entry) {
@@ -165,6 +193,17 @@ function getPendingKeys(changes: PendingChange[]): PendingKeyMaps {
     }
 
     // MCP — track by scope
+    if (change.type === 'move') {
+      const fromScope = change.fromScope ?? 'global';
+      const toScope = change.toScope ?? change.scope;
+      const removedMap = fromScope === 'project' ? projectRemoved : removed;
+      const addedMap = toScope === 'project' ? projectAdded : added;
+      if (!removedMap.has(change.agent)) removedMap.set(change.agent, new Set());
+      removedMap.get(change.agent)?.add(change.key);
+      if (!addedMap.has(change.agent)) addedMap.set(change.agent, new Set());
+      addedMap.get(change.agent)?.add(change.key);
+      continue;
+    }
     const map = change.scope === 'project'
       ? (change.type === 'add' ? projectAdded : projectRemoved)
       : (change.type === 'add' ? added : removed);
@@ -185,6 +224,19 @@ export function buildChangeSummaryLines(changes: PendingChange[]): string[] {
 
     const prefix = change.category === 'skill' ? '[Skill] ' : '[MCP] ';
     const scopeTag = change.category === 'mcp' && change.scope === 'project' ? '(project) ' : '';
+
+    if (change.type === 'move') {
+      const fromScope = change.fromScope ?? 'global';
+      const toScope = change.toScope ?? change.scope;
+      const fmt = (scope: 'global' | 'project', projectPath?: string) => {
+        if (scope === 'global') return 'global';
+        const tail = projectPath ? ` (${shortenProjectPath(projectPath)})` : '';
+        return `project${tail}`;
+      };
+      const from = fmt(fromScope, change.fromProjectPath);
+      const to = fmt(toScope, change.toProjectPath);
+      return `↻ ${prefix}${change.key} on ${AGENT_LABELS[change.agent] ?? change.agent}: ${from} → ${to}`;
+    }
 
     return change.type === 'add'
       ? `+ ${prefix}${scopeTag}${change.key} → ${AGENT_LABELS[change.agent] ?? change.agent}`
@@ -306,6 +358,12 @@ export function useProfilesBoard() {
   const [isEditMode, setIsEditMode] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [refreshState, setRefreshState] = useState<'idle' | 'loading' | 'success'>('idle');
+  const [moveScopeRequest, setMoveScopeRequest] = useState<{
+    agent: string;
+    key: string;
+    fromScope: 'global' | 'project';
+    fromProjectPath?: string;
+  } | null>(null);
   const agentConfigsRef = useRef(agentConfigs);
   const pendingChangesRef = useRef(pendingChanges);
   const boardScopeRef = useRef(boardScope);
@@ -503,6 +561,23 @@ export function useProfilesBoard() {
             return;
           }
 
+          if (change.type === 'move') {
+            await fetchJson(
+              withCwd(`/api/agents/${change.agent}/mcps/${encodeURIComponent(change.key)}`, activeProjectRef.current),
+              {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  fromScope: change.fromScope,
+                  toScope: change.toScope,
+                  fromProjectPath: change.fromProjectPath,
+                  toProjectPath: change.toProjectPath,
+                }),
+              }
+            );
+            return;
+          }
+
           throw new Error(
             `MCP "${change.key}" is missing the staged metadata needed to apply this change.`
           );
@@ -600,6 +675,77 @@ export function useProfilesBoard() {
       setSaving(false);
     }
   }, [fetchLiveConfigs, invalidatePendingPreflights, pendingChanges, showFeedback]);
+
+  const handleMoveMcpScope = useCallback(
+    (agent: string, key: string, fromScope: 'global' | 'project', _toScope: 'global' | 'project') => {
+      const fromProjectPath = fromScope === 'project' ? activeProjectRef.current || undefined : undefined;
+      setMoveScopeRequest({ agent, key, fromScope, fromProjectPath });
+    },
+    []
+  );
+
+  const cancelMoveScope = useCallback(() => {
+    setMoveScopeRequest(null);
+  }, []);
+
+  const confirmMoveScope = useCallback(
+    (selection: { toScope: 'global' | 'project'; toProjectPath?: string }) => {
+      const request = moveScopeRequest;
+      if (!request) return;
+
+      const config = agentConfigsRef.current.find((entry) => entry.agent === request.agent);
+      if (!config) {
+        showFeedback('error', `Agent "${request.agent}" not loaded`);
+        setMoveScopeRequest(null);
+        return;
+      }
+
+      const sourceLocal = request.fromScope === 'project' ? (config.projectMcpServers ?? {}) : config.mcpServers;
+      const sourceRemote =
+        request.fromScope === 'project' ? (config.projectRemoteMcpServers ?? {}) : config.remoteMcpServers;
+      const entry = sourceLocal[request.key];
+      const remoteEntry = sourceRemote[request.key];
+      if (!entry && !remoteEntry) {
+        showFeedback('error', `MCP "${request.key}" not found in ${request.fromScope} scope`);
+        setMoveScopeRequest(null);
+        return;
+      }
+
+      const fromProjectPath =
+        request.fromScope === 'project' ? request.fromProjectPath ?? activeProjectRef.current : undefined;
+      const toProjectPath = selection.toScope === 'project' ? selection.toProjectPath : undefined;
+
+      setPendingChanges((previous) => {
+        // Drop any existing move for the same key/agent so re-issuing the action replaces it.
+        const filtered = previous.filter(
+          (change) =>
+            !(
+              change.category === 'mcp' &&
+              change.type === 'move' &&
+              change.agent === request.agent &&
+              change.key === request.key
+            )
+        );
+        const nextChange: PendingChange = {
+          id: nextChangeId(),
+          type: 'move',
+          category: 'mcp',
+          agent: request.agent,
+          scope: selection.toScope,
+          key: request.key,
+          entry,
+          remoteEntry,
+          fromScope: request.fromScope,
+          toScope: selection.toScope,
+          fromProjectPath,
+          toProjectPath,
+        };
+        return [...filtered, nextChange];
+      });
+      setMoveScopeRequest(null);
+    },
+    [moveScopeRequest, showFeedback]
+  );
 
   const stageValidatedChange = useCallback(
     (startedPreflightGeneration: number, nextChange: PendingChange) => {
@@ -883,6 +1029,10 @@ export function useProfilesBoard() {
     fetchLiveConfigs,
     handleRefresh,
     handleStagedRemove,
+    handleMoveMcpScope,
+    moveScopeRequest,
+    cancelMoveScope,
+    confirmMoveScope,
     handleUndoChange,
     handleDiscardAll,
     handleSave,

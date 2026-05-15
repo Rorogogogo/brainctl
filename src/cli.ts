@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 
 import { Command } from 'commander';
 
+import { registerConfigCommand } from './commands/config.js';
 import { registerDoctorCommand } from './commands/doctor.js';
 import { registerMcpCommand } from './commands/mcp.js';
 import { registerProfileCommand } from './commands/profile.js';
@@ -47,6 +48,7 @@ export function createProgram(overrides: Partial<CliServices> = {}): Command {
     .version(packageVersion.version);
 
   registerStatusCommand(program, services.statusService);
+  registerConfigCommand(program);
   registerDoctorCommand(program, services.doctorService);
   registerProfileCommand(program, {
     profileService: services.profileService,
