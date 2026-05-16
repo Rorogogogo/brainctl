@@ -781,10 +781,12 @@ export function useProfilesBoard() {
 
   const handleDragStart = useCallback(
     (event: DragStartEvent) => {
-      if (!isEditMode) return;
+      if (!isEditModeRef.current) {
+        setIsEditMode(true);
+      }
       setActiveId(event.active.id as string);
     },
-    [isEditMode]
+    []
   );
 
   const handleDragCancel = useCallback(() => {
@@ -794,7 +796,6 @@ export function useProfilesBoard() {
   const handleDragEnd = useCallback(
     (event: DragEndEvent) => {
       setActiveId(null);
-      if (!isEditMode) return;
 
       const { active, over } = event;
       if (!over) return;
@@ -994,7 +995,7 @@ export function useProfilesBoard() {
         }
       })();
     },
-    [isEditMode, pendingChanges, previewConfigs, showFeedback, stageValidatedChange]
+    [pendingChanges, previewConfigs, showFeedback, stageValidatedChange]
   );
 
   useEffect(() => {
@@ -1041,6 +1042,7 @@ export function useProfilesBoard() {
     handleDragCancel,
     handleDragEnd,
     overlayData,
+    activeId,
     setConfirmOpen,
     setIsEditMode,
   };

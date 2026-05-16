@@ -22,6 +22,7 @@ import ConfirmDialog from '../components/ConfirmDialog.js';
 import { AgentColumn } from './board/AgentColumn.js';
 import { ConfirmSwitchProjectModal } from './board/ConfirmSwitchProjectModal.js';
 import { DragOverlayCard, snapToPointer } from './board/DragOverlayCard.js';
+import { DropTray } from './board/DropTray.js';
 import { PendingChangesBar } from './board/PendingChangesBar.js';
 import { ProjectBar } from './board/ProjectBar.js';
 import { customCollisionDetection } from './board/dnd.js';
@@ -65,6 +66,7 @@ export default function ProfilesView() {
     handleDragCancel,
     handleDragEnd,
     overlayData,
+    activeId,
     setConfirmOpen,
     setIsEditMode,
   } = useProfilesBoard();
@@ -203,6 +205,7 @@ export default function ProfilesView() {
       <DndContext
         sensors={sensors}
         collisionDetection={customCollisionDetection}
+        autoScroll={false}
         onDragStart={handleDragStart}
         onDragCancel={handleDragCancel}
         onDragEnd={handleDragEnd}
@@ -241,6 +244,8 @@ export default function ProfilesView() {
             <DragOverlayCard label={overlayData.label} sublabel={overlayData.sublabel} />
           ) : null}
         </DragOverlay>
+
+        <DropTray activeId={activeId} configs={previewConfigs} />
       </DndContext>
 
       <ConfirmDialog

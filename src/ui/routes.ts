@@ -171,10 +171,12 @@ export function createUiRouteHandler(
           return sendJson(response, 405, { error: 'Method not allowed' });
         }
         const target = await resolveBrainctlApiTarget();
+        const apiFrontendUrl = await resolveBrainctlFrontendUrl({ apiBaseUrl: target.apiBaseUrl });
         const apiInfo = {
           apiBaseUrl: target.apiBaseUrl,
           apiMode: target.mode,
           apiSource: target.source,
+          apiFrontendUrl,
         };
         const resolved = await resolveBrainctlApiToken({ configService: brainctlConfigService });
         if (!resolved) {
@@ -379,26 +381,67 @@ export function createUiRouteHandler(
           const result = await profileService.list({ cwd: dependencies.cwd });
           const enriched = await Promise.all(
             result.profiles.map(async (name) => {
-              const manifestPath = path.join(
-                brainctlHome(),
-                '.brainctl',
-                'profiles',
-                name,
-                'manifest.yaml'
-              );
+              const profileFolder = path.join(brainctlHome(), '.brainctl', 'profiles', name);
+              const manifestPath = path.join(profileFolder, 'manifest.yaml');
+              const publishedPath = path.join(profileFolder, 'published.yaml');
+              const { readFile: rf } = await import('node:fs/promises');
+              const yamlMod = await import('yaml');
+              const out: {
+                name: string;
+                sourceAgent?: AgentName;
+                published?: {
+                  slug: string;
+                  profileId?: string;
+                  version?: string;
+                  lastPublishedAt?: string;
+                  apiBaseUrl?: string;
+                  url?: string;
+                  manageUrl?: string;
+                };
+              } = { name };
               try {
-                const { readFile: rf } = await import('node:fs/promises');
-                const yamlMod = await import('yaml');
                 const parsed = yamlMod.default.parse(
                   await rf(manifestPath, 'utf8')
                 ) as { source?: { kind?: string; agent?: AgentName } } | null;
                 const source = parsed?.source;
-                return source?.kind === 'agent' && source.agent
-                  ? { name, sourceAgent: source.agent }
-                  : { name };
+                if (source?.kind === 'agent' && source.agent) {
+                  out.sourceAgent = source.agent;
+                }
               } catch {
-                return { name };
+                // no manifest
               }
+              try {
+                const parsedPub = yamlMod.default.parse(
+                  await rf(publishedPath, 'utf8')
+                ) as {
+                  slug?: string;
+                  profileId?: string;
+                  versionId?: string;
+                  version?: string;
+                  lastPublishedAt?: string;
+                  apiBaseUrl?: string;
+                } | null;
+                if (parsedPub?.slug) {
+                  const frontend = await resolveBrainctlFrontendUrl({
+                    apiBaseUrl: parsedPub.apiBaseUrl,
+                  });
+                  const fe = frontend.replace(/\/$/, '');
+                  out.published = {
+                    slug: parsedPub.slug,
+                    profileId: parsedPub.profileId,
+                    version: parsedPub.version,
+                    lastPublishedAt: parsedPub.lastPublishedAt,
+                    apiBaseUrl: parsedPub.apiBaseUrl,
+                    url: `${fe}/profiles/${parsedPub.slug}`,
+                    manageUrl: parsedPub.profileId
+                      ? `${fe}/app/profiles/${parsedPub.profileId}`
+                      : undefined,
+                  };
+                }
+              } catch {
+                // not published
+              }
+              return out;
             })
           );
           return sendJson(response, 200, { profiles: enriched });
@@ -551,6 +594,7 @@ export function createUiRouteHandler(
           const publishService = createProfilePublishService({
             profileExportService,
           });
+          const apiBaseUrl = await resolveBrainctlApiBaseUrl({ apiBaseUrl: data.apiBaseUrl });
           const result = await publishService.execute({
             cwd: dependencies.cwd,
             profileName,
@@ -560,17 +604,48 @@ export function createUiRouteHandler(
             version: data.version,
             changelog: data.changelog,
             visibility: data.visibility,
-            apiBaseUrl: await resolveBrainctlApiBaseUrl({ apiBaseUrl: data.apiBaseUrl }),
+            apiBaseUrl,
             fetch: (input, init) =>
               tokenManager.authenticatedFetch(
                 typeof input === 'string' ? input : input.toString(),
                 init
               ),
           });
+          try {
+            const sidecarPath = path.join(
+              brainctlHome(),
+              '.brainctl',
+              'profiles',
+              profileName,
+              'published.yaml'
+            );
+            const yamlMod = await import('yaml');
+            const { writeFile: wf } = await import('node:fs/promises');
+            await wf(
+              sidecarPath,
+              yamlMod.default.stringify({
+                slug: result.slug,
+                title,
+                profileId: result.profileId,
+                versionId: result.versionId,
+                version: result.version,
+                apiBaseUrl,
+                lastPublishedAt: new Date().toISOString(),
+              }),
+              'utf8'
+            );
+          } catch {
+            // non-fatal: badge will just not appear in UI
+          }
           return sendJson(response, 200, { ok: true, ...result });
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error);
-          return sendJson(response, 502, { error: message });
+          const upstreamStatus = /HTTP (\d{3})/.exec(message)?.[1];
+          const status =
+            upstreamStatus && /^4\d\d$/.test(upstreamStatus)
+              ? Number(upstreamStatus)
+              : 502;
+          return sendJson(response, status, { error: message });
         }
       }
       case '/api/profiles/register-github': {
@@ -631,7 +706,12 @@ export function createUiRouteHandler(
           return sendJson(response, 200, { ok: true, result });
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error);
-          return sendJson(response, 502, { error: message });
+          const upstreamStatus = /HTTP (\d{3})/.exec(message)?.[1];
+          const status =
+            upstreamStatus && /^4\d\d$/.test(upstreamStatus)
+              ? Number(upstreamStatus)
+              : 502;
+          return sendJson(response, status, { error: message });
         }
       }
       case '/api/projects': {

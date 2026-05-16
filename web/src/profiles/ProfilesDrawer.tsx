@@ -5,6 +5,7 @@ import {
   ChevronRight,
   Folder,
   FolderOpen,
+  MoreHorizontal,
   UploadCloud,
   Loader2,
   PencilLine,
@@ -14,21 +15,31 @@ import {
   Wand2,
   X,
 } from 'lucide-react';
+import type { ComponentType, ReactNode } from 'react';
 
 import { AgentLogo } from '../components/agent-brand';
 import ConfirmDialog from '../components/ConfirmDialog';
-import PublishProfileDialog from '../components/PublishProfileDialog';
 import { Tooltip } from '../components/Tooltip';
 import { toast } from '../components/ui/toast.js';
-import EditProfileModal from './EditProfileModal';
 
 const AGENTS = ['claude', 'codex', 'gemini'] as const;
 type Agent = typeof AGENTS[number];
 type ItemType = 'mcp' | 'plugin' | 'skill';
 
+interface ProfilePublishedInfo {
+  slug: string;
+  profileId?: string;
+  version?: string;
+  lastPublishedAt?: string;
+  apiBaseUrl?: string;
+  url?: string;
+  manageUrl?: string;
+}
+
 interface ProfileSummary {
   name: string;
   sourceAgent?: Agent;
+  published?: ProfilePublishedInfo;
 }
 
 interface ProfileContents {
@@ -55,9 +66,15 @@ interface ApplyState {
 }
 export interface ProfilesDrawerProps {
   onApplyProfile?: (profileName: string) => void;
+  onPublishProfile?: (profileName: string) => void;
+  onViewProfile?: (profileName: string) => void;
 }
 
-export default function ProfilesDrawer({ onApplyProfile }: ProfilesDrawerProps) {
+export default function ProfilesDrawer({
+  onApplyProfile,
+  onPublishProfile,
+  onViewProfile,
+}: ProfilesDrawerProps) {
   const [profiles, setProfiles] = useState<ProfileSummary[]>([]);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [contents, setContents] = useState<Record<string, ProfileContents>>({});
@@ -69,8 +86,6 @@ export default function ProfilesDrawer({ onApplyProfile }: ProfilesDrawerProps) 
   const [renameTarget, setRenameTarget] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
   const [renaming, setRenaming] = useState(false);
-  const [editModalProfile, setEditModalProfile] = useState<string | null>(null);
-  const [publishTarget, setPublishTarget] = useState<string | null>(null);
   const [drawerWidth, setDrawerWidth] = useState<number>(() => {
     if (typeof window === 'undefined') return 224;
     const saved = window.localStorage.getItem('brainctl:profiles-drawer-width');
@@ -119,7 +134,14 @@ export default function ProfilesDrawer({ onApplyProfile }: ProfilesDrawerProps) 
     try {
       const r = await fetch('/api/profiles');
       const data = (await r.json()) as {
-        profiles: Array<string | { name: string; sourceAgent?: Agent }>;
+        profiles: Array<
+          | string
+          | {
+              name: string;
+              sourceAgent?: Agent;
+              published?: ProfilePublishedInfo;
+            }
+        >;
       };
       setProfiles(
         data.profiles.map((entry) =>
@@ -400,15 +422,10 @@ export default function ProfilesDrawer({ onApplyProfile }: ProfilesDrawerProps) 
               ) : (
                 <button
                   type="button"
-                  onClick={() => void toggle(p.name)}
+                  onClick={() => onViewProfile?.(p.name)}
                   title={p.name}
                   className="flex min-w-0 flex-1 items-center gap-2 rounded-md px-1 py-0.5 text-left font-medium text-zinc-800 hover:bg-zinc-100"
                 >
-                  {expanded.has(p.name) ? (
-                    <ChevronDown size={12} />
-                  ) : (
-                    <ChevronRight size={12} />
-                  )}
                   {p.sourceAgent ? (
                     <span
                       className="grid size-3.5 shrink-0 place-items-center overflow-hidden"
@@ -420,6 +437,15 @@ export default function ProfilesDrawer({ onApplyProfile }: ProfilesDrawerProps) 
                     <Folder size={12} className="text-zinc-500" />
                   )}
                   <span className="truncate">{p.name}</span>
+                  {p.published && (
+                    <span
+                      className="ml-auto inline-flex shrink-0 items-center gap-1 rounded border border-zinc-200 bg-white px-1 py-0 text-[9px] font-medium text-zinc-500"
+                      title={`Published as "${p.published.slug}"${p.published.version ? ` v${p.published.version}` : ''}${p.published.lastPublishedAt ? `\nLast published ${new Date(p.published.lastPublishedAt).toLocaleString()}` : ''}`}
+                    >
+                      <UploadCloud size={9} strokeWidth={2.25} />
+                      <span>Published</span>
+                    </span>
+                  )}
                 </button>
               )}
               {renameTarget !== p.name && (
@@ -433,18 +459,6 @@ export default function ProfilesDrawer({ onApplyProfile }: ProfilesDrawerProps) 
                   className="grid size-5 place-items-center rounded text-zinc-500 transition hover:bg-emerald-100 hover:text-emerald-700 disabled:opacity-50"
                 >
                   <Wand2 size={11} />
-                </button>
-                </Tooltip>
-              )}
-              {renameTarget !== p.name && (
-                <Tooltip label="Edit profile contents…">
-                <button
-                  type="button"
-                  onClick={() => setEditModalProfile(p.name)}
-                  disabled={deleting || renaming}
-                  className="grid size-5 place-items-center rounded text-zinc-500 transition hover:bg-zinc-100 disabled:opacity-50"
-                >
-                  <Settings2 size={11} />
                 </button>
                 </Tooltip>
               )}
@@ -464,73 +478,45 @@ export default function ProfilesDrawer({ onApplyProfile }: ProfilesDrawerProps) 
                 </button>
                 </Tooltip>
               ) : (
-                <Tooltip label="Rename profile">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setRenameTarget(p.name);
-                    setRenameValue(p.name);
-                  }}
-                  disabled={renaming || deleting}
-                  className="grid size-5 place-items-center rounded text-zinc-500 transition hover:bg-zinc-100 disabled:opacity-50"
-                >
-                  <PencilLine size={11} />
-                </button>
-                </Tooltip>
-              )}
-              <Tooltip label="Open profile folder in Finder">
-              <button
-                type="button"
-                onClick={() => void openFolder(p.name)}
-                className="grid size-5 place-items-center rounded text-zinc-500 transition hover:bg-zinc-100"
-              >
-                <FolderOpen size={11} />
-              </button>
-              </Tooltip>
-              <Tooltip label="Publish to GitHub registry">
-              <button
-                type="button"
-                onClick={() => setPublishTarget(p.name)}
-                disabled={deleting || renaming}
-                className="grid size-5 place-items-center rounded text-zinc-500 transition hover:bg-zinc-100 disabled:opacity-50"
-              >
-                <UploadCloud size={11} />
-              </button>
-              </Tooltip>
-              <Tooltip label="Delete profile">
-              <button
-                type="button"
-                onClick={() => setDeleteTarget(p.name)}
-                disabled={deleting}
-                className="grid size-5 place-items-center rounded text-zinc-500 transition hover:bg-rose-100 hover:text-rose-700 disabled:opacity-50"
-              >
-                <Trash2 size={11} />
-              </button>
-              </Tooltip>
-            </div>
-            {expanded.has(p.name) && (
-              <div className="border-t border-zinc-200 px-2 py-1.5">
-                <ProfileItems
-                  profileName={p.name}
-                  contents={contents[p.name]}
-                  applyState={applyState}
-                  onApply={apply}
+                <RowMenu
+                  disabled={deleting || renaming}
+                  items={[
+                    {
+                      label: 'Edit contents…',
+                      icon: Settings2,
+                      onSelect: () => onEditProfile?.(p.name),
+                    },
+                    {
+                      label: 'Rename',
+                      icon: PencilLine,
+                      onSelect: () => {
+                        setRenameTarget(p.name);
+                        setRenameValue(p.name);
+                      },
+                    },
+                    {
+                      label: 'Reveal in Finder',
+                      icon: FolderOpen,
+                      onSelect: () => void openFolder(p.name),
+                    },
+                    {
+                      label: 'Publish to GitHub…',
+                      icon: UploadCloud,
+                      onSelect: () => onPublishProfile?.(p.name),
+                    },
+                    {
+                      label: 'Delete profile',
+                      icon: Trash2,
+                      destructive: true,
+                      onSelect: () => setDeleteTarget(p.name),
+                    },
+                  ]}
                 />
-              </div>
-            )}
+              )}
+            </div>
           </li>
         ))}
       </ul>
-      <EditProfileModal
-        open={editModalProfile !== null}
-        onOpenChange={(open) => {
-          if (!open) setEditModalProfile(null);
-        }}
-        profileName={editModalProfile}
-        onChanged={() => {
-          window.dispatchEvent(new CustomEvent('brainctl:profiles-changed'));
-        }}
-      />
       <ConfirmDialog
         open={deleteTarget !== null}
         onOpenChange={(open) => {
@@ -545,13 +531,6 @@ export default function ProfilesDrawer({ onApplyProfile }: ProfilesDrawerProps) 
           if (deleteTarget) void deleteProfile(deleteTarget);
         }}
       />
-      <PublishProfileDialog
-        open={publishTarget !== null}
-        profileName={publishTarget}
-        onOpenChange={(open) => {
-          if (!open) setPublishTarget(null);
-        }}
-      />
       <ResizeHandle onMouseDown={startResize} />
     </aside>
   );
@@ -563,6 +542,84 @@ const MAX_DRAWER_WIDTH = 520;
 function clampWidth(value: number): number {
   if (!Number.isFinite(value)) return 224;
   return Math.max(MIN_DRAWER_WIDTH, Math.min(MAX_DRAWER_WIDTH, Math.round(value)));
+}
+
+interface RowMenuItem {
+  label: string;
+  icon: ComponentType<{ size?: number; className?: string }>;
+  onSelect: () => void;
+  destructive?: boolean;
+  disabled?: boolean;
+}
+
+function RowMenu({ items, disabled }: { items: RowMenuItem[]; disabled?: boolean }): ReactNode {
+  const [open, setOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDocPointer = (event: PointerEvent) => {
+      if (!containerRef.current) return;
+      if (containerRef.current.contains(event.target as Node)) return;
+      setOpen(false);
+    };
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setOpen(false);
+    };
+    document.addEventListener('pointerdown', onDocPointer);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('pointerdown', onDocPointer);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [open]);
+
+  return (
+    <div ref={containerRef} className="relative">
+      <Tooltip label="More actions">
+        <button
+          type="button"
+          onClick={() => setOpen((value) => !value)}
+          disabled={disabled}
+          aria-haspopup="menu"
+          aria-expanded={open}
+          className="grid size-5 place-items-center rounded text-zinc-500 transition hover:bg-zinc-100 disabled:opacity-50"
+        >
+          <MoreHorizontal size={12} />
+        </button>
+      </Tooltip>
+      {open && (
+        <div
+          role="menu"
+          className="absolute right-0 top-full z-30 mt-1 min-w-[170px] overflow-hidden rounded-lg border border-zinc-200 bg-white py-1 shadow-lg"
+        >
+          {items.map((item) => {
+            const Icon = item.icon;
+            return (
+              <button
+                key={item.label}
+                role="menuitem"
+                type="button"
+                disabled={item.disabled}
+                onClick={() => {
+                  setOpen(false);
+                  item.onSelect();
+                }}
+                className={`flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-[12px] font-medium transition disabled:opacity-50 ${
+                  item.destructive
+                    ? 'text-rose-600 hover:bg-rose-50'
+                    : 'text-zinc-700 hover:bg-zinc-100'
+                }`}
+              >
+                <Icon size={12} className={item.destructive ? 'text-rose-500' : 'text-zinc-500'} />
+                {item.label}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
 }
 
 function ResizeHandle({

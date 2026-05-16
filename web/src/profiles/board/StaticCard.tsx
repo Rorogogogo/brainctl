@@ -29,7 +29,8 @@ export function StaticCard({
   editable: boolean;
   folderPath?: string;
 }) {
-  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id, disabled: !editable });
+  const dragDisabled = status === 'removed';
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id, disabled: dragDisabled });
   const [expanded, setExpanded] = useState(false);
 
   const statusClass =
@@ -39,13 +40,13 @@ export function StaticCard({
       ? ' border-red-200 bg-red-50 opacity-50 line-through'
       : ' border-zinc-200 bg-white hover:border-zinc-300';
 
-  const editableClass = editable
+  const editableClass = !dragDisabled
     ? ' cursor-grab active:cursor-grabbing hover:shadow-sm'
     : '';
 
   const detailCount = details?.length ?? 0;
   const hasDetails = detailCount > 0;
-  const dragProps = editable ? { ...listeners, ...attributes } : {};
+  const dragProps = !dragDisabled ? { ...listeners, ...attributes } : {};
 
   return (
     <div
@@ -65,7 +66,7 @@ export function StaticCard({
         ) : null}
         {folderPath && !status ? (
           <button
-            className="grid size-8 shrink-0 place-items-center rounded-lg border border-zinc-200 bg-white text-zinc-500 transition-colors hover:bg-zinc-50 hover:text-zinc-900"
+            className="grid size-8 shrink-0 place-items-center rounded-lg border border-transparent text-zinc-400 transition-colors hover:bg-zinc-50 hover:text-zinc-900"
             type="button"
             onPointerDown={(event) => event.stopPropagation()}
             onClick={() => openFolder(folderPath)}
@@ -85,7 +86,9 @@ export function StaticCard({
           >
             {expanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
           </button>
-        ) : null}
+        ) : (
+          <div className="size-8 shrink-0" aria-hidden />
+        )}
         {onRemove && !status ? (
           <button
             className="grid size-8 shrink-0 place-items-center rounded-lg border border-transparent text-zinc-400 transition-colors hover:bg-red-50 hover:text-red-600"

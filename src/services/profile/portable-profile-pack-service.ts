@@ -20,7 +20,7 @@ import type {
 import { createAgentConfigService, type AgentConfigService } from '../agent/agent-config-service.js';
 import type { AgentLiveConfig, AgentSkillEntry } from '../sync/agent-reader.js';
 import { redactPortableMcpCredentials } from '../credential/credential-redaction-service.js';
-import { createProfileService, type ProfileService } from './profile-service.js';
+import { createProfileService, profileDir, type ProfileService } from './profile-service.js';
 import { classifyPortableMcp } from './portable-mcp-classifier.js';
 import { findProjectRoot, getDefaultExclude, getDefaultInstall } from '../platform/runtime-detector.js';
 
@@ -91,6 +91,13 @@ export function createPortableProfilePackService(
         for (const [key, sourcePath] of packed.bundledSources) {
           mcpIndex += 1;
           report(`  [${mcpIndex}/${packed.bundledSources.size}] copying MCP "${key}"`);
+          try {
+            await stat(sourcePath);
+          } catch {
+            throw new Error(
+              `Bundled MCP "${key}" cannot be packed: source directory not found at ${sourcePath}. Remove the MCP from this profile or fix its path, then try again.`
+            );
+          }
           const destPath = path.join(stagingDir, 'mcps', key);
           await mkdir(destPath, { recursive: true });
           const excludePatterns = getExcludePatternsForMcp(packed.profile.mcps[key]);
@@ -275,10 +282,12 @@ async function buildPackedProfile(options: {
       cwd: options.cwd,
       name: options.source.name,
     });
-    return redactAndNormalizeProfile(profile, options.cwd, {
-      kind: 'profile',
-      profileName: profile.name,
-    });
+    return redactAndNormalizeProfile(
+      profile,
+      options.cwd,
+      { kind: 'profile', profileName: profile.name },
+      { bundledBaseDir: profileDir(options.cwd, options.source.name) }
+    );
   }
 
   const agentSource = options.source;
@@ -337,6 +346,7 @@ async function buildPackedProfile(options: {
       kind: 'agent',
       agent: agentSource.agent,
     },
+    undefined,
     extras
   );
 }
@@ -420,6 +430,7 @@ async function redactAndNormalizeProfile(
   profile: ProfileConfig,
   cwd: string,
   source: PortableProfileManifest['source'],
+  options?: { bundledBaseDir?: string },
   extras?: {
     plugins: PortablePluginSnapshot[];
     bundledPlugins: Map<string, string>;
@@ -448,9 +459,10 @@ async function redactAndNormalizeProfile(
       }
 
       if (result.redacted.kind === 'local' && result.redacted.source === 'bundled') {
+        const baseDir = options?.bundledBaseDir ?? cwd;
         const sourcePath = path.isAbsolute(result.redacted.path)
           ? result.redacted.path
-          : path.resolve(cwd, result.redacted.path);
+          : path.resolve(baseDir, result.redacted.path);
         bundledSources.set(key, sourcePath);
         return [
           key,

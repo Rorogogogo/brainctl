@@ -1,14 +1,37 @@
 import { useState } from 'react';
-import { Check, Download, Loader2 } from 'lucide-react';
+import { Check, Loader2, Store } from 'lucide-react';
 
 import { AgentLogo } from './components/agent-brand';
 import ApiModeBadge from './components/ApiModeBadge';
 import CreateProfileButton from './components/CreateProfileButton';
 import SignInButton from './components/SignInButton';
 import { toast } from './components/ui/toast.js';
+import { useAuthStatus } from './lib/auth-status.js';
 import ApplyProfilePanel from './profiles/ApplyProfilePanel';
+import EditProfilePanel from './profiles/EditProfilePanel';
+import PublishProfilePanel from './profiles/PublishProfilePanel';
+import ViewProfilePanel from './profiles/ViewProfilePanel';
 import ProfilesDrawer from './profiles/ProfilesDrawer';
 import ProfilesView from './profiles/ProfilesView';
+
+const DEFAULT_MARKETPLACE_URL = 'https://www.brainctl.net';
+
+function MarketplaceLink() {
+  const { status } = useAuthStatus();
+  const href = status?.apiFrontendUrl ?? DEFAULT_MARKETPLACE_URL;
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      title={href}
+      className="inline-flex h-9 items-center gap-2 rounded-xl border border-zinc-200 bg-white px-4 text-sm font-medium text-zinc-700 shadow-sm transition-colors hover:bg-zinc-50 hover:text-zinc-900"
+    >
+      <Store size={16} />
+      <span>Marketplace</span>
+    </a>
+  );
+}
 
 const AGENTS = ['claude', 'codex', 'gemini'] as const;
 type Agent = typeof AGENTS[number];
@@ -113,6 +136,9 @@ function SnapshotButtons() {
 
 export default function App() {
   const [applyProfileName, setApplyProfileName] = useState<string | null>(null);
+  const [publishProfileName, setPublishProfileName] = useState<string | null>(null);
+  const [viewProfileName, setViewProfileName] = useState<string | null>(null);
+  const [editProfileName, setEditProfileName] = useState<string | null>(null);
 
   return (
     <main className="h-screen overflow-hidden bg-[#fcfcfc] p-4 text-zinc-900">
@@ -134,27 +160,81 @@ export default function App() {
             <SnapshotButtons />
             <CreateProfileButton />
             <SignInButton />
-            <a
-              href="https://www.brainctl.net"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex h-9 items-center gap-2 rounded-xl border border-zinc-200 bg-white px-4 text-sm font-medium text-zinc-700 shadow-sm transition-colors hover:bg-zinc-50 hover:text-zinc-900"
-            >
-              <Download size={16} />
-              <span>Install</span>
-            </a>
+            <MarketplaceLink />
           </div>
         </header>
 
         <section className="-ml-4 flex min-h-0 w-full gap-4 overflow-hidden pt-4">
-          <ProfilesDrawer onApplyProfile={setApplyProfileName} />
+          <ProfilesDrawer
+            onApplyProfile={(name) => {
+              setPublishProfileName(null);
+              setViewProfileName(null);
+              setEditProfileName(null);
+              setApplyProfileName(name);
+            }}
+            onPublishProfile={(name) => {
+              setApplyProfileName(null);
+              setViewProfileName(null);
+              setEditProfileName(null);
+              setPublishProfileName(name);
+            }}
+            onViewProfile={(name) => {
+              setApplyProfileName(null);
+              setPublishProfileName(null);
+              setEditProfileName(null);
+              setViewProfileName(name);
+            }}
+            onEditProfile={(name) => {
+              setApplyProfileName(null);
+              setPublishProfileName(null);
+              setViewProfileName(null);
+              setEditProfileName(name);
+            }}
+          />
           <div className="scrollbar-none min-w-0 flex-1 overflow-y-auto pr-1">
-            {applyProfileName ? (
+            {publishProfileName ? (
+              <PublishProfilePanel
+                profileName={publishProfileName}
+                onCancel={() => setPublishProfileName(null)}
+                onPublished={() => {
+                  window.dispatchEvent(new CustomEvent('brainctl:profiles-changed'));
+                }}
+                onEdit={(name) => {
+                  setPublishProfileName(null);
+                  setEditProfileName(name);
+                }}
+              />
+            ) : applyProfileName ? (
               <ApplyProfilePanel
                 initialProfile={applyProfileName}
                 onCancel={() => setApplyProfileName(null)}
                 onApplied={() => {
                   window.dispatchEvent(new CustomEvent('brainctl:profiles-changed'));
+                }}
+              />
+            ) : editProfileName ? (
+              <EditProfilePanel
+                profileName={editProfileName}
+                onCancel={() => setEditProfileName(null)}
+                onChanged={() => {
+                  window.dispatchEvent(new CustomEvent('brainctl:profiles-changed'));
+                }}
+              />
+            ) : viewProfileName ? (
+              <ViewProfilePanel
+                profileName={viewProfileName}
+                onCancel={() => setViewProfileName(null)}
+                onApply={(name) => {
+                  setViewProfileName(null);
+                  setApplyProfileName(name);
+                }}
+                onPublish={(name) => {
+                  setViewProfileName(null);
+                  setPublishProfileName(name);
+                }}
+                onEdit={(name) => {
+                  setViewProfileName(null);
+                  setEditProfileName(name);
                 }}
               />
             ) : (

@@ -35,8 +35,9 @@ export function DraggableCard({
   folderPath?: string;
   expandedContent?: ReactNode;
 }) {
+  const dragDisabled = status === 'removed' || Boolean(expandedContent);
   const { attributes, listeners, setNodeRef, isDragging } =
-    useDraggable({ id, disabled: !editable || Boolean(expandedContent) });
+    useDraggable({ id, disabled: dragDisabled });
 
   const statusClass =
     status === 'added'
@@ -45,11 +46,11 @@ export function DraggableCard({
       ? ' border-red-200 bg-red-50 opacity-50 line-through'
       : ' border-zinc-200 bg-white hover:border-zinc-300';
 
-  const editableClass = editable
+  const editableClass = !dragDisabled
     ? ' cursor-grab active:cursor-grabbing hover:shadow-sm'
     : '';
 
-  const dragProps = editable && !expandedContent ? { ...listeners, ...attributes } : {};
+  const dragProps = !dragDisabled ? { ...listeners, ...attributes } : {};
 
   return (
     <div
@@ -70,7 +71,7 @@ export function DraggableCard({
         )}
         {folderPath && !status && (
           <button
-            className="grid size-8 shrink-0 place-items-center rounded-lg border border-zinc-200 bg-white text-zinc-500 transition-colors hover:bg-zinc-50 hover:text-zinc-900"
+            className="grid size-8 shrink-0 place-items-center rounded-lg border border-transparent text-zinc-400 transition-colors hover:bg-zinc-50 hover:text-zinc-900"
             type="button"
             onPointerDown={(event) => event.stopPropagation()}
             onClick={() => openFolder(folderPath)}
@@ -81,7 +82,7 @@ export function DraggableCard({
         )}
         {onMoveScope && moveScopeTarget && !status && (
           <button
-            className="grid size-8 shrink-0 place-items-center rounded-lg border border-zinc-200 bg-white text-zinc-500 transition-colors hover:bg-zinc-50 hover:text-zinc-900"
+            className="grid size-8 shrink-0 place-items-center rounded-lg border border-transparent text-zinc-400 transition-colors hover:bg-zinc-50 hover:text-zinc-900"
             type="button"
             onPointerDown={(event) => event.stopPropagation()}
             onClick={onMoveScope}
