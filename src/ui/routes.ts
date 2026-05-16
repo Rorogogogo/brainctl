@@ -611,32 +611,6 @@ export function createUiRouteHandler(
                 init
               ),
           });
-          try {
-            const sidecarPath = path.join(
-              brainctlHome(),
-              '.brainctl',
-              'profiles',
-              profileName,
-              'published.yaml'
-            );
-            const yamlMod = await import('yaml');
-            const { writeFile: wf } = await import('node:fs/promises');
-            await wf(
-              sidecarPath,
-              yamlMod.default.stringify({
-                slug: result.slug,
-                title,
-                profileId: result.profileId,
-                versionId: result.versionId,
-                version: result.version,
-                apiBaseUrl,
-                lastPublishedAt: new Date().toISOString(),
-              }),
-              'utf8'
-            );
-          } catch {
-            // non-fatal: badge will just not appear in UI
-          }
           return sendJson(response, 200, { ok: true, ...result });
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error);
