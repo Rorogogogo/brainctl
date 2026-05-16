@@ -19,18 +19,27 @@ import type { ComponentType, ReactNode } from 'react';
 
 import { AgentLogo } from '../components/agent-brand';
 import ConfirmDialog from '../components/ConfirmDialog';
-import PublishProfileDialog from '../components/PublishProfileDialog';
 import { Tooltip } from '../components/Tooltip';
 import { toast } from '../components/ui/toast.js';
-import EditProfileModal from './EditProfileModal';
 
 const AGENTS = ['claude', 'codex', 'gemini'] as const;
 type Agent = typeof AGENTS[number];
 type ItemType = 'mcp' | 'plugin' | 'skill';
 
+interface ProfilePublishedInfo {
+  slug: string;
+  profileId?: string;
+  version?: string;
+  lastPublishedAt?: string;
+  apiBaseUrl?: string;
+  url?: string;
+  manageUrl?: string;
+}
+
 interface ProfileSummary {
   name: string;
   sourceAgent?: Agent;
+  published?: ProfilePublishedInfo;
 }
 
 interface ProfileContents {
@@ -57,9 +66,15 @@ interface ApplyState {
 }
 export interface ProfilesDrawerProps {
   onApplyProfile?: (profileName: string) => void;
+  onPublishProfile?: (profileName: string) => void;
+  onViewProfile?: (profileName: string) => void;
 }
 
-export default function ProfilesDrawer({ onApplyProfile }: ProfilesDrawerProps) {
+export default function ProfilesDrawer({
+  onApplyProfile,
+  onPublishProfile,
+  onViewProfile,
+}: ProfilesDrawerProps) {
   const [profiles, setProfiles] = useState<ProfileSummary[]>([]);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [contents, setContents] = useState<Record<string, ProfileContents>>({});
@@ -71,8 +86,6 @@ export default function ProfilesDrawer({ onApplyProfile }: ProfilesDrawerProps) 
   const [renameTarget, setRenameTarget] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
   const [renaming, setRenaming] = useState(false);
-  const [editModalProfile, setEditModalProfile] = useState<string | null>(null);
-  const [publishTarget, setPublishTarget] = useState<string | null>(null);
   const [drawerWidth, setDrawerWidth] = useState<number>(() => {
     if (typeof window === 'undefined') return 224;
     const saved = window.localStorage.getItem('brainctl:profiles-drawer-width');
@@ -121,7 +134,14 @@ export default function ProfilesDrawer({ onApplyProfile }: ProfilesDrawerProps) 
     try {
       const r = await fetch('/api/profiles');
       const data = (await r.json()) as {
-        profiles: Array<string | { name: string; sourceAgent?: Agent }>;
+        profiles: Array<
+          | string
+          | {
+              name: string;
+              sourceAgent?: Agent;
+              published?: ProfilePublishedInfo;
+            }
+        >;
       };
       setProfiles(
         data.profiles.map((entry) =>
@@ -402,15 +422,10 @@ export default function ProfilesDrawer({ onApplyProfile }: ProfilesDrawerProps) 
               ) : (
                 <button
                   type="button"
-                  onClick={() => void toggle(p.name)}
+                  onClick={() => onViewProfile?.(p.name)}
                   title={p.name}
                   className="flex min-w-0 flex-1 items-center gap-2 rounded-md px-1 py-0.5 text-left font-medium text-zinc-800 hover:bg-zinc-100"
                 >
-                  {expanded.has(p.name) ? (
-                    <ChevronDown size={12} />
-                  ) : (
-                    <ChevronRight size={12} />
-                  )}
                   {p.sourceAgent ? (
                     <span
                       className="grid size-3.5 shrink-0 place-items-center overflow-hidden"
@@ -422,6 +437,15 @@ export default function ProfilesDrawer({ onApplyProfile }: ProfilesDrawerProps) 
                     <Folder size={12} className="text-zinc-500" />
                   )}
                   <span className="truncate">{p.name}</span>
+                  {p.published && (
+                    <span
+                      className="ml-auto inline-flex shrink-0 items-center gap-1 rounded border border-zinc-200 bg-white px-1 py-0 text-[9px] font-medium text-zinc-500"
+                      title={`Published as "${p.published.slug}"${p.published.version ? ` v${p.published.version}` : ''}${p.published.lastPublishedAt ? `\nLast published ${new Date(p.published.lastPublishedAt).toLocaleString()}` : ''}`}
+                    >
+                      <UploadCloud size={9} strokeWidth={2.25} />
+                      <span>Published</span>
+                    </span>
+                  )}
                 </button>
               )}
               {renameTarget !== p.name && (
@@ -460,7 +484,7 @@ export default function ProfilesDrawer({ onApplyProfile }: ProfilesDrawerProps) 
                     {
                       label: 'Edit contents…',
                       icon: Settings2,
-                      onSelect: () => setEditModalProfile(p.name),
+                      onSelect: () => onEditProfile?.(p.name),
                     },
                     {
                       label: 'Rename',
@@ -478,7 +502,7 @@ export default function ProfilesDrawer({ onApplyProfile }: ProfilesDrawerProps) 
                     {
                       label: 'Publish to GitHub…',
                       icon: UploadCloud,
-                      onSelect: () => setPublishTarget(p.name),
+                      onSelect: () => onPublishProfile?.(p.name),
                     },
                     {
                       label: 'Delete profile',
@@ -490,29 +514,9 @@ export default function ProfilesDrawer({ onApplyProfile }: ProfilesDrawerProps) 
                 />
               )}
             </div>
-            {expanded.has(p.name) && (
-              <div className="border-t border-zinc-200 px-2 py-1.5">
-                <ProfileItems
-                  profileName={p.name}
-                  contents={contents[p.name]}
-                  applyState={applyState}
-                  onApply={apply}
-                />
-              </div>
-            )}
           </li>
         ))}
       </ul>
-      <EditProfileModal
-        open={editModalProfile !== null}
-        onOpenChange={(open) => {
-          if (!open) setEditModalProfile(null);
-        }}
-        profileName={editModalProfile}
-        onChanged={() => {
-          window.dispatchEvent(new CustomEvent('brainctl:profiles-changed'));
-        }}
-      />
       <ConfirmDialog
         open={deleteTarget !== null}
         onOpenChange={(open) => {
@@ -525,13 +529,6 @@ export default function ProfilesDrawer({ onApplyProfile }: ProfilesDrawerProps) 
         variant="danger"
         onConfirm={() => {
           if (deleteTarget) void deleteProfile(deleteTarget);
-        }}
-      />
-      <PublishProfileDialog
-        open={publishTarget !== null}
-        profileName={publishTarget}
-        onOpenChange={(open) => {
-          if (!open) setPublishTarget(null);
         }}
       />
       <ResizeHandle onMouseDown={startResize} />

@@ -8,6 +8,9 @@ import SignInButton from './components/SignInButton';
 import { toast } from './components/ui/toast.js';
 import { useAuthStatus } from './lib/auth-status.js';
 import ApplyProfilePanel from './profiles/ApplyProfilePanel';
+import EditProfilePanel from './profiles/EditProfilePanel';
+import PublishProfilePanel from './profiles/PublishProfilePanel';
+import ViewProfilePanel from './profiles/ViewProfilePanel';
 import ProfilesDrawer from './profiles/ProfilesDrawer';
 import ProfilesView from './profiles/ProfilesView';
 
@@ -133,6 +136,9 @@ function SnapshotButtons() {
 
 export default function App() {
   const [applyProfileName, setApplyProfileName] = useState<string | null>(null);
+  const [publishProfileName, setPublishProfileName] = useState<string | null>(null);
+  const [viewProfileName, setViewProfileName] = useState<string | null>(null);
+  const [editProfileName, setEditProfileName] = useState<string | null>(null);
 
   return (
     <main className="h-screen overflow-hidden bg-[#fcfcfc] p-4 text-zinc-900">
@@ -159,14 +165,76 @@ export default function App() {
         </header>
 
         <section className="-ml-4 flex min-h-0 w-full gap-4 overflow-hidden pt-4">
-          <ProfilesDrawer onApplyProfile={setApplyProfileName} />
+          <ProfilesDrawer
+            onApplyProfile={(name) => {
+              setPublishProfileName(null);
+              setViewProfileName(null);
+              setEditProfileName(null);
+              setApplyProfileName(name);
+            }}
+            onPublishProfile={(name) => {
+              setApplyProfileName(null);
+              setViewProfileName(null);
+              setEditProfileName(null);
+              setPublishProfileName(name);
+            }}
+            onViewProfile={(name) => {
+              setApplyProfileName(null);
+              setPublishProfileName(null);
+              setEditProfileName(null);
+              setViewProfileName(name);
+            }}
+            onEditProfile={(name) => {
+              setApplyProfileName(null);
+              setPublishProfileName(null);
+              setViewProfileName(null);
+              setEditProfileName(name);
+            }}
+          />
           <div className="scrollbar-none min-w-0 flex-1 overflow-y-auto pr-1">
-            {applyProfileName ? (
+            {publishProfileName ? (
+              <PublishProfilePanel
+                profileName={publishProfileName}
+                onCancel={() => setPublishProfileName(null)}
+                onPublished={() => {
+                  window.dispatchEvent(new CustomEvent('brainctl:profiles-changed'));
+                }}
+                onEdit={(name) => {
+                  setPublishProfileName(null);
+                  setEditProfileName(name);
+                }}
+              />
+            ) : applyProfileName ? (
               <ApplyProfilePanel
                 initialProfile={applyProfileName}
                 onCancel={() => setApplyProfileName(null)}
                 onApplied={() => {
                   window.dispatchEvent(new CustomEvent('brainctl:profiles-changed'));
+                }}
+              />
+            ) : editProfileName ? (
+              <EditProfilePanel
+                profileName={editProfileName}
+                onCancel={() => setEditProfileName(null)}
+                onChanged={() => {
+                  window.dispatchEvent(new CustomEvent('brainctl:profiles-changed'));
+                }}
+              />
+            ) : viewProfileName ? (
+              <ViewProfilePanel
+                profileName={viewProfileName}
+                onCancel={() => setViewProfileName(null)}
+                onApply={(name) => {
+                  setViewProfileName(null);
+                  setApplyProfileName(name);
+                }}
+                onPublish={(name) => {
+                  setViewProfileName(null);
+                  setPublishProfileName(name);
+                }}
+                onEdit={(name) => {
+                  setViewProfileName(null);
+                  setEditProfileName(name);
                 }}
               />
             ) : (
