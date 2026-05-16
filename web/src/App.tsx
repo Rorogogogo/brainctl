@@ -1,14 +1,34 @@
 import { useState } from 'react';
-import { Check, Download, Loader2 } from 'lucide-react';
+import { Check, Loader2, Store } from 'lucide-react';
 
 import { AgentLogo } from './components/agent-brand';
 import ApiModeBadge from './components/ApiModeBadge';
 import CreateProfileButton from './components/CreateProfileButton';
 import SignInButton from './components/SignInButton';
 import { toast } from './components/ui/toast.js';
+import { useAuthStatus } from './lib/auth-status.js';
 import ApplyProfilePanel from './profiles/ApplyProfilePanel';
 import ProfilesDrawer from './profiles/ProfilesDrawer';
 import ProfilesView from './profiles/ProfilesView';
+
+const DEFAULT_MARKETPLACE_URL = 'https://www.brainctl.net';
+
+function MarketplaceLink() {
+  const { status } = useAuthStatus();
+  const href = status?.apiFrontendUrl ?? DEFAULT_MARKETPLACE_URL;
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      title={href}
+      className="inline-flex h-9 items-center gap-2 rounded-xl border border-zinc-200 bg-white px-4 text-sm font-medium text-zinc-700 shadow-sm transition-colors hover:bg-zinc-50 hover:text-zinc-900"
+    >
+      <Store size={16} />
+      <span>Marketplace</span>
+    </a>
+  );
+}
 
 const AGENTS = ['claude', 'codex', 'gemini'] as const;
 type Agent = typeof AGENTS[number];
@@ -134,15 +154,7 @@ export default function App() {
             <SnapshotButtons />
             <CreateProfileButton />
             <SignInButton />
-            <a
-              href="https://www.brainctl.net"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex h-9 items-center gap-2 rounded-xl border border-zinc-200 bg-white px-4 text-sm font-medium text-zinc-700 shadow-sm transition-colors hover:bg-zinc-50 hover:text-zinc-900"
-            >
-              <Download size={16} />
-              <span>Install</span>
-            </a>
+            <MarketplaceLink />
           </div>
         </header>
 

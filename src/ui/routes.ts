@@ -171,10 +171,12 @@ export function createUiRouteHandler(
           return sendJson(response, 405, { error: 'Method not allowed' });
         }
         const target = await resolveBrainctlApiTarget();
+        const apiFrontendUrl = await resolveBrainctlFrontendUrl({ apiBaseUrl: target.apiBaseUrl });
         const apiInfo = {
           apiBaseUrl: target.apiBaseUrl,
           apiMode: target.mode,
           apiSource: target.source,
+          apiFrontendUrl,
         };
         const resolved = await resolveBrainctlApiToken({ configService: brainctlConfigService });
         if (!resolved) {

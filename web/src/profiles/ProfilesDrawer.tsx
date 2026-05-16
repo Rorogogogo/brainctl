@@ -5,6 +5,7 @@ import {
   ChevronRight,
   Folder,
   FolderOpen,
+  MoreHorizontal,
   UploadCloud,
   Loader2,
   PencilLine,
@@ -14,6 +15,7 @@ import {
   Wand2,
   X,
 } from 'lucide-react';
+import type { ComponentType, ReactNode } from 'react';
 
 import { AgentLogo } from '../components/agent-brand';
 import ConfirmDialog from '../components/ConfirmDialog';
@@ -436,18 +438,6 @@ export default function ProfilesDrawer({ onApplyProfile }: ProfilesDrawerProps) 
                 </button>
                 </Tooltip>
               )}
-              {renameTarget !== p.name && (
-                <Tooltip label="Edit profile contents…">
-                <button
-                  type="button"
-                  onClick={() => setEditModalProfile(p.name)}
-                  disabled={deleting || renaming}
-                  className="grid size-5 place-items-center rounded text-zinc-500 transition hover:bg-zinc-100 disabled:opacity-50"
-                >
-                  <Settings2 size={11} />
-                </button>
-                </Tooltip>
-              )}
               {renameTarget === p.name ? (
                 <Tooltip label="Cancel rename">
                 <button
@@ -464,49 +454,41 @@ export default function ProfilesDrawer({ onApplyProfile }: ProfilesDrawerProps) 
                 </button>
                 </Tooltip>
               ) : (
-                <Tooltip label="Rename profile">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setRenameTarget(p.name);
-                    setRenameValue(p.name);
-                  }}
-                  disabled={renaming || deleting}
-                  className="grid size-5 place-items-center rounded text-zinc-500 transition hover:bg-zinc-100 disabled:opacity-50"
-                >
-                  <PencilLine size={11} />
-                </button>
-                </Tooltip>
+                <RowMenu
+                  disabled={deleting || renaming}
+                  items={[
+                    {
+                      label: 'Edit contents…',
+                      icon: Settings2,
+                      onSelect: () => setEditModalProfile(p.name),
+                    },
+                    {
+                      label: 'Rename',
+                      icon: PencilLine,
+                      onSelect: () => {
+                        setRenameTarget(p.name);
+                        setRenameValue(p.name);
+                      },
+                    },
+                    {
+                      label: 'Reveal in Finder',
+                      icon: FolderOpen,
+                      onSelect: () => void openFolder(p.name),
+                    },
+                    {
+                      label: 'Publish to GitHub…',
+                      icon: UploadCloud,
+                      onSelect: () => setPublishTarget(p.name),
+                    },
+                    {
+                      label: 'Delete profile',
+                      icon: Trash2,
+                      destructive: true,
+                      onSelect: () => setDeleteTarget(p.name),
+                    },
+                  ]}
+                />
               )}
-              <Tooltip label="Open profile folder in Finder">
-              <button
-                type="button"
-                onClick={() => void openFolder(p.name)}
-                className="grid size-5 place-items-center rounded text-zinc-500 transition hover:bg-zinc-100"
-              >
-                <FolderOpen size={11} />
-              </button>
-              </Tooltip>
-              <Tooltip label="Publish to GitHub registry">
-              <button
-                type="button"
-                onClick={() => setPublishTarget(p.name)}
-                disabled={deleting || renaming}
-                className="grid size-5 place-items-center rounded text-zinc-500 transition hover:bg-zinc-100 disabled:opacity-50"
-              >
-                <UploadCloud size={11} />
-              </button>
-              </Tooltip>
-              <Tooltip label="Delete profile">
-              <button
-                type="button"
-                onClick={() => setDeleteTarget(p.name)}
-                disabled={deleting}
-                className="grid size-5 place-items-center rounded text-zinc-500 transition hover:bg-rose-100 hover:text-rose-700 disabled:opacity-50"
-              >
-                <Trash2 size={11} />
-              </button>
-              </Tooltip>
             </div>
             {expanded.has(p.name) && (
               <div className="border-t border-zinc-200 px-2 py-1.5">
@@ -563,6 +545,84 @@ const MAX_DRAWER_WIDTH = 520;
 function clampWidth(value: number): number {
   if (!Number.isFinite(value)) return 224;
   return Math.max(MIN_DRAWER_WIDTH, Math.min(MAX_DRAWER_WIDTH, Math.round(value)));
+}
+
+interface RowMenuItem {
+  label: string;
+  icon: ComponentType<{ size?: number; className?: string }>;
+  onSelect: () => void;
+  destructive?: boolean;
+  disabled?: boolean;
+}
+
+function RowMenu({ items, disabled }: { items: RowMenuItem[]; disabled?: boolean }): ReactNode {
+  const [open, setOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDocPointer = (event: PointerEvent) => {
+      if (!containerRef.current) return;
+      if (containerRef.current.contains(event.target as Node)) return;
+      setOpen(false);
+    };
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setOpen(false);
+    };
+    document.addEventListener('pointerdown', onDocPointer);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('pointerdown', onDocPointer);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [open]);
+
+  return (
+    <div ref={containerRef} className="relative">
+      <Tooltip label="More actions">
+        <button
+          type="button"
+          onClick={() => setOpen((value) => !value)}
+          disabled={disabled}
+          aria-haspopup="menu"
+          aria-expanded={open}
+          className="grid size-5 place-items-center rounded text-zinc-500 transition hover:bg-zinc-100 disabled:opacity-50"
+        >
+          <MoreHorizontal size={12} />
+        </button>
+      </Tooltip>
+      {open && (
+        <div
+          role="menu"
+          className="absolute right-0 top-full z-30 mt-1 min-w-[170px] overflow-hidden rounded-lg border border-zinc-200 bg-white py-1 shadow-lg"
+        >
+          {items.map((item) => {
+            const Icon = item.icon;
+            return (
+              <button
+                key={item.label}
+                role="menuitem"
+                type="button"
+                disabled={item.disabled}
+                onClick={() => {
+                  setOpen(false);
+                  item.onSelect();
+                }}
+                className={`flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-[12px] font-medium transition disabled:opacity-50 ${
+                  item.destructive
+                    ? 'text-rose-600 hover:bg-rose-50'
+                    : 'text-zinc-700 hover:bg-zinc-100'
+                }`}
+              >
+                <Icon size={12} className={item.destructive ? 'text-rose-500' : 'text-zinc-500'} />
+                {item.label}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
 }
 
 function ResizeHandle({

@@ -7,6 +7,7 @@ export interface AuthStatus {
   apiBaseUrl?: string;
   apiMode?: 'local' | 'prod' | 'custom';
   apiSource?: 'flag' | 'env' | 'config' | 'default';
+  apiFrontendUrl?: string;
   error?: string;
 }
 

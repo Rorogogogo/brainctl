@@ -12,6 +12,14 @@ export function parseDragId(id: string): { agent: string; category: DragCategory
 }
 
 export function parseDropId(id: string): { agent: string; category: DropCategory } | null {
+  const trayMatch = id.match(/^tray:(\w+):(mcps|skills|plugins)$/);
+  if (trayMatch) {
+    return {
+      agent: trayMatch[1],
+      category: trayMatch[2] === 'mcps' ? 'mcp' : trayMatch[2] === 'skills' ? 'skill' : 'plugin',
+    };
+  }
+
   const match = id.match(/^(\w+):(mcps|skills|plugins|column)(?::anchor)?$/);
   if (!match) return null;
 
@@ -34,6 +42,9 @@ export function resolveCrossAgentDropId(activeId: string, overId: string): strin
 export const customCollisionDetection: CollisionDetection = (args) => {
   const pointerCollisions = pointerWithin(args);
   if (pointerCollisions.length === 0) return pointerCollisions;
+
+  const trayHit = pointerCollisions.find((c) => typeof c.id === 'string' && (c.id as string).startsWith('tray:'));
+  if (trayHit) return [trayHit];
 
   const correctZoneId = resolveCrossAgentDropId(args.active.id as string, pointerCollisions[0].id as string);
   if (!correctZoneId) return pointerCollisions;
