@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Check, Loader2, Store } from 'lucide-react';
+import { BookOpen, Check, Loader2, Store } from 'lucide-react';
 
 import { AgentLogo } from './components/agent-brand';
 import ApiModeBadge from './components/ApiModeBadge';
@@ -29,6 +29,24 @@ function MarketplaceLink() {
     >
       <Store size={16} />
       <span>Marketplace</span>
+    </a>
+  );
+}
+
+function DocsLink() {
+  const { status } = useAuthStatus();
+  const baseUrl = status?.apiFrontendUrl ?? DEFAULT_MARKETPLACE_URL;
+  const href = `${baseUrl.replace(/\/$/, '')}/docs`;
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      title={href}
+      className="inline-flex h-9 items-center gap-2 rounded-xl border border-zinc-200 bg-white px-4 text-sm font-medium text-zinc-700 shadow-sm transition-colors hover:bg-zinc-50 hover:text-zinc-900"
+    >
+      <BookOpen size={16} />
+      <span>Docs</span>
     </a>
   );
 }
@@ -161,6 +179,7 @@ export default function App() {
             <CreateProfileButton />
             <SignInButton />
             <MarketplaceLink />
+            <DocsLink />
           </div>
         </header>
 

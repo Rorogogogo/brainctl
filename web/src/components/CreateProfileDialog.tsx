@@ -10,6 +10,18 @@ import { snapshotProfile } from '../lib/profile-snapshot';
 type Agent = 'claude' | 'codex' | 'gemini';
 type Source = 'blank' | Agent;
 
+const PROFILE_NAME_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
+
+function slugifyProfileName(input: string): string {
+  return input
+    .trim()
+    .toLowerCase()
+    .replace(/[\s_]+/g, '-')
+    .replace(/[^a-z0-9.-]/g, '')
+    .replace(/-+/g, '-')
+    .replace(/^[-.]+|[-.]+$/g, '');
+}
+
 interface CreateProfileDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -70,10 +82,17 @@ export default function CreateProfileDialog({
   }, [open]);
 
   async function submit() {
-    const trimmed = name.trim();
+    const trimmed = slugifyProfileName(name);
     if (source === 'blank' && !trimmed) {
       setError('Profile name is required for an empty profile.');
       return;
+    }
+    if (trimmed && !PROFILE_NAME_PATTERN.test(trimmed)) {
+      setError('Use letters, numbers, ".", "_", or "-". Must start with a letter or number.');
+      return;
+    }
+    if (trimmed && trimmed !== name.trim()) {
+      setName(trimmed);
     }
     setBusy(true);
     setError(null);
@@ -186,14 +205,23 @@ export default function CreateProfileDialog({
                 type="text"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
+                onBlur={() => {
+                  const s = slugifyProfileName(name);
+                  if (s && s !== name) setName(s);
+                }}
                 disabled={busy}
                 placeholder={source === 'blank' ? 'my-profile' : `backup-${source}-…`}
+                pattern="^[A-Za-z0-9][A-Za-z0-9._-]*$"
+                title='Letters, numbers, ".", "_", or "-". Must start with a letter or number.'
                 className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 focus:border-zinc-400 focus:outline-none"
                 autoFocus
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') void submit();
                 }}
               />
+              <span className="text-xs text-zinc-500">
+                Letters, numbers, ".", "_", or "-". Spaces are auto-converted to dashes.
+              </span>
             </label>
 
             {error && (

@@ -86,7 +86,17 @@ export interface ProfileService {
   delete(options: { cwd?: string; name: string }): Promise<void>;
 }
 
-const PROFILE_NAME_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
+export const PROFILE_NAME_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
+
+export function slugifyProfileName(input: string): string {
+  return input
+    .trim()
+    .toLowerCase()
+    .replace(/[\s_]+/g, '-')
+    .replace(/[^a-z0-9.-]/g, '')
+    .replace(/-+/g, '-')
+    .replace(/^[-.]+|[-.]+$/g, '');
+}
 
 export function createProfileService(): ProfileService {
   return {

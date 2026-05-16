@@ -11,7 +11,7 @@ import { startUiServer, type UiServer } from './ui/server.js';
 import { createProfileExportService } from './services/profile/profile-export-service.js';
 import { createProfileImportService } from './services/profile/profile-import-service.js';
 import { createProfileApplyService, type ItemSelector } from './services/profile/profile-apply-service.js';
-import { createProfileService } from './services/profile/profile-service.js';
+import { createProfileService, PROFILE_NAME_PATTERN, slugifyProfileName } from './services/profile/profile-service.js';
 import {
   createProfileSnapshotService,
   defaultBackupProfileName,
@@ -183,19 +183,28 @@ export function createMcpServer(
 
   server.addTool({
     name: 'brainctl_create_profile',
-    description: 'Create a new profile with a default example skill.',
+    description: 'Create a new profile with a default example skill. Name must match /^[A-Za-z0-9][A-Za-z0-9._-]*$/; spaces are auto-slugified.',
     parameters: z.object({
-      name: z.string().describe('Profile name to create'),
+      name: z
+        .string()
+        .min(1)
+        .describe('Profile name (letters, numbers, ".", "_", "-"; spaces auto-slugified)'),
       description: z.string().optional().describe('Profile description'),
     }),
     execute: async (args) => {
+      const slug = slugifyProfileName(args.name);
+      if (!PROFILE_NAME_PATTERN.test(slug)) {
+        throw new Error(
+          `Invalid profile name "${args.name}". Use letters, numbers, ".", "_", or "-".`
+        );
+      }
       const profileService = createProfileService();
       const result = await profileService.create({
         cwd,
-        name: args.name,
+        name: slug,
         description: args.description,
       });
-      return JSON.stringify(result, null, 2);
+      return JSON.stringify({ ...result, name: slug }, null, 2);
     },
   });
 
