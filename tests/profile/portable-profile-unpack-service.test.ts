@@ -79,6 +79,7 @@ describe('createProfileImportService portable unpack', () => {
       installedMcps: ['demo'],
       installedPlugins: [],
       installedUserSkills: [],
+      requiredCredentials: [],
     });
 
     const installedProfile = YAML.parse(
@@ -261,7 +262,7 @@ describe('createProfileImportService portable unpack', () => {
     await expect(readFile(path.join(installedDir, 'old.txt'), 'utf8')).rejects.toThrow();
   });
 
-  it('rejects imports with missing required credential placeholders', async () => {
+  it('reports missing required credentials without blocking the import', async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), 'brainctl-unpack-'));
     tempDirs.push(root);
 
@@ -307,14 +308,12 @@ describe('createProfileImportService portable unpack', () => {
 
     const service = createProfileImportService();
 
-    await expect(
-      service.execute({
-        cwd: projectDir,
-        archivePath,
-      })
-    ).rejects.toThrowError(
-      new ProfileError('Missing required credentials: db_password.')
-    );
+    const result = await service.execute({
+      cwd: projectDir,
+      archivePath,
+    });
+
+    expect(result.requiredCredentials.map((c) => c.key)).toContain('db_password');
   });
 
   it('resolves supplied credentials before persisting the imported profile and leaves optional placeholders intact', async () => {

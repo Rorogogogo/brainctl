@@ -13,6 +13,7 @@ export interface ProfileRegistryInstallResult {
   installedMcps: string[];
   installedPlugins: string[];
   installedUserSkills: string[];
+  requiredCredentials: Array<{ key: string; description?: string }>;
   version: string;
   sourceKind: string;
 }

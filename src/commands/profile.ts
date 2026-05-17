@@ -138,6 +138,18 @@ export function registerProfileCommand(program: Command, services: ProfileComman
       if (result.installedMcps.length > 0) {
         console.log(`Installed bundled MCPs: ${result.installedMcps.join(', ')}`);
       }
+      if (result.requiredCredentials.length > 0) {
+        console.warn(
+          pc.yellow(
+            `Credentials still required before apply: ${result.requiredCredentials.map((c) => c.key).join(', ')}`,
+          ),
+        );
+        console.warn(
+          pc.yellow(
+            `  Re-import with -c key=value (or set the keys in your environment) before running 'profile apply'.`,
+          ),
+        );
+      }
     });
 
   profileCmd
@@ -167,7 +179,7 @@ export function registerProfileCommand(program: Command, services: ProfileComman
         const agents = parseAgentList(options.agent);
         const items = options.items ? parseItemList(options.items) : undefined;
 
-        const { backups, applied } = await profileApplyService.execute({
+        const { backups, applied, unresolvedCredentials } = await profileApplyService.execute({
           cwd: process.cwd(),
           profileName: name,
           agents,
@@ -189,6 +201,18 @@ export function registerProfileCommand(program: Command, services: ProfileComman
           if (r.pluginsInstalled?.length) extras.push(`plugins: ${r.pluginsInstalled.join(',')}`);
           if (r.userSkillsInstalled?.length) extras.push(`skills: ${r.userSkillsInstalled.join(',')}`);
           console.log(`  ${r.agent}: ${extras.join(' | ')}`);
+        }
+        if (unresolvedCredentials.length > 0) {
+          console.warn(
+            pc.yellow(
+              `\n⚠ MCPs were written with unresolved credential placeholders: ${unresolvedCredentials.join(', ')}`,
+            ),
+          );
+          console.warn(
+            pc.yellow(
+              `  Those MCPs won't authenticate until you provide the keys (re-import with -c key=value, set them in your environment, or edit the agent config directly).`,
+            ),
+          );
         }
       }
     );
@@ -289,6 +313,18 @@ export function registerProfileCommand(program: Command, services: ProfileComman
         }
         if (result.installedUserSkills.length > 0) {
           console.log(`Skills: ${result.installedUserSkills.join(', ')}`);
+        }
+        if (result.requiredCredentials.length > 0) {
+          console.warn(
+            pc.yellow(
+              `Credentials still required before apply: ${result.requiredCredentials.map((c) => c.key).join(', ')}`,
+            ),
+          );
+          console.warn(
+            pc.yellow(
+              `  Re-install with -c key=value (or set the keys in your environment) before running 'profile apply'.`,
+            ),
+          );
         }
       }
     );
