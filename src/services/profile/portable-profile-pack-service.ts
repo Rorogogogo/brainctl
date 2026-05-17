@@ -315,7 +315,10 @@ async function buildPackedProfile(options: {
         const entrypointPath = entrypoint
           ? path.resolve(agentSource.cwd, entrypoint)
           : classified.path;
-        const { marker } = findProjectRoot(entrypointPath, classified.runtime);
+        const { root, marker } = findProjectRoot(entrypointPath, classified.runtime);
+        if (marker) {
+          classified.path = root;
+        }
         if (!classified.install) {
           const defaultInstall = getDefaultInstall(classified.runtime, marker, classified.path, entrypoint);
           if (defaultInstall) {
