@@ -7,6 +7,7 @@ import type { ProfileImportService } from '../services/profile/profile-import-se
 import type { ProfileService } from '../services/profile/profile-service.js';
 import type { ProfileSnapshotService } from '../services/profile/profile-snapshot-service.js';
 import { createProfileRegistryClient } from '../services/profile/profile-registry-client.js';
+import { createProfileRegistryInstallService } from '../services/profile/profile-registry-install-service.js';
 import { resolveBrainctlApiBaseUrl } from '../services/platform/brainctl-config-service.js';
 import type { AgentName } from '../types.js';
 
@@ -241,18 +242,56 @@ export function registerProfileCommand(program: Command, services: ProfileComman
     .command('install')
     .argument('<slug>', 'Registry profile slug')
     .option('--api-base-url <url>', 'Brainctl platform API base URL')
-    .description('Read the install descriptor for a registry profile')
-    .action(async (slug: string, options: { apiBaseUrl?: string }) => {
-      const client = createProfileRegistryClient({
-        baseUrl: await registryApiUrl(options.apiBaseUrl),
-        token: process.env.BRAINCTL_API_TOKEN,
-      });
-      const descriptor = await client.getInstallDescriptor(slug);
+    .option('--force', 'Overwrite existing profile', false)
+    .option('-c, --credential <key=value>', 'Provide a credential value for import', collectCredentialOption, [])
+    .option('--descriptor-only', 'Print the install descriptor without downloading or importing', false)
+    .description('Download and import a registry profile by slug')
+    .action(
+      async (
+        slug: string,
+        options: {
+          apiBaseUrl?: string;
+          force: boolean;
+          credential: string[];
+          descriptorOnly: boolean;
+        }
+      ) => {
+        const apiBaseUrl = await registryApiUrl(options.apiBaseUrl);
 
-      console.log(`Install descriptor: ${descriptor.source_kind}`);
-      console.log(`  version: ${descriptor.version}`);
-      console.log(`  download: ${descriptor.download_url}`);
-    });
+        if (options.descriptorOnly) {
+          const client = createProfileRegistryClient({
+            baseUrl: apiBaseUrl,
+            token: process.env.BRAINCTL_API_TOKEN,
+          });
+          const descriptor = await client.getInstallDescriptor(slug);
+          console.log(`Install descriptor: ${descriptor.source_kind}`);
+          console.log(`  version: ${descriptor.version}`);
+          console.log(`  download: ${descriptor.download_url}`);
+          return;
+        }
+
+        const installer = createProfileRegistryInstallService();
+        const result = await installer.execute({
+          slug,
+          apiBaseUrl,
+          token: process.env.BRAINCTL_API_TOKEN,
+          cwd: process.cwd(),
+          force: options.force,
+          credentials: toCredentialMap(options.credential),
+        });
+
+        console.log(`Installed "${result.profileName}" v${result.version} (${result.sourceKind})`);
+        if (result.installedMcps.length > 0) {
+          console.log(`Bundled MCPs: ${result.installedMcps.join(', ')}`);
+        }
+        if (result.installedPlugins.length > 0) {
+          console.log(`Plugins: ${result.installedPlugins.join(', ')}`);
+        }
+        if (result.installedUserSkills.length > 0) {
+          console.log(`Skills: ${result.installedUserSkills.join(', ')}`);
+        }
+      }
+    );
 
   profileCmd
     .command('snapshot')

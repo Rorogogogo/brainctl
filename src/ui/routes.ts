@@ -13,6 +13,7 @@ import { createPluginInstallService } from '../services/plugin/plugin-install-se
 import { createProfileExportService } from '../services/profile/profile-export-service.js';
 import { createProfileImportService } from '../services/profile/profile-import-service.js';
 import { createProfileRegistryClient } from '../services/profile/profile-registry-client.js';
+import { createProfileRegistryInstallService } from '../services/profile/profile-registry-install-service.js';
 import { createProfilePublishService } from '../services/profile/profile-publish-service.js';
 import {
   createBrainctlConfigService,
@@ -91,6 +92,9 @@ export function createUiRouteHandler(
   const profileService = createProfileService();
   const profileExportService = createProfileExportService({ profileService });
   const profileImportService = createProfileImportService();
+  const profileRegistryInstallService = createProfileRegistryInstallService({
+    profileImportService,
+  });
   const profileApplyService = createProfileApplyService({ profileService });
   const profileSnapshotService = createProfileSnapshotService();
   const agentConfigService = createAgentConfigService();
@@ -543,6 +547,78 @@ export function createUiRouteHandler(
           const result = await profileImportService.execute({
             cwd: dependencies.cwd,
             archivePath: data.archivePath.trim(),
+            force: data.force === true,
+            credentials: parseCredentialMap(data.credentials),
+          });
+          return sendJson(response, 200, result);
+        } catch (error) {
+          return sendProfileError(response, error);
+        }
+      }
+      case '/api/profiles/import-upload': {
+        if (request.method !== 'POST') {
+          return sendJson(response, 405, { error: 'Method not allowed' });
+        }
+
+        const url = new URL(request.url ?? '/', 'http://localhost');
+        const force = url.searchParams.get('force') === 'true';
+
+        const chunks: Buffer[] = [];
+        for await (const chunk of request) {
+          chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+        }
+        const bytes = Buffer.concat(chunks);
+        if (bytes.length === 0) {
+          return sendJson(response, 400, { error: 'Empty upload body' });
+        }
+
+        const { mkdtemp, writeFile, rm } = await import('node:fs/promises');
+        const { tmpdir } = await import('node:os');
+        const dir = await mkdtemp(path.join(tmpdir(), 'brainctl-upload-'));
+        const archivePath = path.join(dir, 'profile.tar.gz');
+        try {
+          await writeFile(archivePath, bytes);
+          const result = await profileImportService.execute({
+            cwd: dependencies.cwd,
+            archivePath,
+            force,
+          });
+          return sendJson(response, 200, result);
+        } catch (error) {
+          return sendProfileError(response, error);
+        } finally {
+          await rm(dir, { recursive: true, force: true }).catch(() => {});
+        }
+      }
+      case '/api/profiles/install-from-registry': {
+        if (request.method !== 'POST') {
+          return sendJson(response, 405, { error: 'Method not allowed' });
+        }
+
+        const body = await readJsonBody(request);
+        if (!body.ok) {
+          return sendJson(response, 400, { error: 'Invalid JSON body' });
+        }
+
+        const data = body.value as {
+          slug?: string;
+          force?: boolean;
+          credentials?: Record<string, unknown>;
+          apiBaseUrl?: string;
+        };
+        const slug = typeof data.slug === 'string' ? data.slug.trim() : '';
+        if (!slug) {
+          return sendJson(response, 400, { error: 'Missing slug' });
+        }
+
+        try {
+          const apiBaseUrl = await resolveBrainctlApiBaseUrl({ apiBaseUrl: data.apiBaseUrl });
+          const tokenInfo = await resolveBrainctlApiToken();
+          const result = await profileRegistryInstallService.execute({
+            slug,
+            apiBaseUrl,
+            token: tokenInfo?.token,
+            cwd: dependencies.cwd,
             force: data.force === true,
             credentials: parseCredentialMap(data.credentials),
           });
