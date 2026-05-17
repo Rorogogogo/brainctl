@@ -4,6 +4,7 @@ import { BookOpen, Check, Loader2, Store } from 'lucide-react';
 import { AgentLogo } from './components/agent-brand';
 import ApiModeBadge from './components/ApiModeBadge';
 import CreateProfileButton from './components/CreateProfileButton';
+import ImportProfileButton from './components/ImportProfileButton';
 import SignInButton from './components/SignInButton';
 import { toast } from './components/ui/toast.js';
 import { useAuthStatus } from './lib/auth-status.js';
@@ -177,6 +178,7 @@ export default function App() {
           <div className="flex flex-wrap items-center gap-2">
             <SnapshotButtons />
             <CreateProfileButton />
+            <ImportProfileButton />
             <SignInButton />
             <MarketplaceLink />
             <DocsLink />

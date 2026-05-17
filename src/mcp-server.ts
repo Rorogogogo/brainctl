@@ -17,6 +17,7 @@ import {
   defaultBackupProfileName,
 } from './services/profile/profile-snapshot-service.js';
 import { createProfileRegistryClient } from './services/profile/profile-registry-client.js';
+import { createProfileRegistryInstallService } from './services/profile/profile-registry-install-service.js';
 import { createProfilePublishService } from './services/profile/profile-publish-service.js';
 import {
   resolveBrainctlApiBaseUrl,
@@ -422,19 +423,43 @@ export function createMcpServer(
 
   server.addTool({
     name: 'brainctl_install_registry_profile',
-    description: 'Read the hosted registry install descriptor for a profile slug.',
+    description:
+      'Install a profile from the hosted registry by slug. Downloads the package, imports it, and registers it locally. Pass descriptor_only=true to just read the install descriptor without downloading.',
     parameters: z.object({
       slug: z.string().describe('Registry profile slug'),
+      force: z.boolean().default(false).describe('Overwrite existing profile if it exists'),
+      credentials: z
+        .record(z.string(), z.string())
+        .optional()
+        .describe('Credential values keyed by placeholder name'),
+      descriptor_only: z
+        .boolean()
+        .default(false)
+        .describe('Return the install descriptor without downloading or importing'),
     }),
     execute: async (args) => {
       const resolved = await resolveBrainctlApiToken();
-      const client = createProfileRegistryClient({
-        baseUrl: await registryApiUrl(apiBaseUrl),
-        token: resolved?.token,
-      });
-      const descriptor = await client.getInstallDescriptor(args.slug);
+      const baseUrl = await registryApiUrl(apiBaseUrl);
 
-      return JSON.stringify(descriptor, null, 2);
+      if (args.descriptor_only) {
+        const client = createProfileRegistryClient({
+          baseUrl,
+          token: resolved?.token,
+        });
+        const descriptor = await client.getInstallDescriptor(args.slug);
+        return JSON.stringify(descriptor, null, 2);
+      }
+
+      const installer = createProfileRegistryInstallService();
+      const result = await installer.execute({
+        slug: args.slug,
+        apiBaseUrl: baseUrl,
+        token: resolved?.token,
+        cwd,
+        force: args.force,
+        credentials: args.credentials,
+      });
+      return JSON.stringify(result, null, 2);
     },
   });
 
