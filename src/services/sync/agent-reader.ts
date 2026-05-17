@@ -1,4 +1,4 @@
-import { readFile, readdir } from 'node:fs/promises';
+import { readFile, readdir, stat } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import path from 'node:path';
 
@@ -26,6 +26,14 @@ export interface AgentSkillEntry {
   name: string;
   source?: string; // e.g. "claude-plugins-official", "local"
   kind?: 'skill' | 'plugin';
+  /**
+   * Where this skill lives in the filesystem hierarchy:
+   *   - 'user'    — read from `~/.<agent>/skills/` or a user-installed plugin
+   *                 (plugin-owned skills are logically user-scoped because
+   *                 plugins are installed under the user's home directory).
+   *   - 'project' — read from `<repo>/.claude/skills/` (Claude only).
+   */
+  scope: 'user' | 'project';
   pluginSkills?: string[];
   pluginMcps?: string[];
   pluginAgents?: string[];
@@ -84,7 +92,9 @@ export function createClaudeReader(): AgentConfigReader {
         }
 
         const skills = await readClaudePlugins();
-        const filtered = filterPluginOwnedMcps({ mcpServers, remoteMcpServers, projectMcpServers, projectRemoteMcpServers, skills });
+        const projectSkills = await readClaudeProjectSkills(options.cwd);
+        const allSkills = [...skills, ...projectSkills];
+        const filtered = filterPluginOwnedMcps({ mcpServers, remoteMcpServers, projectMcpServers, projectRemoteMcpServers, skills: allSkills });
         return {
           agent: 'claude',
           configPath,
@@ -93,10 +103,11 @@ export function createClaudeReader(): AgentConfigReader {
           remoteMcpServers: filtered.remoteMcpServers,
           projectMcpServers: filtered.projectMcpServers,
           projectRemoteMcpServers: filtered.projectRemoteMcpServers,
-          skills,
+          skills: allSkills,
         };
       } catch {
         const skills = await readClaudePlugins();
+        const projectSkills = await readClaudeProjectSkills(options.cwd);
         return {
           agent: 'claude',
           configPath,
@@ -105,7 +116,7 @@ export function createClaudeReader(): AgentConfigReader {
           remoteMcpServers: {},
           projectMcpServers: {},
           projectRemoteMcpServers: {},
-          skills,
+          skills: [...skills, ...projectSkills],
         };
       }
     },
@@ -488,7 +499,10 @@ async function readGeminiSkills(): Promise<AgentSkillEntry[]> {
 }
 
 /** Shared: read skill directories (Codex and Gemini use the same SKILL.md convention) */
-async function readSkillDirs(skillsDir: string): Promise<AgentSkillEntry[]> {
+async function readSkillDirs(
+  skillsDir: string,
+  scope: 'user' | 'project' = 'user'
+): Promise<AgentSkillEntry[]> {
   const entries = await readdir(skillsDir, { withFileTypes: true });
   const skills: AgentSkillEntry[] = [];
 
@@ -496,11 +510,57 @@ async function readSkillDirs(skillsDir: string): Promise<AgentSkillEntry[]> {
     if (entry.name.startsWith('.')) continue;
     const installPath = path.join(skillsDir, entry.name);
     if (entry.isDirectory()) {
-      skills.push({ name: entry.name, source: 'local', kind: 'skill', installPath });
+      skills.push({ name: entry.name, source: 'local', kind: 'skill', scope, installPath });
     } else if (entry.isSymbolicLink()) {
-      skills.push({ name: entry.name, source: 'linked', kind: 'skill', installPath });
+      skills.push({ name: entry.name, source: 'linked', kind: 'skill', scope, installPath });
     }
   }
 
   return skills;
+}
+
+/**
+ * Walk from `cwd` up to the repo root (first ancestor containing `.git`, or
+ * the filesystem root) and emit any skills declared in
+ * `<ancestor>/.claude/skills/` with `scope: 'project'`.
+ *
+ * Only Claude reads project-scoped skills per the official docs. Codex and
+ * Gemini have no equivalent concept and are intentionally skipped.
+ *
+ * We dedupe by skill name (closer ancestor wins — Claude itself uses an
+ * on-demand discovery model, so capturing the nearest declaration is the
+ * predictable choice).
+ */
+async function readClaudeProjectSkills(cwd: string): Promise<AgentSkillEntry[]> {
+  const seen = new Map<string, AgentSkillEntry>();
+  let current = path.resolve(cwd);
+  const visited = new Set<string>();
+
+  while (!visited.has(current)) {
+    visited.add(current);
+    const skillsDir = path.join(current, '.claude', 'skills');
+    try {
+      const entries = await readSkillDirs(skillsDir, 'project');
+      for (const entry of entries) {
+        if (!seen.has(entry.name)) seen.set(entry.name, entry);
+      }
+    } catch {
+      // no skills dir at this level
+    }
+
+    // Stop walk at the first ancestor that looks like a repo root.
+    try {
+      const gitPath = path.join(current, '.git');
+      await stat(gitPath);
+      break;
+    } catch {
+      // not a repo root; continue up
+    }
+
+    const parent = path.dirname(current);
+    if (parent === current) break; // filesystem root
+    current = parent;
+  }
+
+  return Array.from(seen.values());
 }

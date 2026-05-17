@@ -155,7 +155,14 @@ export function AgentColumn({
       folderPath: undefined,
     })),
   ];
-  const { skills: localSkills, plugins } = splitAgentSkillEntries(config.skills);
+  const { skills: allLocalSkills, plugins } = splitAgentSkillEntries(config.skills);
+  const supportsProjectSkills = config.agent === 'claude';
+  const localSkills = supportsProjectSkills
+    ? allLocalSkills.filter((s) => (scope === 'project' ? s.scope === 'project' : s.scope !== 'project'))
+    : scope === 'project'
+      ? []
+      : allLocalSkills;
+  const skillScopeForRemove: 'user' | 'project' = scope === 'project' ? 'project' : 'user';
   const removablePlugins = plugins.filter((plugin) => isRemovablePlugin(config.agent, plugin));
 
   return (
@@ -292,15 +299,15 @@ export function AgentColumn({
               disabled={localSkills.length === 0}
               onClick={() => {
                 for (const skill of localSkills) {
-                  onStagedRemove(config.agent, 'skill', skill.name, 'global');
+                  onStagedRemove(config.agent, 'skill', skill.name, skillScopeForRemove === 'project' ? 'project' : 'global');
                 }
               }}
             />
           ) : undefined
         }
         hint={
-          scope === 'project'
-            ? 'Skills are always installed globally — there is no project-scoped location for them.'
+          scope === 'project' && !supportsProjectSkills
+            ? `Skills for ${config.agent} are user-scoped only — Claude is the only agent with a project skill location.`
             : undefined
         }
       >
@@ -319,7 +326,7 @@ export function AgentColumn({
               sublabel={skill.source ?? 'local'}
               icon={<FileText size={16} />}
               status={status}
-              onRemove={editable ? () => onStagedRemove(config.agent, 'skill', skill.name, 'global') : undefined}
+              onRemove={editable ? () => onStagedRemove(config.agent, 'skill', skill.name, skillScopeForRemove === 'project' ? 'project' : 'global') : undefined}
               editable={editable}
               folderPath={skill.installPath}
             />

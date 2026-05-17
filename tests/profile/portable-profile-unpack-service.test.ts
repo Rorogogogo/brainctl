@@ -561,4 +561,67 @@ describe('createProfileImportService portable unpack', () => {
       else process.env.HOME = originalHome;
     }
   });
+
+  it('honors per-skill scope in the manifest when importing (project skills land in cwd/.claude/skills)', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'brainctl-import-proj-scope-'));
+    tempDirs.push(root);
+
+    const projectDir = path.join(root, 'workspace');
+    const archiveStageDir = path.join(root, 'archive-stage');
+    await mkdir(projectDir, { recursive: true });
+    process.env.BRAINCTL_HOME = projectDir;
+
+    // Build a tiny manifest+profile with one project-scoped skill.
+    await mkdir(path.join(archiveStageDir, 'project-skills', 'lint'), { recursive: true });
+    await writeFile(
+      path.join(archiveStageDir, 'project-skills', 'lint', 'SKILL.md'),
+      '---\nname: lint\n---\nrun the linter\n',
+      'utf8'
+    );
+    await writeFile(
+      path.join(archiveStageDir, 'manifest.yaml'),
+      [
+        'schemaVersion: 3',
+        'profileName: pscope',
+        'userSkills:',
+        '  - agent: claude',
+        '    name: lint',
+        '    archivePath: project-skills/lint',
+        '    scope: project',
+      ].join('\n'),
+      'utf8'
+    );
+    await writeFile(
+      path.join(archiveStageDir, 'profile.yaml'),
+      ['name: pscope', 'mcps: {}'].join('\n'),
+      'utf8'
+    );
+
+    const archivePath = path.join(root, 'pscope.tar.gz');
+    execSync(`tar -czf "${archivePath}" -C "${archiveStageDir}" .`);
+
+    const originalHome = process.env.HOME;
+    const tempHome = path.join(root, 'home');
+    await mkdir(tempHome, { recursive: true });
+    process.env.HOME = tempHome;
+
+    try {
+      const importService = createProfileImportService();
+      const result = await importService.execute({
+        cwd: projectDir,
+        archivePath,
+      });
+
+      expect(result.installedUserSkills).toEqual(['claude:lint']);
+      await expect(
+        readFile(path.join(projectDir, '.claude', 'skills', 'lint', 'SKILL.md'), 'utf8')
+      ).resolves.toContain('name: lint');
+      await expect(
+        readFile(path.join(tempHome, '.claude', 'skills', 'lint', 'SKILL.md'), 'utf8')
+      ).rejects.toThrow();
+    } finally {
+      if (originalHome === undefined) delete process.env.HOME;
+      else process.env.HOME = originalHome;
+    }
+  });
 });

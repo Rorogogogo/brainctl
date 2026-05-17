@@ -569,6 +569,39 @@ export function createMcpServer(
   });
 
   server.addTool({
+    name: 'brainctl_move_agent_skill_scope',
+    description:
+      'Move a Claude skill directory between user scope (~/.claude/skills/<name>) and project scope (<cwd>/.claude/skills/<name>). Idempotent. Only supported for Claude — codex and gemini have no project-scoped skills concept.',
+    parameters: z.object({
+      agent: z.enum(['claude', 'codex', 'gemini']).describe('Target agent (only "claude" is supported)'),
+      name: z.string().describe('Skill directory name to move'),
+      fromScope: z.enum(['user', 'project']).describe('Current scope of the skill'),
+      toScope: z.enum(['user', 'project']).describe('Destination scope'),
+      fromProjectPath: z.string().optional().describe('When fromScope=project, the source project path (defaults to cwd)'),
+      toProjectPath: z.string().optional().describe('When toScope=project, the destination project path (defaults to cwd)'),
+    }),
+    execute: async (args) => {
+      const agentConfigService = createAgentConfigService();
+      await agentConfigService.moveSkillScope({
+        cwd,
+        agent: args.agent as AgentName,
+        skillName: args.name,
+        fromScope: args.fromScope,
+        toScope: args.toScope,
+        fromProjectPath: args.fromProjectPath,
+        toProjectPath: args.toProjectPath,
+      });
+      return JSON.stringify({
+        ok: true,
+        agent: args.agent,
+        name: args.name,
+        fromScope: args.fromScope,
+        toScope: args.toScope,
+      });
+    },
+  });
+
+  server.addTool({
     name: 'brainctl_remove_agent_mcp',
     description: 'Remove an MCP server entry from a specific agent config.',
     parameters: z.object({

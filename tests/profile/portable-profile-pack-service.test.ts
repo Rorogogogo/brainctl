@@ -644,4 +644,80 @@ describe('createPortableProfilePackService', () => {
     expect(gitignore).toContain('.env');
   });
 
+  it('captures both user-scoped and project-scoped Claude skills with scope tags in the manifest', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'brainctl-pack-mixed-skills-'));
+    tempDirs.push(root);
+    const cwd = path.join(root, 'workspace');
+    await mkdir(cwd, { recursive: true });
+
+    // Create real source dirs for both skills so cp() can copy them.
+    const userSkillDir = path.join(root, 'home-skills', 'user-thing');
+    const projSkillDir = path.join(cwd, '.claude', 'skills', 'proj-thing');
+    await mkdir(userSkillDir, { recursive: true });
+    await writeFile(path.join(userSkillDir, 'SKILL.md'), '---\nname: user-thing\n---\n', 'utf8');
+    await mkdir(projSkillDir, { recursive: true });
+    await writeFile(path.join(projSkillDir, 'SKILL.md'), '---\nname: proj-thing\n---\n', 'utf8');
+
+    const service = createPortableProfilePackService({
+      agentConfigService: {
+        async readAll() {
+          return [
+            {
+              agent: 'claude',
+              configPath: '/tmp/.claude.json',
+              exists: true,
+              mcpServers: {},
+              remoteMcpServers: {},
+              projectMcpServers: {},
+              projectRemoteMcpServers: {},
+              skills: [
+                {
+                  name: 'user-thing',
+                  source: 'local',
+                  kind: 'skill',
+                  scope: 'user',
+                  installPath: userSkillDir,
+                },
+                {
+                  name: 'proj-thing',
+                  source: 'local',
+                  kind: 'skill',
+                  scope: 'project',
+                  installPath: projSkillDir,
+                },
+              ],
+            },
+          ] as any;
+        },
+      },
+    });
+
+    const archivePath = path.join(cwd, 'mixed.tar.gz');
+    await service.execute({
+      cwd,
+      source: { source: 'agent', agent: 'claude', cwd },
+      outputPath: archivePath,
+    });
+
+    const extractDir = await mkdtemp(path.join(os.tmpdir(), 'brainctl-pack-mixed-extract-'));
+    tempDirs.push(extractDir);
+    execSync(`tar -xzf "${archivePath}" -C "${extractDir}"`);
+
+    const manifest = YAML.parse(
+      await readFile(path.join(extractDir, 'manifest.yaml'), 'utf8')
+    ) as { userSkills: Array<{ name: string; scope?: string; archivePath: string }> };
+
+    const byName = Object.fromEntries(manifest.userSkills.map((s) => [s.name, s]));
+    expect(byName['user-thing'].scope).toBeUndefined();
+    expect(byName['proj-thing'].scope).toBe('project');
+
+    // Both skill directories were bundled.
+    await expect(
+      readFile(path.join(extractDir, byName['user-thing'].archivePath, 'SKILL.md'), 'utf8')
+    ).resolves.toContain('user-thing');
+    await expect(
+      readFile(path.join(extractDir, byName['proj-thing'].archivePath, 'SKILL.md'), 'utf8')
+    ).resolves.toContain('proj-thing');
+  });
+
 });

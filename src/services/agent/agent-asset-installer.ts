@@ -108,6 +108,7 @@ async function installPluginCrossAgent(
     plugin: {
       name: plugin.name,
       kind: 'plugin',
+      scope: 'user',
       managed: true,
       source: plugin.source,
       pluginSkills: bundle.skills,
@@ -121,7 +122,8 @@ async function installPluginCrossAgent(
 export async function installUserSkill(
   sourceDir: string,
   skill: PortableUserSkillSnapshot,
-  targetAgent?: PortableUserSkillSnapshot['agent']
+  targetAgent?: PortableUserSkillSnapshot['agent'],
+  options?: { cwd?: string }
 ): Promise<void> {
   try {
     await stat(sourceDir);
@@ -132,7 +134,26 @@ export async function installUserSkill(
   }
 
   const agent = targetAgent ?? skill.agent;
-  const targetDir = path.join(homedir(), `.${agent}`, 'skills', skill.name);
+  const scope = skill.scope ?? 'user';
+
+  let targetDir: string;
+  if (scope === 'project') {
+    if (agent !== 'claude') {
+      throw new ProfileError(
+        `Skill "${skill.name}" is marked project-scoped but project skills are only supported for Claude.`
+      );
+    }
+    const cwd = options?.cwd;
+    if (!cwd) {
+      throw new ProfileError(
+        `Skill "${skill.name}" is project-scoped but no cwd was provided to installUserSkill.`
+      );
+    }
+    targetDir = path.join(cwd, '.claude', 'skills', skill.name);
+  } else {
+    targetDir = path.join(homedir(), `.${agent}`, 'skills', skill.name);
+  }
+
   await rm(targetDir, { recursive: true, force: true });
   await mkdir(path.dirname(targetDir), { recursive: true });
   await cp(sourceDir, targetDir, { recursive: true });

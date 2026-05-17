@@ -27,6 +27,7 @@ export async function readManagedPlugins(options: {
     return (parsed.agents?.[options.agent] ?? []).map((entry) => ({
       ...entry,
       kind: 'plugin',
+      scope: entry.scope ?? 'user',
       managed: true,
     }));
   } catch {
@@ -48,6 +49,7 @@ export async function writeManagedPluginInstall(options: {
     {
       ...options.plugin,
       kind: 'plugin' as const,
+      scope: options.plugin.scope ?? 'user',
       managed: true,
     },
   ].sort((left, right) => left.name.localeCompare(right.name));

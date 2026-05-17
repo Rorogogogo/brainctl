@@ -200,7 +200,7 @@ export function createProfileImportService(
           await rm(profileLocalDir, { recursive: true, force: true });
           await mkdir(path.dirname(profileLocalDir), { recursive: true });
           await cp(sourceDir, profileLocalDir, { recursive: true });
-          await installUserSkill(profileLocalDir, skill);
+          await installUserSkill(profileLocalDir, skill, undefined, { cwd });
           installedUserSkills.push(`${skill.agent}:${skill.name}`);
         }
 

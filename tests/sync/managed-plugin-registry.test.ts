@@ -42,6 +42,7 @@ describe('managed plugin registry', () => {
         name: 'frontend-design',
         source: 'claude-plugins-official',
         kind: 'plugin',
+        scope: 'user',
         installPath: '/tmp/frontend-design',
         pluginSkills: ['frontend-design'],
         managed: true,
@@ -76,15 +77,16 @@ describe('managed plugin registry', () => {
 
   it('hides plugin-owned skills and converted commands from the plain skill list after merge', () => {
     const localSkills: AgentSkillEntry[] = [
-      { name: 'frontend-design', source: 'local', kind: 'skill' },
-      { name: 'ship-it', source: 'local', kind: 'skill' },
-      { name: 'notes', source: 'local', kind: 'skill' },
+      { name: 'frontend-design', source: 'local', kind: 'skill', scope: 'user' },
+      { name: 'ship-it', source: 'local', kind: 'skill', scope: 'user' },
+      { name: 'notes', source: 'local', kind: 'skill', scope: 'user' },
     ];
     const managedPlugins: AgentSkillEntry[] = [
       {
         name: 'frontend-design',
         source: 'claude-plugins-official',
         kind: 'plugin',
+        scope: 'user',
         managed: true,
         installPath: '/tmp/frontend-design',
         pluginSkills: ['frontend-design'],
@@ -99,12 +101,13 @@ describe('managed plugin registry', () => {
         name: 'frontend-design',
         source: 'claude-plugins-official',
         kind: 'plugin',
+        scope: 'user',
         installPath: '/tmp/frontend-design',
         pluginSkills: ['frontend-design'],
         pluginCommands: ['ship-it'],
         managed: true,
       },
-      { name: 'notes', source: 'local', kind: 'skill' },
+      { name: 'notes', source: 'local', kind: 'skill', scope: 'user' },
     ]);
   });
 });

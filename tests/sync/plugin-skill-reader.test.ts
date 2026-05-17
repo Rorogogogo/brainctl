@@ -51,6 +51,7 @@ describe('readInstalledPlugins', () => {
         name: 'superpowers',
         source: 'claude-plugins-official',
         kind: 'plugin',
+        scope: 'user',
         pluginSkills: ['systematic-debugging', 'test-driven-development'],
       },
     ]);
@@ -87,6 +88,7 @@ describe('readInstalledPlugins', () => {
         name: 'context7',
         source: 'claude-plugins-official',
         kind: 'plugin',
+        scope: 'user',
         pluginSkills: [],
       },
     ]);

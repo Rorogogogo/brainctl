@@ -155,7 +155,7 @@ export function createProfileApplyService(
         }
         for (const skill of skillsByName.values()) {
           const sourceDir = path.join(folder, skill.archivePath);
-          await installUserSkill(sourceDir, skill, agent);
+          await installUserSkill(sourceDir, skill, agent, { cwd });
           userSkillsInstalled.push(skill.name);
         }
 
@@ -221,7 +221,10 @@ async function cleanupExtras(options: {
       }
     } else {
       if (options.keepSkills.has(entry.name)) continue;
-      const skillDir = path.join(homedir(), `.${options.agent}`, 'skills', entry.name);
+      const skillDir =
+        entry.scope === 'project'
+          ? path.join(options.cwd, '.claude', 'skills', entry.name)
+          : path.join(homedir(), `.${options.agent}`, 'skills', entry.name);
       try {
         await rm(skillDir, { recursive: true, force: true });
         userSkillsRemoved.push(entry.name);
