@@ -563,6 +563,18 @@ export function createUiRouteHandler(
         const url = new URL(request.url ?? '/', 'http://localhost');
         const force = url.searchParams.get('force') === 'true';
 
+        let credentials: Record<string, string> | undefined;
+        const credsHeader = request.headers['x-brainctl-credentials'];
+        if (typeof credsHeader === 'string' && credsHeader.length > 0) {
+          try {
+            const decoded = Buffer.from(credsHeader, 'base64').toString('utf8');
+            const parsed = JSON.parse(decoded) as Record<string, unknown>;
+            credentials = parseCredentialMap(parsed);
+          } catch {
+            return sendJson(response, 400, { error: 'Invalid X-Brainctl-Credentials header' });
+          }
+        }
+
         const chunks: Buffer[] = [];
         for await (const chunk of request) {
           chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
@@ -582,6 +594,7 @@ export function createUiRouteHandler(
             cwd: dependencies.cwd,
             archivePath,
             force,
+            credentials,
           });
           return sendJson(response, 200, result);
         } catch (error) {

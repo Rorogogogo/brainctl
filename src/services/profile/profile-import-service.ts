@@ -42,6 +42,7 @@ export interface ProfileImportService {
     installedMcps: string[];
     installedPlugins: string[];
     installedUserSkills: string[];
+    requiredCredentials: Array<{ key: string; description?: string }>;
   }>;
 }
 
@@ -111,7 +112,7 @@ export function createProfileImportService(
         const dotEnvCreds = await readDotEnvCredentials(extractDir);
         const combinedCreds = { ...dotEnvCreds, ...(options.credentials ?? {}) };
 
-        const missingCredentials = new Map<string, string>();
+        const missingCredentials = new Map<string, string | undefined>();
         for (const [name, mcp] of Object.entries(profile.mcps)) {
           const resolution = resolvePortableMcpCredentials(mcp, {
             credentials: combinedCreds,
@@ -120,15 +121,19 @@ export function createProfileImportService(
           });
           profile.mcps[name] = resolution.resolved;
           for (const credential of resolution.missing) {
-            missingCredentials.set(credential.key, credential.description ?? credential.key);
+            if (!missingCredentials.has(credential.key)) {
+              missingCredentials.set(credential.key, credential.description);
+            }
           }
         }
 
-        if (missingCredentials.size > 0) {
-          throw new ProfileError(
-            `Missing required credentials: ${Array.from(missingCredentials.keys()).join(', ')}.`
-          );
-        }
+        // Missing credentials no longer block import — placeholders are left
+        // in the stored profile.yaml and the keys are returned so callers can
+        // surface them. Apply-time will refuse to push a profile with
+        // unresolved credentials.
+        const requiredCredentials = Array.from(missingCredentials.entries()).map(
+          ([key, description]) => ({ key, ...(description ? { description } : {}) })
+        );
 
         const installedMcps: string[] = [];
         const mcpsBaseDir = path.join(profilesRoot(cwd), profileName, 'mcps');
@@ -225,7 +230,7 @@ export function createProfileImportService(
         await mkdir(path.dirname(profilePath), { recursive: true });
         await writeFile(profilePath, YAML.stringify(outputYaml), 'utf8');
 
-        return { profileName, installedMcps, installedPlugins, installedUserSkills };
+        return { profileName, installedMcps, installedPlugins, installedUserSkills, requiredCredentials };
       } finally {
         if (!isFolderSource) {
           await rm(extractDir, { recursive: true, force: true });

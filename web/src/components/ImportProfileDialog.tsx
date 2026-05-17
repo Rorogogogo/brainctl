@@ -13,6 +13,7 @@ interface ImportProfileDialogProps {
 interface ImportResult {
   profileName: string;
   version?: string;
+  requiredCredentials?: Array<{ key: string; description?: string }>;
 }
 
 export default function ImportProfileDialog({
@@ -28,6 +29,8 @@ export default function ImportProfileDialog({
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState(false);
+  const [missingCreds, setMissingCreds] = useState<string[]>([]);
+  const [creds, setCreds] = useState<Record<string, string>>({});
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -40,8 +43,23 @@ export default function ImportProfileDialog({
       setError(null);
       setSuccess(null);
       setDragOver(false);
+      setMissingCreds([]);
+      setCreds({});
     }
   }, [open]);
+
+  function parseMissingCreds(message: string): string[] {
+    const m = message.match(/Missing required credentials:\s*([^.]+)\./i);
+    if (!m) return [];
+    return m[1].split(',').map((s) => s.trim()).filter((s) => s.length > 0);
+  }
+
+  function buildCredsObject(): Record<string, string> | undefined {
+    const filled = Object.fromEntries(
+      Object.entries(creds).filter(([, v]) => v.trim().length > 0),
+    );
+    return Object.keys(filled).length > 0 ? filled : undefined;
+  }
 
   function handleDrop(e: DragEvent<HTMLDivElement>) {
     e.preventDefault();
@@ -64,18 +82,42 @@ export default function ImportProfileDialog({
     try {
       const bytes = await file.arrayBuffer();
       const url = `/api/profiles/import-upload?force=${force ? 'true' : 'false'}`;
-      const r = await fetch(url, {
-        method: 'POST',
-        headers: { 'content-type': 'application/octet-stream' },
-        body: bytes,
-      });
+      const credsObj = buildCredsObject();
+      const headers: Record<string, string> = { 'content-type': 'application/octet-stream' };
+      if (credsObj) {
+        headers['x-brainctl-credentials'] = btoa(JSON.stringify(credsObj));
+      }
+      const r = await fetch(url, { method: 'POST', headers, body: bytes });
       if (!r.ok) {
         const data = (await r.json().catch(() => ({}))) as { error?: string };
-        throw new Error(data.error ?? `HTTP ${r.status}`);
+        const message = data.error ?? `HTTP ${r.status}`;
+        const keys = parseMissingCreds(message);
+        if (keys.length > 0) {
+          setMissingCreds(keys);
+          setCreds((prev) => {
+            const next = { ...prev };
+            for (const k of keys) if (!(k in next)) next[k] = '';
+            return next;
+          });
+        }
+        throw new Error(message);
       }
       const data = (await r.json()) as ImportResult;
-      setSuccess(`Imported profile "${data.profileName}".`);
-      toast.success(`Imported profile "${data.profileName}"`);
+      const needed = data.requiredCredentials ?? [];
+      if (needed.length > 0) {
+        setMissingCreds(needed.map((c) => c.key));
+        setCreds((prev) => {
+          const next = { ...prev };
+          for (const c of needed) if (!(c.key in next)) next[c.key] = '';
+          return next;
+        });
+        setSuccess(`Imported "${data.profileName}" — but credentials are still required before it can be applied.`);
+        toast.success(`Imported "${data.profileName}" (credentials needed)`);
+      } else {
+        setSuccess(`Imported profile "${data.profileName}".`);
+        setMissingCreds([]);
+        toast.success(`Imported profile "${data.profileName}"`);
+      }
       onImported(data.profileName);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -96,19 +138,43 @@ export default function ImportProfileDialog({
     setError(null);
     setSuccess(null);
     try {
+      const credsObj = buildCredsObject();
       const r = await fetch('/api/profiles/install-from-registry', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ slug: trimmed, force }),
+        body: JSON.stringify({ slug: trimmed, force, credentials: credsObj }),
       });
       if (!r.ok) {
         const data = (await r.json().catch(() => ({}))) as { error?: string };
-        throw new Error(data.error ?? `HTTP ${r.status}`);
+        const message = data.error ?? `HTTP ${r.status}`;
+        const keys = parseMissingCreds(message);
+        if (keys.length > 0) {
+          setMissingCreds(keys);
+          setCreds((prev) => {
+            const next = { ...prev };
+            for (const k of keys) if (!(k in next)) next[k] = '';
+            return next;
+          });
+        }
+        throw new Error(message);
       }
       const data = (await r.json()) as ImportResult;
       const versionLabel = data.version ? ` (v${data.version})` : '';
-      setSuccess(`Installed "${data.profileName}"${versionLabel}.`);
-      toast.success(`Installed profile "${data.profileName}"${versionLabel}`);
+      const needed = data.requiredCredentials ?? [];
+      if (needed.length > 0) {
+        setMissingCreds(needed.map((c) => c.key));
+        setCreds((prev) => {
+          const next = { ...prev };
+          for (const c of needed) if (!(c.key in next)) next[c.key] = '';
+          return next;
+        });
+        setSuccess(`Installed "${data.profileName}"${versionLabel} — but credentials are still required before it can be applied.`);
+        toast.success(`Installed "${data.profileName}"${versionLabel} (credentials needed)`);
+      } else {
+        setSuccess(`Installed "${data.profileName}"${versionLabel}.`);
+        setMissingCreds([]);
+        toast.success(`Installed profile "${data.profileName}"${versionLabel}`);
+      }
       onImported(data.profileName);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -228,6 +294,29 @@ export default function ImportProfileDialog({
               />
               Force overwrite if a profile with the same name exists
             </label>
+
+            {missingCreds.length > 0 && (
+              <div className="flex flex-col gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-3">
+                <div className="text-xs font-medium text-amber-900">
+                  Credentials required
+                </div>
+                <div className="text-[11px] text-amber-800">
+                  This profile bundles MCPs that need these values. Fill them in and click {mode === 'file' ? 'Import' : 'Install'} again.
+                </div>
+                {missingCreds.map((key) => (
+                  <label key={key} className="flex flex-col gap-1 text-xs text-amber-900">
+                    <code className="font-mono">{key}</code>
+                    <input
+                      type="password"
+                      value={creds[key] ?? ''}
+                      onChange={(e) => setCreds((prev) => ({ ...prev, [key]: e.target.value }))}
+                      disabled={busy}
+                      className="rounded-md border border-amber-200 bg-white px-2 py-1.5 text-xs text-zinc-900 focus:border-amber-400 focus:outline-none"
+                    />
+                  </label>
+                ))}
+              </div>
+            )}
 
             {error && (
               <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-800">

@@ -7,6 +7,7 @@ import YAML from 'yaml';
 import { ProfileError } from '../../errors.js';
 import type {
   AgentName,
+  McpServerConfig,
   PortableProfileManifest,
   PortableUserSkillSnapshot,
   SyncResult,
@@ -51,6 +52,7 @@ export interface ProfileApplyService {
   execute(options: ApplyOptions): Promise<{
     backups: Array<{ agent: AgentName; profileName: string }>;
     applied: ApplyResult;
+    unresolvedCredentials: string[];
   }>;
 }
 
@@ -89,6 +91,8 @@ export function createProfileApplyService(
           `Profile "${profile.name}" includes remote MCP "${remoteMcpName}". Remote MCP apply is not supported yet.`
         );
       }
+
+      const unresolvedCredentials = findUnresolvedCredentialPlaceholders(profile.mcps);
 
       const isPartial = options.items !== undefined && options.items.length > 0;
       const shouldBackup = options.backup ?? !isPartial;
@@ -186,7 +190,7 @@ export function createProfileApplyService(
         });
       }
 
-      return { backups, applied };
+      return { backups, applied, unresolvedCredentials };
     },
   };
 }
@@ -257,4 +261,29 @@ async function readProfileManifest(
   } catch {
     return null;
   }
+}
+
+const CREDENTIAL_PLACEHOLDER_PATTERN = /\$\{\s*credentials\.([^}\s]+)\s*\}/g;
+
+function findUnresolvedCredentialPlaceholders(
+  mcps: Record<string, McpServerConfig>
+): string[] {
+  const keys = new Set<string>();
+  const visit = (value: unknown) => {
+    if (typeof value === 'string') {
+      for (const match of value.matchAll(CREDENTIAL_PLACEHOLDER_PATTERN)) {
+        keys.add(match[1]);
+      }
+      return;
+    }
+    if (Array.isArray(value)) {
+      for (const item of value) visit(item);
+      return;
+    }
+    if (value && typeof value === 'object') {
+      for (const item of Object.values(value)) visit(item);
+    }
+  };
+  visit(mcps);
+  return Array.from(keys).sort();
 }
