@@ -333,4 +333,105 @@ describe('createProfileApplyService', () => {
       else process.env.BRAINCTL_HOME = originalBrainctlHome;
     }
   });
+
+  it('applies skills to both user and project scopes per manifest', async () => {
+    const tempHome = await mkdtemp(path.join(os.tmpdir(), 'brainctl-apply-mixed-home-'));
+    const tempProject = await mkdtemp(path.join(os.tmpdir(), 'brainctl-apply-mixed-proj-'));
+    tempDirs.push(tempHome, tempProject);
+    const originalHome = process.env.HOME;
+    const originalBrainctlHome = process.env.BRAINCTL_HOME;
+    process.env.HOME = tempHome;
+    process.env.BRAINCTL_HOME = tempProject;
+
+    try {
+      const folder = path.join(tempProject, '.brainctl', 'profiles', 'mixed');
+      await mkdir(path.join(folder, 'skills', 'user-thing'), { recursive: true });
+      await writeFile(
+        path.join(folder, 'skills', 'user-thing', 'SKILL.md'),
+        '---\nname: user-thing\n---\n',
+        'utf8'
+      );
+      await mkdir(path.join(folder, 'project-skills', 'proj-thing'), { recursive: true });
+      await writeFile(
+        path.join(folder, 'project-skills', 'proj-thing', 'SKILL.md'),
+        '---\nname: proj-thing\n---\n',
+        'utf8'
+      );
+      await writeFile(
+        path.join(folder, 'manifest.yaml'),
+        [
+          'schemaVersion: 3',
+          'profileName: mixed',
+          'userSkills:',
+          '  - agent: claude',
+          '    name: user-thing',
+          '    archivePath: skills/user-thing',
+          '  - agent: claude',
+          '    name: proj-thing',
+          '    archivePath: project-skills/proj-thing',
+          '    scope: project',
+        ].join('\n'),
+        'utf8'
+      );
+
+      const profileService: ProfileService = {
+        async list() {
+          return { profiles: ['mixed'] };
+        },
+        async get() {
+          return { name: 'mixed', skills: {}, mcps: {}, memory: { paths: [] } };
+        },
+        async create() {
+          return { profilePath: '' };
+        },
+        async update() {},
+        async delete() {},
+        async getMetaConfig() {
+          return { agents: ['claude'] };
+        },
+      };
+
+      const writer: AgentConfigWriter = {
+        async write() {
+          return { configPath: '/tmp/c', backedUpTo: null };
+        },
+        async restore() {
+          return { restoredFrom: '' };
+        },
+      };
+      const snapshotService: ProfileSnapshotService = {
+        async execute() {
+          return { profilePath: '' };
+        },
+      };
+
+      const service = createProfileApplyService({
+        profileService,
+        snapshotService,
+        writers: { claude: writer },
+      });
+
+      await service.execute({
+        cwd: tempProject,
+        profileName: 'mixed',
+        agents: ['claude'],
+      });
+
+      await expect(
+        readFile(path.join(tempHome, '.claude', 'skills', 'user-thing', 'SKILL.md'), 'utf8')
+      ).resolves.toContain('name: user-thing');
+      await expect(
+        readFile(path.join(tempProject, '.claude', 'skills', 'proj-thing', 'SKILL.md'), 'utf8')
+      ).resolves.toContain('name: proj-thing');
+      // proj-thing did NOT also go to user scope
+      await expect(
+        readFile(path.join(tempHome, '.claude', 'skills', 'proj-thing', 'SKILL.md'), 'utf8')
+      ).rejects.toThrow();
+    } finally {
+      if (originalHome === undefined) delete process.env.HOME;
+      else process.env.HOME = originalHome;
+      if (originalBrainctlHome === undefined) delete process.env.BRAINCTL_HOME;
+      else process.env.BRAINCTL_HOME = originalBrainctlHome;
+    }
+  });
 });

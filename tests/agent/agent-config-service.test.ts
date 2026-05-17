@@ -123,4 +123,68 @@ describe('agent config service', () => {
       },
     });
   });
+
+  describe('moveSkillScope (claude)', () => {
+    it('moves a user-scope skill directory into project scope', async () => {
+      const cwd = await mkdtemp(path.join(os.tmpdir(), 'brainctl-move-cwd-'));
+      const userSkill = path.join(homeDir, '.claude', 'skills', 'lint');
+      await mkdir(userSkill, { recursive: true });
+      await writeFile(path.join(userSkill, 'SKILL.md'), '---\nname: lint\n---\n', 'utf8');
+
+      const service = createAgentConfigService();
+      await service.moveSkillScope({
+        cwd,
+        agent: 'claude',
+        skillName: 'lint',
+        fromScope: 'user',
+        toScope: 'project',
+      });
+
+      const newPath = path.join(cwd, '.claude', 'skills', 'lint', 'SKILL.md');
+      await expect(readFile(newPath, 'utf8')).resolves.toContain('name: lint');
+      await expect(readFile(path.join(userSkill, 'SKILL.md'), 'utf8')).rejects.toThrow();
+
+      // Idempotent: running again with the same args succeeds (already at dest).
+      await service.moveSkillScope({
+        cwd,
+        agent: 'claude',
+        skillName: 'lint',
+        fromScope: 'user',
+        toScope: 'project',
+      });
+    });
+
+    it('moves a project-scope skill into user scope', async () => {
+      const cwd = await mkdtemp(path.join(os.tmpdir(), 'brainctl-move-cwd2-'));
+      const projSkill = path.join(cwd, '.claude', 'skills', 'fmt');
+      await mkdir(projSkill, { recursive: true });
+      await writeFile(path.join(projSkill, 'SKILL.md'), '---\nname: fmt\n---\n', 'utf8');
+
+      const service = createAgentConfigService();
+      await service.moveSkillScope({
+        cwd,
+        agent: 'claude',
+        skillName: 'fmt',
+        fromScope: 'project',
+        toScope: 'user',
+      });
+
+      const dest = path.join(homeDir, '.claude', 'skills', 'fmt', 'SKILL.md');
+      await expect(readFile(dest, 'utf8')).resolves.toContain('name: fmt');
+      await expect(readFile(path.join(projSkill, 'SKILL.md'), 'utf8')).rejects.toThrow();
+    });
+
+    it('rejects move-scope for codex or gemini', async () => {
+      const service = createAgentConfigService();
+      await expect(
+        service.moveSkillScope({
+          cwd: '/tmp',
+          agent: 'codex',
+          skillName: 'x',
+          fromScope: 'user',
+          toScope: 'project',
+        })
+      ).rejects.toThrow(/only supported for Claude/i);
+    });
+  });
 });

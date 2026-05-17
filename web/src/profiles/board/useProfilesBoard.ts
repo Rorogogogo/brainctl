@@ -598,9 +598,14 @@ export function useProfilesBoard() {
           }
 
           if (change.type === 'remove') {
-            await fetchJson(withCwd(`/api/agents/${change.agent}/skills/${encodeURIComponent(change.key)}`, activeProjectRef.current), {
-              method: 'DELETE',
-            });
+            const skillScope = change.scope === 'project' ? 'project' : 'user';
+            await fetchJson(
+              withCwd(
+                `/api/agents/${change.agent}/skills/${encodeURIComponent(change.key)}?scope=${skillScope}`,
+                activeProjectRef.current,
+              ),
+              { method: 'DELETE' },
+            );
             return;
           }
 

@@ -59,6 +59,66 @@ describe('installUserSkill', () => {
   });
 });
 
+describe('installUserSkill project scope', () => {
+  const tempDirs: string[] = [];
+
+  afterEach(async () => {
+    await Promise.all(tempDirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
+  });
+
+  it('writes project-scoped skills into <cwd>/.claude/skills/', async () => {
+    const tempHome = await mkdtemp(path.join(os.tmpdir(), 'brainctl-pscope-home-'));
+    const sourceDir = await mkdtemp(path.join(os.tmpdir(), 'brainctl-pscope-src-'));
+    const cwd = await mkdtemp(path.join(os.tmpdir(), 'brainctl-pscope-cwd-'));
+    tempDirs.push(tempHome, sourceDir, cwd);
+    const originalHome = process.env.HOME;
+    process.env.HOME = tempHome;
+
+    try {
+      await writeFile(
+        path.join(sourceDir, 'SKILL.md'),
+        ['---', 'name: lint', 'description: lint things', '---', '', 'body'].join('\n'),
+        'utf8'
+      );
+
+      await installUserSkill(
+        sourceDir,
+        { agent: 'claude', name: 'lint', archivePath: 'project-skills/lint', scope: 'project' },
+        'claude',
+        { cwd }
+      );
+
+      const installed = await readFile(
+        path.join(cwd, '.claude', 'skills', 'lint', 'SKILL.md'),
+        'utf8'
+      );
+      expect(installed).toContain('name: lint');
+
+      // Make sure it did NOT also land in the user-scope location.
+      await expect(
+        readFile(path.join(tempHome, '.claude', 'skills', 'lint', 'SKILL.md'), 'utf8')
+      ).rejects.toThrow();
+    } finally {
+      if (originalHome === undefined) delete process.env.HOME;
+      else process.env.HOME = originalHome;
+    }
+  });
+
+  it('throws when project scope is requested without a cwd', async () => {
+    const sourceDir = await mkdtemp(path.join(os.tmpdir(), 'brainctl-pscope-src2-'));
+    tempDirs.push(sourceDir);
+    await writeFile(path.join(sourceDir, 'SKILL.md'), '---\nname: x\n---\n', 'utf8');
+
+    await expect(
+      installUserSkill(
+        sourceDir,
+        { agent: 'claude', name: 'x', archivePath: 'project-skills/x', scope: 'project' },
+        'claude'
+      )
+    ).rejects.toThrow(/cwd/);
+  });
+});
+
 describe('installPlugin', () => {
   const tempDirs: string[] = [];
 

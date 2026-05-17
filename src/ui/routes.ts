@@ -1196,14 +1196,50 @@ export function createUiRouteHandler(
           }
 
           if (request.method === 'DELETE' && skillKey) {
+            const scopeParam = url.searchParams.get('scope');
+            const scope: 'user' | 'project' = scopeParam === 'project' ? 'project' : 'user';
             try {
               await agentConfigService.removeSkill({
                 agent: agentName,
                 skillName: skillKey,
+                scope,
+                cwd: resolveCwd(request, dependencies.cwd),
               });
               return sendJson(response, 200, { ok: true });
             } catch (error) {
               return sendHandledError(response, error, 'Failed to remove skill');
+            }
+          }
+
+          if (request.method === 'PATCH' && skillKey) {
+            const body = await readJsonBody(request);
+            if (!body.ok) {
+              return sendJson(response, 400, { error: 'Invalid JSON body' });
+            }
+            const data = body.value as {
+              fromScope?: string;
+              toScope?: string;
+              fromProjectPath?: string;
+              toProjectPath?: string;
+            };
+            const fromScope: 'user' | 'project' = data.fromScope === 'project' ? 'project' : 'user';
+            const toScope: 'user' | 'project' = data.toScope === 'project' ? 'project' : 'user';
+            if (fromScope === toScope) {
+              return sendJson(response, 400, { error: 'Source and destination must differ' });
+            }
+            try {
+              await agentConfigService.moveSkillScope({
+                cwd: resolveCwd(request, dependencies.cwd),
+                agent: agentName,
+                skillName: skillKey,
+                fromScope,
+                toScope,
+                fromProjectPath: typeof data.fromProjectPath === 'string' ? data.fromProjectPath : undefined,
+                toProjectPath: typeof data.toProjectPath === 'string' ? data.toProjectPath : undefined,
+              });
+              return sendJson(response, 200, { ok: true });
+            } catch (error) {
+              return sendHandledError(response, error, 'Failed to move skill scope');
             }
           }
 

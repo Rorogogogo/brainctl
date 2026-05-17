@@ -391,15 +391,25 @@ function collectAgentExtras(agentConfig: AgentLiveConfig): {
       continue;
     }
 
-    if (skill.kind === 'skill' && skill.source === 'local') {
+    if (skill.kind === 'skill' && (skill.source === 'local' || skill.source === 'linked')) {
       if (pluginOwnedSkillNames.has(skill.name)) continue;
-      const localSkillDir = path.join(homedir(), `.${agentConfig.agent}`, 'skills', skill.name);
-      const archivePath = `skills/${sanitizePackName(skill.name)}`;
+      const scope = skill.scope ?? 'user';
+      // Project-scoped skills carry their absolute installPath; user-scoped
+      // skills live at the well-known home-rooted location.
+      const localSkillDir = skill.installPath
+        ?? path.join(homedir(), `.${agentConfig.agent}`, 'skills', skill.name);
+      // Disambiguate project vs user skills with the same name in the archive
+      // by prefixing the project-skill bucket.
+      const archivePath =
+        scope === 'project'
+          ? `project-skills/${sanitizePackName(skill.name)}`
+          : `skills/${sanitizePackName(skill.name)}`;
       bundledUserSkills.set(archivePath, localSkillDir);
       userSkills.push({
         agent: agentConfig.agent,
         name: skill.name,
         archivePath,
+        ...(scope === 'project' ? { scope: 'project' as const } : {}),
       });
     }
   }

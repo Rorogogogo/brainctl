@@ -20,6 +20,8 @@ export interface SkillPreflightService {
     targetAgent: AgentName;
     skillName: string;
     source?: string;
+    sourceScope?: 'user' | 'project';
+    sourceCwd?: string;
   }): Promise<SkillPreflightResult>;
 }
 
@@ -46,7 +48,12 @@ export function createSkillPreflightService(
         return { ok: false, checks };
       }
 
-      const sourceDir = getSkillDir(options.sourceAgent, options.skillName);
+      const sourceDir = getSkillDir(
+        options.sourceAgent,
+        options.skillName,
+        options.sourceScope ?? 'user',
+        options.sourceCwd
+      );
       const exists = await pathExists(sourceDir);
       checks.push({
         label: 'Source',

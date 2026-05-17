@@ -53,6 +53,11 @@ export interface PortableUserSkillSnapshot {
   agent: AgentName;
   name: string;
   archivePath: string;
+  /**
+   * Scope where this skill should be (re)installed. Defaults to 'user' when
+   * absent (legacy manifests / non-Claude agents).
+   */
+  scope?: 'user' | 'project';
 }
 
 export interface PortableProfileManifest {

@@ -1,4 +1,4 @@
-import { copyFile, cp, mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
+import { copyFile, cp, mkdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import path from 'node:path';
 
@@ -51,10 +51,25 @@ export interface AgentConfigService {
     sourceAgent: AgentName;
     targetAgent: AgentName;
     skillName: string;
+    sourceScope?: 'user' | 'project';
+    targetScope?: 'user' | 'project';
+    sourceCwd?: string;
+    targetCwd?: string;
   }): Promise<void>;
   removeSkill(options: {
     agent: AgentName;
     skillName: string;
+    scope?: 'user' | 'project';
+    cwd?: string;
+  }): Promise<void>;
+  moveSkillScope(options: {
+    cwd: string;
+    agent: AgentName;
+    skillName: string;
+    fromScope: 'user' | 'project';
+    toScope: 'user' | 'project';
+    fromProjectPath?: string;
+    toProjectPath?: string;
   }): Promise<void>;
 }
 
@@ -189,11 +204,15 @@ export function createAgentConfigService(
 
     async copySkill(options) {
       const { sourceAgent, targetAgent, skillName } = options;
+      const sourceScope = options.sourceScope ?? 'user';
+      const targetScope = options.targetScope ?? 'user';
       const preflight = await skillPreflightService.execute({
         sourceAgent,
         targetAgent,
         skillName,
         source: 'local',
+        sourceScope,
+        sourceCwd: options.sourceCwd,
       });
       const firstError = preflight.checks.find((check) => check.status === 'error');
       if (firstError) {
@@ -202,16 +221,53 @@ export function createAgentConfigService(
         );
       }
 
-      const sourceDir = getSkillDir(sourceAgent, skillName);
-      const targetDir = getSkillDir(targetAgent, skillName);
+      const sourceDir = getSkillDir(sourceAgent, skillName, sourceScope, options.sourceCwd);
+      const targetDir = getSkillDir(targetAgent, skillName, targetScope, options.targetCwd);
       await mkdir(path.dirname(targetDir), { recursive: true });
       await cp(sourceDir, targetDir, { recursive: true });
     },
 
     async removeSkill(options) {
       const { agent, skillName } = options;
-      const skillDir = getSkillDir(agent, skillName);
+      const scope = options.scope ?? 'user';
+      const skillDir = getSkillDir(agent, skillName, scope, options.cwd);
       await rm(skillDir, { recursive: true, force: true });
+    },
+
+    async moveSkillScope(options) {
+      const { cwd, agent, skillName, fromScope, toScope, fromProjectPath, toProjectPath } = options;
+      if (agent !== 'claude') {
+        throw new ValidationError(
+          `Skill scope changes are only supported for Claude (codex/gemini have no project-scoped skills).`
+        );
+      }
+      const fromCwd = fromScope === 'project' ? (fromProjectPath ?? cwd) : cwd;
+      const toCwd = toScope === 'project' ? (toProjectPath ?? cwd) : cwd;
+      if (fromScope === toScope && fromCwd === toCwd) return;
+
+      const fromDir = getSkillDir(agent, skillName, fromScope, fromCwd);
+      const toDir = getSkillDir(agent, skillName, toScope, toCwd);
+
+      try {
+        await stat(fromDir);
+      } catch {
+        // Idempotent: if the source is already gone but the destination
+        // exists, treat the move as already done.
+        try {
+          await stat(toDir);
+          return;
+        } catch {
+          throw new ValidationError(
+            `Skill "${skillName}" not found in Claude ${fromScope} scope at ${fromDir}.`
+          );
+        }
+      }
+
+      await mkdir(path.dirname(toDir), { recursive: true });
+      // If the destination already exists, replace it (idempotent overwrite).
+      await rm(toDir, { recursive: true, force: true });
+      await cp(fromDir, toDir, { recursive: true });
+      await rm(fromDir, { recursive: true, force: true });
     },
   };
 }
