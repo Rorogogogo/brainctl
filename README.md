@@ -7,7 +7,7 @@
 *A cross-agent command centre for Claude Code, Codex, and Gemini CLI — CLI + MCP server + drag-and-drop web dashboard.*
 
 [![npm version](https://img.shields.io/npm/v/brainctl)](https://www.npmjs.com/package/brainctl)
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://opensource.org/licenses/MIT)
+[![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL--3.0-blue.svg)](LICENSE) [![Commercial License](https://img.shields.io/badge/license-Commercial-orange.svg)](COMMERCIAL.md)
 [![Build](https://img.shields.io/github/actions/workflow/status/Rorogogogo/brainctl/deploy.yml?branch=main)](https://github.com/Rorogogogo/brainctl/actions)
 [![Stars](https://img.shields.io/github/stars/Rorogogogo/brainctl?style=social)](https://github.com/Rorogogogo/brainctl)
 
@@ -375,7 +375,7 @@ Issues and PRs welcome. See [`CLAUDE.md`](CLAUDE.md) for the codebase map an age
 
 ## 📄 License
 
-[MIT](https://opensource.org/licenses/MIT) — do whatever you want.
+Dual-licensed: **AGPL-3.0** (free for open-source / personal use, see [LICENSE](LICENSE)) and **Commercial** (closed-source / proprietary / hosted SaaS, see [COMMERCIAL.md](COMMERCIAL.md)).
 
 ## License
 
