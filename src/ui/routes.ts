@@ -496,7 +496,7 @@ export function createUiRouteHandler(
             ? source.agent
             : data?.agent;
         const normalizedAgent =
-          agent === 'claude' || agent === 'codex' || agent === 'gemini' ? agent : undefined;
+          agent === 'claude' || agent === 'codex' || agent === 'antigravity' ? (agent as AgentName) : undefined;
         const name =
           source?.source === 'profile'
             ? source.name
@@ -860,7 +860,7 @@ export function createUiRouteHandler(
           return sendJson(response, 400, { error: 'Invalid JSON body' });
         }
         const data = (body.value ?? {}) as { agent?: AgentName; as?: string };
-        if (data.agent !== 'claude' && data.agent !== 'codex' && data.agent !== 'gemini') {
+        if (data.agent !== 'claude' && data.agent !== 'codex' && data.agent !== 'antigravity') {
           return sendJson(response, 400, { error: 'Invalid agent' });
         }
         const profileName = data.as ?? defaultBackupProfileName(data.agent);
@@ -1020,7 +1020,7 @@ export function createUiRouteHandler(
         }
 
         // Agent MCP routes: /api/agents/:name/mcps(/:key)
-        const agentMcpCheckMatch = url.pathname.match(/^\/api\/agents\/(claude|codex|gemini)\/mcps\/check$/);
+        const agentMcpCheckMatch = url.pathname.match(/^\/api\/agents\/(claude|codex|antigravity)\/mcps\/check$/);
         if (agentMcpCheckMatch) {
           const agentName = agentMcpCheckMatch[1] as AgentName;
 
@@ -1052,7 +1052,7 @@ export function createUiRouteHandler(
           return sendJson(response, 200, result);
         }
 
-        const agentMcpMatch = url.pathname.match(/^\/api\/agents\/(claude|codex|gemini)\/mcps(?:\/(.+))?$/);
+        const agentMcpMatch = url.pathname.match(/^\/api\/agents\/(claude|codex|antigravity)\/mcps(?:\/(.+))?$/);
         if (agentMcpMatch) {
           const agentName = agentMcpMatch[1] as AgentName;
           const mcpKey = agentMcpMatch[2] ? decodeURIComponent(agentMcpMatch[2]) : null;
@@ -1142,7 +1142,7 @@ export function createUiRouteHandler(
         }
 
         // Agent skill routes: /api/agents/:name/skills(/:key)
-        const agentSkillCheckMatch = url.pathname.match(/^\/api\/agents\/(claude|codex|gemini)\/skills\/check$/);
+        const agentSkillCheckMatch = url.pathname.match(/^\/api\/agents\/(claude|codex|antigravity)\/skills\/check$/);
         if (agentSkillCheckMatch) {
           const agentName = agentSkillCheckMatch[1] as AgentName;
 
@@ -1169,7 +1169,7 @@ export function createUiRouteHandler(
           return sendJson(response, 200, result);
         }
 
-        const agentSkillMatch = url.pathname.match(/^\/api\/agents\/(claude|codex|gemini)\/skills(?:\/(.+))?$/);
+        const agentSkillMatch = url.pathname.match(/^\/api\/agents\/(claude|codex|antigravity)\/skills(?:\/(.+))?$/);
         if (agentSkillMatch) {
           const agentName = agentSkillMatch[1] as AgentName;
           const skillKey = agentSkillMatch[2] ? decodeURIComponent(agentSkillMatch[2]) : null;
@@ -1259,7 +1259,7 @@ export function createUiRouteHandler(
           return sendJson(response, 405, { error: 'Method not allowed' });
         }
 
-        const agentPluginCheckMatch = url.pathname.match(/^\/api\/agents\/(claude|codex|gemini)\/plugins\/check$/);
+        const agentPluginCheckMatch = url.pathname.match(/^\/api\/agents\/(claude|codex|antigravity)\/plugins\/check$/);
         if (agentPluginCheckMatch) {
           const agentName = agentPluginCheckMatch[1] as AgentName;
 
@@ -1297,7 +1297,7 @@ export function createUiRouteHandler(
           return sendJson(response, 200, result);
         }
 
-        const agentPluginMatch = url.pathname.match(/^\/api\/agents\/(claude|codex|gemini)\/plugins(?:\/(.+))?$/);
+        const agentPluginMatch = url.pathname.match(/^\/api\/agents\/(claude|codex|antigravity)\/plugins(?:\/(.+))?$/);
         if (agentPluginMatch) {
           const agentName = agentPluginMatch[1] as AgentName;
           const pluginName = agentPluginMatch[2] ? decodeURIComponent(agentPluginMatch[2]) : null;

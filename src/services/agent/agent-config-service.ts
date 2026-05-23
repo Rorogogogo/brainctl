@@ -7,7 +7,7 @@ import type { AgentName } from '../../types.js';
 import {
   createClaudeReader,
   createCodexReader,
-  createGeminiReader,
+  createAntigravityReader,
   type AgentConfigReader,
   type AgentLiveConfig,
   type AgentMcpEntry,
@@ -81,7 +81,7 @@ interface AgentConfigServiceDependencies {
 const readers: Record<AgentName, AgentConfigReader> = {
   claude: createClaudeReader(),
   codex: createCodexReader(),
-  gemini: createGeminiReader(),
+  antigravity: createAntigravityReader(),
 };
 
 export function createAgentConfigService(
@@ -95,7 +95,7 @@ export function createAgentConfigService(
       const results = await Promise.all([
         readers.claude.read(options),
         readers.codex.read(options),
-        readers.gemini.read(options),
+        readers.antigravity.read(options),
       ]);
       return results;
     },
@@ -128,9 +128,9 @@ export function createAgentConfigService(
             if (remoteEntry) { state.remoteMcpServers[key] = remoteEntry; } else { state.mcpServers[key] = entry!; }
           });
         }
-      } else if (agent === 'gemini') {
+      } else if (agent === 'antigravity') {
         if (scope === 'project') {
-          await mutateBrainctlProjectMcps(cwd, 'gemini', (state) => {
+          await mutateBrainctlProjectMcps(cwd, 'antigravity', (state) => {
             delete state.mcpServers[key];
             delete state.remoteMcpServers[key];
             if (remoteEntry) { state.remoteMcpServers[key] = remoteEntry; } else { state.mcpServers[key] = entry!; }
@@ -154,9 +154,9 @@ export function createAgentConfigService(
         } else {
           await mutateCodexConfig(cwd, (state) => { delete state.mcpServers[key]; delete state.remoteMcpServers[key]; });
         }
-      } else if (agent === 'gemini') {
+      } else if (agent === 'antigravity') {
         if (scope === 'project') {
-          await mutateBrainctlProjectMcps(cwd, 'gemini', (state) => { delete state.mcpServers[key]; delete state.remoteMcpServers[key]; });
+          await mutateBrainctlProjectMcps(cwd, 'antigravity', (state) => { delete state.mcpServers[key]; delete state.remoteMcpServers[key]; });
         } else {
           await mutateGeminiConfig(cwd, (servers) => { delete servers[key]; });
         }
@@ -238,7 +238,7 @@ export function createAgentConfigService(
       const { cwd, agent, skillName, fromScope, toScope, fromProjectPath, toProjectPath } = options;
       if (agent !== 'claude') {
         throw new ValidationError(
-          `Skill scope changes are only supported for Claude (codex/gemini have no project-scoped skills).`
+          `Skill scope changes are only supported for Claude (codex/antigravity have no project-scoped skills).`
         );
       }
       const fromCwd = fromScope === 'project' ? (fromProjectPath ?? cwd) : cwd;
@@ -471,7 +471,7 @@ async function mutateGeminiConfig(
   _cwd: string,
   mutate: (servers: Record<string, unknown>) => void
 ): Promise<void> {
-  const configPath = path.join(homedir(), '.gemini', 'settings.json');
+  const configPath = path.join(homedir(), '.gemini', 'antigravity-cli', 'mcp_config.json');
 
   let existing: Record<string, unknown> = {};
   try {
@@ -509,7 +509,7 @@ function toGeminiRemoteEntry(entry: PortableRemoteMcpMetadata): Record<string, u
 
 async function mutateBrainctlProjectMcps(
   cwd: string,
-  agent: 'codex' | 'gemini',
+  agent: 'codex' | 'antigravity',
   mutate: (state: { mcpServers: Record<string, AgentMcpEntry>; remoteMcpServers: Record<string, PortableRemoteMcpMetadata> }) => void
 ): Promise<void> {
   const filePath = path.join(cwd, '.brainctl', 'project-mcps.json');

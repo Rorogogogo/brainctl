@@ -22,7 +22,7 @@ import ConfirmDialog from '../components/ConfirmDialog';
 import { Tooltip } from '../components/Tooltip';
 import { toast } from '../components/ui/toast.js';
 
-const AGENTS = ['claude', 'codex', 'gemini'] as const;
+const AGENTS = ['claude', 'codex', 'antigravity'] as const;
 type Agent = typeof AGENTS[number];
 type ItemType = 'mcp' | 'plugin' | 'skill';
 

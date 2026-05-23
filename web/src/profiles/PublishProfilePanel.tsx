@@ -14,7 +14,7 @@ import { AgentLogo } from '../components/agent-brand';
 import { refreshAuthStatus, useAuthStatus } from '../lib/auth-status.js';
 import { toast } from '../components/ui/toast.js';
 
-type Agent = 'claude' | 'codex' | 'gemini';
+type Agent = 'claude' | 'codex' | 'antigravity';
 type PublishMode = 'upload' | 'github';
 
 interface ProfileContents {

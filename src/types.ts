@@ -1,4 +1,4 @@
-export type AgentName = 'claude' | 'codex' | 'gemini';
+export type AgentName = 'claude' | 'codex' | 'antigravity';
 
 export type ErrorCategory = 'user' | 'system';
 export type DiagnosticStatus = 'ok' | 'warn' | 'error';

@@ -4,7 +4,7 @@
 
 **One AI setup. Three agents. Zero reconfiguration.**
 
-*A cross-agent command centre for Claude Code, Codex, and Gemini CLI — CLI + MCP server + drag-and-drop web dashboard.*
+*A cross-agent command centre for Claude Code, Codex, and Antigravity CLI — CLI + MCP server + drag-and-drop web dashboard.*
 
 [![npm version](https://img.shields.io/npm/v/brainctl)](https://www.npmjs.com/package/brainctl)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://opensource.org/licenses/MIT)
@@ -19,7 +19,7 @@
 
 > **Zero install required.** Brainctl runs straight from npx — register it as an MCP server in your agent and you're done. No global install, no bin to manage.
 
-> **Prerequisite:** at least one of `claude`, `codex`, or `gemini` installed and on your `PATH`.
+> **Prerequisite:** at least one of `claude`, `codex`, or `antigravity` installed and on your `PATH`.
 
 ### 1. Register `brainctl` as an MCP server (pick your agents)
 
@@ -74,15 +74,15 @@ Restart your Codex session to pick it up.
 </details>
 
 <details open>
-<summary><b>🔵 Gemini CLI</b> — <code>~/.gemini/settings.json</code></summary>
+<summary><b>🔵 Antigravity CLI</b> — <code>~/.gemini/antigravity-cli/mcp_config.json</code></summary>
 
-Easiest: use the `gemini` CLI.
+Easiest: use the `antigravity` CLI.
 
 ```bash
-gemini mcp add -s user brainctl npx -y brainctl mcp
+antigravity mcp add -s user brainctl npx -y brainctl mcp
 ```
 
-Or edit `~/.gemini/settings.json` directly (merge into the top-level `mcpServers` object):
+Or edit `~/.gemini/antigravity-cli/mcp_config.json` directly:
 
 ```json
 {
@@ -95,7 +95,7 @@ Or edit `~/.gemini/settings.json` directly (merge into the top-level `mcpServers
 }
 ```
 
-Restart your Gemini session.
+Restart your Antigravity session.
 
 </details>
 
@@ -149,7 +149,7 @@ brainctl config unset apiBaseUrl
 
 ## ✨ Features
 
-- 🔀 **Multi-agent** — Claude Code, Codex, Gemini CLI from one config
+- 🔀 **Multi-agent** — Claude Code, Codex, Antigravity CLI from one config
 - 🖱️ **Drag-and-drop dashboard** — shuffle MCPs and skills between agents, staged + previewed before save
 - 🔌 **MCP server** — 22 tools any compatible agent can call
 - 📦 **Portable profiles** _(preview)_ — pack an entire agent setup (plugins + skills + MCPs) into a self-contained tarball
@@ -166,7 +166,7 @@ brainctl config unset apiBaseUrl
 
 ```
 ┌──────────────┐  ┌──────────────┐  ┌──────────────┐
-│    Claude    │  │    Codex     │  │    Gemini    │
+│    Claude    │  │    Codex     │  │ Antigravity  │
 │ ┌──────────┐ │  │ ┌──────────┐ │  │              │
 │ │ github   │◄├──┤►│ github   │ │  │  drop here   │
 │ │ brainctl │ │  │ │ brainctl │ │  │  to copy     │
@@ -175,7 +175,7 @@ brainctl config unset apiBaseUrl
 └──────────────┘  └──────────────┘  └──────────────┘
 ```
 
-The dashboard reads **live config files** (`~/.claude.json`, `~/.codex/config.toml`, `~/.gemini/settings.json`) and writes back atomically with timestamped backups.
+The dashboard reads **live config files** (`~/.claude.json`, `~/.codex/config.toml`, `~/.gemini/antigravity-cli/mcp_config.json`) and writes back atomically with timestamped backups.
 
 ---
 
@@ -219,7 +219,7 @@ brainctl ui
 ```bash
 brainctl run summarize ./notes.md --with claude
 brainctl run analyze   ./report.md --with codex --fallback claude
-brainctl run review    ./code.md   --with gemini
+brainctl run review    ./code.md   --with antigravity
 ```
 
 ---
@@ -290,7 +290,7 @@ mcps: {}
 │   INPUT     │  ← your file
 └─────────────┘
         ↓
-   Agent CLI (claude / codex / gemini)
+   Agent CLI (claude / codex / antigravity)
 ```
 
 ---
@@ -315,7 +315,7 @@ mcps: {}
 |---|---|---|---|
 | Claude | `~/.claude.json` | `mcpServers` + `projects[cwd].mcpServers` | `~/.claude/plugins/` + `~/.claude/skills/` |
 | Codex | `~/.codex/config.toml` | `[mcp_servers.*]` | `~/.codex/plugins/` + `~/.codex/skills/` |
-| Gemini | `~/.gemini/settings.json` | `mcpServers` | `~/.gemini/skills/` |
+| Antigravity | `~/.gemini/antigravity-cli/mcp_config.json` | `mcpServers` | `~/.gemini/skills/` |
 
 Writes are atomic (temp file → rename) and always leave a timestamped `.bak.*` behind.
 
@@ -361,7 +361,7 @@ Point your agent's MCP config at `node <repo>/dist/cli.js mcp` to iterate withou
 
 brainctl doesn't replace your AI tools — it sits **between you and them** as a thin orchestration layer:
 
-- You keep using Claude Code, Codex, and Gemini CLI directly.
+- You keep using Claude Code, Codex, and Antigravity CLI directly.
 - brainctl keeps the environment consistent across all of them.
 - Portable profiles make your setup shareable in one file.
 

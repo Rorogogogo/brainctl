@@ -14,10 +14,10 @@ import { AgentLogo } from '../components/agent-brand';
 import ConfirmDialog from '../components/ConfirmDialog';
 import { toast } from '../components/ui/toast.js';
 
-type Agent = 'claude' | 'codex' | 'gemini';
+type Agent = 'claude' | 'codex' | 'antigravity';
 type ItemType = 'mcp' | 'plugin' | 'skill';
 
-const ALL_AGENTS: Agent[] = ['claude', 'codex', 'gemini'];
+const ALL_AGENTS: Agent[] = ['claude', 'codex', 'antigravity'];
 
 interface ProfileContents {
   profile: {

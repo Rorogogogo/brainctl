@@ -62,7 +62,7 @@ export interface PendingChangeFailure {
 export const AGENT_LABELS: Record<string, string> = {
   claude: 'Claude',
   codex: 'Codex',
-  gemini: 'Gemini',
+  antigravity: 'Antigravity',
 };
 
 export function canStagePendingAddition(

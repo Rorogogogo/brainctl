@@ -11,7 +11,7 @@ import { createProfileRegistryInstallService } from '../services/profile/profile
 import { resolveBrainctlApiBaseUrl } from '../services/platform/brainctl-config-service.js';
 import type { AgentName } from '../types.js';
 
-const ALL_AGENTS: AgentName[] = ['claude', 'codex', 'gemini'];
+const ALL_AGENTS: AgentName[] = ['claude', 'codex', 'antigravity'];
 
 export interface ProfileCommandServices {
   profileService: ProfileService;
@@ -67,7 +67,7 @@ export function registerProfileCommand(program: Command, services: ProfileComman
   profileCmd
     .command('export')
     .argument('[name]', 'Profile name to export')
-    .option('-a, --agent <name>', 'Pack a live agent config instead (claude, codex, gemini)')
+    .option('-a, --agent <name>', 'Pack a live agent config instead (claude, codex, antigravity)')
     .option('-o, --output <path>', 'Output file or directory path')
     .option('-f, --format <format>', 'Output format: tarball (default) or folder', 'tarball')
     .option(
@@ -82,8 +82,8 @@ export function registerProfileCommand(program: Command, services: ProfileComman
         options: { agent?: string; output?: string; format?: string; credentials?: string }
       ) => {
         const agent =
-          options.agent === 'claude' || options.agent === 'codex' || options.agent === 'gemini'
-            ? options.agent
+          options.agent === 'claude' || options.agent === 'codex' || options.agent === 'antigravity'
+            ? (options.agent as AgentName)
             : undefined;
         if (!agent && !name) {
           throw new Error('Provide a profile name or --agent <name>.');
@@ -157,7 +157,7 @@ export function registerProfileCommand(program: Command, services: ProfileComman
     .argument('<name>', 'Profile name to apply')
     .option(
       '-a, --agent <list>',
-      'Comma-separated agents to target (claude, codex, gemini, or all)',
+      'Comma-separated agents to target (claude, codex, antigravity, or all)',
       'all'
     )
     .option(
@@ -331,12 +331,12 @@ export function registerProfileCommand(program: Command, services: ProfileComman
 
   profileCmd
     .command('snapshot')
-    .option('-a, --agent <name>', 'Agent to snapshot (claude, codex, gemini)')
+    .option('-a, --agent <name>', 'Agent to snapshot (claude, codex, antigravity)')
     .option('--as <name>', 'Profile name to write into (default: backup-<agent>-<timestamp>)')
     .description("Snapshot a live agent's MCPs+plugins+skills into a new profile folder")
     .action(async (options: { agent?: string; as?: string }) => {
       if (!options.agent || !ALL_AGENTS.includes(options.agent as AgentName)) {
-        throw new Error('Provide --agent <claude|codex|gemini>.');
+        throw new Error('Provide --agent <claude|codex|antigravity>.');
       }
       const agent = options.agent as AgentName;
       const { defaultBackupProfileName } = await import(
@@ -364,7 +364,7 @@ function parseAgentList(value: string): AgentName[] {
   const parts = value.split(',').map((s) => s.trim()).filter(Boolean);
   for (const p of parts) {
     if (!ALL_AGENTS.includes(p as AgentName)) {
-      throw new Error(`Invalid agent "${p}". Use claude, codex, gemini, or all.`);
+      throw new Error(`Invalid agent "${p}". Use claude, codex, antigravity, or all.`);
     }
   }
   return parts as AgentName[];

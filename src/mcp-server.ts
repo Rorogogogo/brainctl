@@ -27,7 +27,7 @@ import {
 import { createStatusService } from './services/platform/status-service.js';
 import type { AgentName, ProfileConfig } from './types.js';
 
-const ALL_AGENTS: AgentName[] = ['claude', 'codex', 'gemini'];
+const ALL_AGENTS: AgentName[] = ['claude', 'codex', 'antigravity'];
 
 const packageVersion = JSON.parse(
   readFileSync(new URL('../package.json', import.meta.url), 'utf8')
@@ -100,7 +100,7 @@ export function createMcpServer(
     parameters: z.object({
       name: z.string().describe('Profile name to apply'),
       agents: z
-        .array(z.enum(['claude', 'codex', 'gemini']))
+        .array(z.enum(['claude', 'codex', 'antigravity']))
         .optional()
         .describe('Agents to target (default: all three)'),
       items: z
@@ -142,7 +142,7 @@ export function createMcpServer(
     description:
       "Snapshot a live agent's MCPs+plugins+skills into a new profile folder. Useful for backups or capturing your current setup as a shareable profile.",
     parameters: z.object({
-      agent: z.enum(['claude', 'codex', 'gemini']),
+      agent: z.enum(['claude', 'codex', 'antigravity']),
       as: z
         .string()
         .optional()
@@ -281,7 +281,7 @@ export function createMcpServer(
     description: 'Export a profile as a portable tarball. Packages the profile config and bundled MCP source code for sharing.',
     parameters: z.object({
       name: z.string().optional().describe('Profile name to export'),
-      agent: z.enum(['claude', 'codex', 'gemini']).optional().describe('Pack a live agent config instead of a saved profile'),
+      agent: z.enum(['claude', 'codex', 'antigravity']).optional().describe('Pack a live agent config instead of a saved profile'),
       output_path: z.string().optional().describe('Output file path (defaults to <name>.tar.gz in cwd)'),
     }),
     execute: async (args, context) => {
@@ -512,7 +512,7 @@ export function createMcpServer(
 
   server.addTool({
     name: 'brainctl_read_agent_configs',
-    description: 'Read the live MCP configs from all agents (Claude, Codex, Gemini). Shows what is actually configured in each agent right now, by reading their real config files.',
+    description: 'Read the live MCP configs from all agents (Claude, Codex, Antigravity). Shows what is actually configured in each agent right now, by reading their real config files.',
     parameters: z.object({}),
     execute: async () => {
       const agentConfigService = createAgentConfigService();
@@ -525,7 +525,7 @@ export function createMcpServer(
     name: 'brainctl_add_agent_mcp',
     description: 'Add or overwrite an MCP server entry in a specific agent config. Writes directly to the agent config file (e.g., ~/.claude.json).',
     parameters: z.object({
-      agent: z.enum(['claude', 'codex', 'gemini']).describe('Target agent'),
+      agent: z.enum(['claude', 'codex', 'antigravity']).describe('Target agent'),
       key: z.string().describe('MCP server name/key'),
       command: z.string().describe('Command to run the MCP server'),
       args: z.array(z.string()).default([]).describe('Arguments for the command'),
@@ -546,7 +546,7 @@ export function createMcpServer(
     name: 'brainctl_move_agent_mcp_scope',
     description: 'Move an MCP server entry between global and project scope in a specific agent config (e.g., move from ~/.claude.json top-level mcpServers to projects[cwd].mcpServers, or vice versa).',
     parameters: z.object({
-      agent: z.enum(['claude', 'codex', 'gemini']).describe('Target agent'),
+      agent: z.enum(['claude', 'codex', 'antigravity']).describe('Target agent'),
       key: z.string().describe('MCP server name/key to move'),
       fromScope: z.enum(['global', 'project']).describe('Current scope of the MCP'),
       toScope: z.enum(['global', 'project']).describe('Destination scope'),
@@ -571,9 +571,9 @@ export function createMcpServer(
   server.addTool({
     name: 'brainctl_move_agent_skill_scope',
     description:
-      'Move a Claude skill directory between user scope (~/.claude/skills/<name>) and project scope (<cwd>/.claude/skills/<name>). Idempotent. Only supported for Claude — codex and gemini have no project-scoped skills concept.',
+      'Move a Claude skill directory between user scope (~/.claude/skills/<name>) and project scope (<cwd>/.claude/skills/<name>). Idempotent. Only supported for Claude — codex and antigravity have no project-scoped skills concept.',
     parameters: z.object({
-      agent: z.enum(['claude', 'codex', 'gemini']).describe('Target agent (only "claude" is supported)'),
+      agent: z.enum(['claude', 'codex', 'antigravity']).describe('Target agent (only "claude" is supported)'),
       name: z.string().describe('Skill directory name to move'),
       fromScope: z.enum(['user', 'project']).describe('Current scope of the skill'),
       toScope: z.enum(['user', 'project']).describe('Destination scope'),
@@ -605,7 +605,7 @@ export function createMcpServer(
     name: 'brainctl_remove_agent_mcp',
     description: 'Remove an MCP server entry from a specific agent config.',
     parameters: z.object({
-      agent: z.enum(['claude', 'codex', 'gemini']).describe('Target agent'),
+      agent: z.enum(['claude', 'codex', 'antigravity']).describe('Target agent'),
       key: z.string().describe('MCP server name/key to remove'),
     }),
     execute: async (args) => {

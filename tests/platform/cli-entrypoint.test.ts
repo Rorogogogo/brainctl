@@ -209,7 +209,7 @@ describe('registry profile commands', () => {
     );
     const program = createProgram();
 
-    await program.parseAsync(['node', 'brainctl', 'profile', 'install', 'review-profile'], {
+    await program.parseAsync(['node', 'brainctl', 'profile', 'install', '--descriptor-only', 'review-profile'], {
       from: 'node',
     });
 

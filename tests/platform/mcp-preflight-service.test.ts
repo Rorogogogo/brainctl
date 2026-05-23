@@ -59,7 +59,7 @@ describe('mcp preflight service', () => {
 
     const result = await service.execute({
       cwd: '/tmp/project',
-      agent: 'gemini',
+      agent: 'antigravity',
       key: 'local-server',
       entry: {
         command: 'node',
@@ -158,7 +158,7 @@ describe('mcp preflight service', () => {
 
     const result = await service.execute({
       cwd: '/tmp/project',
-      agent: 'gemini',
+      agent: 'antigravity',
       key: 'containerized',
       entry: {
         command: 'docker',

@@ -93,7 +93,7 @@ export function formatCompatibilityWarnings(
     });
   }
 
-  if (context.targetAgent === 'gemini' && artifacts.claudeAgents.length > 0) {
+  if (context.targetAgent === 'antigravity' && artifacts.claudeAgents.length > 0) {
     warnings.push({
       label: 'Subagents',
       status: 'warn',
@@ -101,7 +101,7 @@ export function formatCompatibilityWarnings(
     });
   }
 
-  if (context.targetAgent === 'gemini' && artifacts.hasCommands) {
+  if (context.targetAgent === 'antigravity' && artifacts.hasCommands) {
     warnings.push({
       label: 'Slash commands',
       status: 'warn',

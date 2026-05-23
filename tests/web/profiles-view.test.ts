@@ -73,7 +73,7 @@ describe('profiles view helpers', () => {
         skills: [{ name: 'notes', source: 'local' }],
       },
       {
-        agent: 'gemini',
+        agent: 'antigravity',
         configPath: '/tmp/gemini.json',
         exists: true,
         mcpServers: {},
@@ -86,13 +86,13 @@ describe('profiles view helpers', () => {
       id: 'change-1',
       type: 'add',
       category: 'skill',
-      agent: 'gemini',
+      agent: 'antigravity',
       key: 'notes',
       skillEntry: { name: 'notes', source: 'local' },
       sourceAgent: 'claude',
     });
 
-    expect(error).toBe('Skill "notes" already exists in Gemini. Remove it first before copying.');
+    expect(error).toBe('Skill "notes" already exists in Antigravity. Remove it first before copying.');
   });
 
   it('keeps failed changes staged after attempting to apply them', async () => {
@@ -112,7 +112,7 @@ describe('profiles view helpers', () => {
         id: 'change-2',
         type: 'remove',
         category: 'skill',
-        agent: 'gemini',
+        agent: 'antigravity',
         key: 'notes',
       },
     ];
@@ -221,7 +221,7 @@ describe('profiles view helpers', () => {
         skills: [],
       },
       {
-        agent: 'gemini',
+        agent: 'antigravity',
         configPath: '/tmp/gemini.json',
         exists: true,
         mcpServers: {},
@@ -234,7 +234,7 @@ describe('profiles view helpers', () => {
       id: 'change-1',
       type: 'add',
       category: 'mcp',
-      agent: 'gemini',
+      agent: 'antigravity',
       key: 'docs',
       remoteEntry: {
         transport: 'http',
@@ -259,7 +259,7 @@ describe('profiles view helpers', () => {
         id: 'change-2',
         type: 'remove',
         category: 'skill',
-        agent: 'gemini',
+        agent: 'antigravity',
         key: 'notes',
       },
       {
@@ -273,7 +273,7 @@ describe('profiles view helpers', () => {
 
     expect(buildChangeSummaryLines(changes)).toEqual([
       '+ [Plugin] frontend-design → Codex',
-      '- [Skill] notes from Gemini',
+      '- [Skill] notes from Antigravity',
       '+ [MCP] github → Claude',
     ]);
   });

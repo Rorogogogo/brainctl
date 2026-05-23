@@ -346,7 +346,7 @@ describe('plugin install service', () => {
     await expect(
       service.execute({
         cwd: '/tmp/project',
-        targetAgent: 'gemini',
+        targetAgent: 'antigravity',
         sourceAgent: 'claude',
         plugin: sourcePlugin,
       })
