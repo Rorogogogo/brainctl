@@ -43,7 +43,7 @@ export async function installPlugin(
     return;
   }
 
-  if (plugin.agent === 'gemini') {
+  if (plugin.agent === 'antigravity') {
     return;
   }
 

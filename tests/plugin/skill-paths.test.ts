@@ -27,19 +27,19 @@ describe('getSkillDir', () => {
     );
   });
 
-  it('throws when project scope is requested for codex or gemini', () => {
+  it('throws when project scope is requested for codex or antigravity', () => {
     expect(() => getSkillDir('codex', 'foo', 'project', '/repo')).toThrow(/project-scoped/i);
-    expect(() => getSkillDir('gemini', 'foo', 'project', '/repo')).toThrow(/project-scoped/i);
+    expect(() => getSkillDir('antigravity', 'foo', 'project', '/repo')).toThrow(/project-scoped/i);
   });
 
   it('throws when project scope is requested without a cwd', () => {
     expect(() => getSkillDir('claude', 'foo', 'project')).toThrow(/cwd is required/);
   });
 
-  it('keeps the user dirs for codex and gemini unchanged', () => {
+  it('keeps the user dirs for codex and antigravity unchanged', () => {
     mockHomedir.mockReturnValue('/h');
     expect(getSkillDir('codex', 'x')).toBe(path.join('/h', '.codex', 'skills', 'x'));
-    expect(getSkillDir('gemini', 'x')).toBe(path.join('/h', '.gemini', 'skills', 'x'));
+    expect(getSkillDir('antigravity', 'x')).toBe(path.join('/h', '.gemini', 'skills', 'x'));
   });
 
   // satisfy unused-imports guard

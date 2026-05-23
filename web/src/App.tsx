@@ -52,13 +52,13 @@ function DocsLink() {
   );
 }
 
-const AGENTS = ['claude', 'codex', 'gemini'] as const;
+const AGENTS = ['claude', 'codex', 'antigravity'] as const;
 type Agent = typeof AGENTS[number];
 
 const AGENT_LABELS: Record<Agent, string> = {
   claude: 'Claude',
   codex: 'Codex',
-  gemini: 'Gemini',
+  antigravity: 'Antigravity',
 };
 
 interface SnapshotState {
@@ -70,7 +70,7 @@ function SnapshotButtons() {
   const [state, setState] = useState<Record<Agent, SnapshotState>>({
     claude: { status: 'idle' },
     codex: { status: 'idle' },
-    gemini: { status: 'idle' },
+    antigravity: { status: 'idle' },
   });
 
   async function snapshot(agent: Agent) {

@@ -20,8 +20,8 @@ describe('profiles board dnd helpers', () => {
   });
 
   it('parses anchor drops', () => {
-    expect(parseDropId('gemini:plugins:anchor')).toEqual({
-      agent: 'gemini',
+    expect(parseDropId('antigravity:plugins:anchor')).toEqual({
+      agent: 'antigravity',
       category: 'plugin',
     });
   });

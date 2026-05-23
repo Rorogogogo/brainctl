@@ -14,7 +14,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { AgentLogo } from '../components/agent-brand';
 import { toast } from '../components/ui/toast.js';
 
-type Agent = 'claude' | 'codex' | 'gemini';
+type Agent = 'claude' | 'codex' | 'antigravity';
 
 interface PluginManifestEntry {
   agent: Agent;

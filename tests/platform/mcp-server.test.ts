@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
@@ -64,6 +64,7 @@ vi.mock('../src/services/run-service.js', () => ({
 
 let tempDir: string | undefined;
 let originalConfigPath: string | undefined;
+let originalBrainctlHome: string | undefined;
 
 afterEach(async () => {
   vi.restoreAllMocks();
@@ -71,6 +72,11 @@ afterEach(async () => {
     delete process.env.BRAINCTL_CONFIG_PATH;
   } else {
     process.env.BRAINCTL_CONFIG_PATH = originalConfigPath;
+  }
+  if (originalBrainctlHome === undefined) {
+    delete process.env.BRAINCTL_HOME;
+  } else {
+    process.env.BRAINCTL_HOME = originalBrainctlHome;
   }
   if (tempDir) {
     await rm(tempDir, { recursive: true, force: true });
@@ -108,6 +114,8 @@ describe('MCP server', () => {
     tempDir = await mkdtemp(path.join(os.tmpdir(), 'brainctl-mcp-config-'));
     originalConfigPath = process.env.BRAINCTL_CONFIG_PATH;
     process.env.BRAINCTL_CONFIG_PATH = path.join(tempDir, 'config.json');
+    originalBrainctlHome = process.env.BRAINCTL_HOME;
+    process.env.BRAINCTL_HOME = tempDir;
     await mkdir(tempDir, { recursive: true });
     await writeFile(
       process.env.BRAINCTL_CONFIG_PATH,
@@ -115,11 +123,26 @@ describe('MCP server', () => {
       'utf8'
     );
 
+    const { execSync } = await import('node:child_process');
+    const dummyTarDir = await mkdtemp(path.join(os.tmpdir(), 'brainctl-dummy-'));
+    await writeFile(path.join(dummyTarDir, 'manifest.yaml'), 'schemaVersion: 1\nprofileName: review-profile\n', 'utf8');
+    await writeFile(path.join(dummyTarDir, 'profile.yaml'), 'name: review-profile\nmcps: {}\n', 'utf8');
+    const dummyTarPath = path.join(dummyTarDir, 'dummy.tar.gz');
+    execSync(`tar -czf "${dummyTarPath}" -C "${dummyTarDir}" manifest.yaml profile.yaml`);
+    const dummyTarBuffer = await readFile(dummyTarPath);
+    await rm(dummyTarDir, { recursive: true, force: true });
+
     const calls: string[] = [];
     vi.stubGlobal(
       'fetch',
       vi.fn(async (url) => {
         calls.push(String(url));
+        if (String(url).endsWith('.tar.gz')) {
+          return new Response(dummyTarBuffer, {
+            status: 200,
+            headers: { 'Content-Type': 'application/x-gzip' },
+          });
+        }
         return new Response(
           JSON.stringify({
             slug: 'review-profile',

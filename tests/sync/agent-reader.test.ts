@@ -19,7 +19,7 @@ vi.mock('node:os', async () => {
 import {
   createClaudeReader,
   createCodexReader,
-  createGeminiReader,
+  createAntigravityReader,
 } from '../../src/services/sync/agent-reader.js';
 
 describe('agent readers', () => {
@@ -166,25 +166,25 @@ describe('agent readers', () => {
     expect(names).not.toContain('outer-skill');
   });
 
-  it('does not project-walk for codex or gemini readers', async () => {
+  it('does not project-walk for codex or antigravity readers', async () => {
     const repo = await mkdtemp(path.join(os.tmpdir(), 'brainctl-no-project-walk-'));
     await mkdir(path.join(repo, '.git'), { recursive: true });
     await mkdir(path.join(repo, '.claude', 'skills', 'should-not-show'), { recursive: true });
 
     const codexResult = await createCodexReader().read({ cwd: repo });
-    const geminiResult = await createGeminiReader().read({ cwd: repo });
+    const geminiResult = await createAntigravityReader().read({ cwd: repo });
     expect(codexResult.skills.find((s) => s.name === 'should-not-show')).toBeUndefined();
     expect(geminiResult.skills.find((s) => s.name === 'should-not-show')).toBeUndefined();
-    // Every emitted skill (if any) must be user-scoped for codex/gemini.
+    // Every emitted skill (if any) must be user-scoped for codex/antigravity.
     for (const s of codexResult.skills) expect(s.scope).toBe('user');
     for (const s of geminiResult.skills) expect(s.scope).toBe('user');
   });
 
-  it('reads global Gemini MCPs into separate maps', async () => {
+  it('reads global Antigravity MCPs into separate maps', async () => {
     const cwd = path.join(homeDir, 'workspace');
-    await mkdir(path.join(homeDir, '.gemini'), { recursive: true });
+    await mkdir(path.join(homeDir, '.gemini', 'antigravity-cli'), { recursive: true });
     await writeFile(
-      path.join(homeDir, '.gemini', 'settings.json'),
+      path.join(homeDir, '.gemini', 'antigravity-cli', 'mcp_config.json'),
       JSON.stringify(
         {
           mcpServers: {
@@ -209,7 +209,7 @@ describe('agent readers', () => {
       'utf8'
     );
 
-    const result = await createGeminiReader().read({ cwd });
+    const result = await createAntigravityReader().read({ cwd });
 
     expect(result.mcpServers).toEqual({
       github: {

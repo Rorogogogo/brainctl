@@ -83,6 +83,14 @@ describe('ProfilesDrawer feedback', () => {
       deleteButton?.click();
     });
 
+    const menuButtons = Array.from(document.body.querySelectorAll('button'));
+    const deleteMenuItem = menuButtons.find((button) => button.textContent?.trim() === 'Delete profile');
+    expect(deleteMenuItem).toBeDefined();
+
+    await act(async () => {
+      deleteMenuItem?.click();
+    });
+
     await waitFor(() => document.body.textContent?.includes('Delete profile "team"?') === true);
 
     const confirmButton = Array.from(document.body.querySelectorAll('button')).find(

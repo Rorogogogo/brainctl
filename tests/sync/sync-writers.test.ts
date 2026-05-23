@@ -18,7 +18,7 @@ vi.mock('node:os', async () => {
 
 import { createClaudeWriter } from '../../src/services/sync/claude-writer.js';
 import { createCodexWriter, stripPluginSection } from '../../src/services/sync/codex-writer.js';
-import { createGeminiWriter } from '../../src/services/sync/gemini-writer.js';
+import { createAntigravityWriter } from '../../src/services/sync/antigravity-writer.js';
 
 describe('sync writers', () => {
   let tempDir: string;
@@ -94,10 +94,10 @@ describe('sync writers', () => {
     expect(saved).not.toContain('[mcp_servers.brainctl]');
   });
 
-  it('writes Gemini MCP config without adding brainctl automatically', async () => {
+  it('writes Antigravity MCP config without adding brainctl automatically', async () => {
     const cwd = path.join(tempDir, 'project');
-    const configDir = path.join(tempDir, '.gemini');
-    const configPath = path.join(configDir, 'settings.json');
+    const configDir = path.join(tempDir, '.gemini', 'antigravity-cli');
+    const configPath = path.join(configDir, 'mcp_config.json');
     await mkdir(configDir, { recursive: true });
     await writeFile(
       configPath,
@@ -111,7 +111,7 @@ describe('sync writers', () => {
       'utf8'
     );
 
-    const writer = createGeminiWriter();
+    const writer = createAntigravityWriter();
     await writer.write({
       cwd,
       mcpServers: {},

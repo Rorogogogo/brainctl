@@ -1,4 +1,4 @@
-type AgentBrand = 'claude' | 'codex' | 'gemini';
+type AgentBrand = 'claude' | 'codex' | 'antigravity';
 
 export function AgentLogo({
   agent,

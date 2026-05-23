@@ -161,11 +161,11 @@ export function createCodexReader(): AgentConfigReader {
   };
 }
 
-export function createGeminiReader(): AgentConfigReader {
+export function createAntigravityReader(): AgentConfigReader {
   return {
     async read(options) {
-      const configPath = path.join(homedir(), '.gemini', 'settings.json');
-      const { projectMcpServers, projectRemoteMcpServers } = await readBrainctlProjectMcps(options.cwd, 'gemini');
+      const configPath = path.join(homedir(), '.gemini', 'antigravity-cli', 'mcp_config.json');
+      const { projectMcpServers, projectRemoteMcpServers } = await readBrainctlProjectMcps(options.cwd, 'antigravity');
 
       let rawServers: Record<string, Record<string, unknown>> = {};
       let exists = false;
@@ -181,7 +181,7 @@ export function createGeminiReader(): AgentConfigReader {
       const mcpServers: Record<string, AgentMcpEntry> = {};
       const remoteMcpServers: Record<string, PortableRemoteMcpMetadata> = {};
       for (const [name, entry] of Object.entries(rawServers)) {
-        const remoteEntry = toGeminiRemoteEntry(entry);
+        const remoteEntry = toAntigravityRemoteEntry(entry);
         if (remoteEntry) {
           remoteMcpServers[name] = remoteEntry;
           continue;
@@ -189,10 +189,10 @@ export function createGeminiReader(): AgentConfigReader {
         mcpServers[name] = { command: String(entry.command ?? ''), args: Array.isArray(entry.args) ? entry.args.map(String) : undefined, env: parseEnvObject(entry.env) };
       }
 
-      const skills = await readGeminiSkills();
+      const skills = await readAntigravitySkills();
       const filtered = filterPluginOwnedMcps({ mcpServers, remoteMcpServers, projectMcpServers, projectRemoteMcpServers, skills });
       return {
-        agent: 'gemini',
+        agent: 'antigravity',
         configPath,
         exists,
         mcpServers: filtered.mcpServers,
@@ -207,7 +207,7 @@ export function createGeminiReader(): AgentConfigReader {
 
 async function readBrainctlProjectMcps(
   cwd: string,
-  agent: 'codex' | 'gemini'
+  agent: 'codex' | 'antigravity'
 ): Promise<{ projectMcpServers: Record<string, AgentMcpEntry>; projectRemoteMcpServers: Record<string, PortableRemoteMcpMetadata> }> {
   try {
     const filePath = path.join(cwd, '.brainctl', 'project-mcps.json');
@@ -272,7 +272,7 @@ function isClaudeRemoteEntry(entry: Record<string, unknown>): boolean {
   return entry.type === 'http' || entry.type === 'sse' || !('command' in entry);
 }
 
-function toGeminiRemoteEntry(entry: Record<string, unknown>): PortableRemoteMcpMetadata | null {
+function toAntigravityRemoteEntry(entry: Record<string, unknown>): PortableRemoteMcpMetadata | null {
   if (typeof entry.httpUrl === 'string' && entry.httpUrl.trim().length > 0) {
     return {
       transport: 'http',
@@ -487,14 +487,14 @@ function dedupePluginsByName(plugins: AgentSkillEntry[]): AgentSkillEntry[] {
   return Array.from(seen.values());
 }
 
-async function readGeminiSkills(): Promise<AgentSkillEntry[]> {
+async function readAntigravitySkills(): Promise<AgentSkillEntry[]> {
   try {
     const skillsDir = path.join(homedir(), '.gemini', 'skills');
     const localSkills = await readSkillDirs(skillsDir);
-    const managedPlugins = await readManagedPlugins({ agent: 'gemini' });
+    const managedPlugins = await readManagedPlugins({ agent: 'antigravity' });
     return mergeManagedPluginsIntoSkills(localSkills, managedPlugins);
   } catch {
-    return await readManagedPlugins({ agent: 'gemini' });
+    return await readManagedPlugins({ agent: 'antigravity' });
   }
 }
 

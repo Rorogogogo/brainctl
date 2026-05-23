@@ -7,7 +7,7 @@ import { AgentLogo } from './agent-brand';
 import { toast } from './ui/toast.js';
 import { snapshotProfile } from '../lib/profile-snapshot';
 
-type Agent = 'claude' | 'codex' | 'gemini';
+type Agent = 'claude' | 'codex' | 'antigravity';
 type Source = 'blank' | Agent;
 
 const PROFILE_NAME_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
@@ -40,9 +40,9 @@ const SOURCE_OPTIONS: Array<{ value: Source; label: string; icon: ReactNode }> =
     icon: <AgentLogo agent="codex" className="size-full object-contain" />,
   },
   {
-    value: 'gemini',
-    label: 'From Gemini',
-    icon: <AgentLogo agent="gemini" className="size-full object-contain" />,
+    value: 'antigravity',
+    label: 'From Antigravity',
+    icon: <AgentLogo agent="antigravity" className="size-full object-contain" />,
   },
   {
     value: 'blank',

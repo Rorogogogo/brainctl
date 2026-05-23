@@ -15,8 +15,14 @@ const CURRENT_VERSION = (JSON.parse(readFileSync(packageJsonPath, 'utf8')) as { 
 
 describe('createPortableProfilePackService', () => {
   const tempDirs: string[] = [];
+  const originalBrainctlHome = process.env.BRAINCTL_HOME;
 
   afterEach(async () => {
+    if (originalBrainctlHome === undefined) {
+      delete process.env.BRAINCTL_HOME;
+    } else {
+      process.env.BRAINCTL_HOME = originalBrainctlHome;
+    }
     await Promise.all(
       tempDirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true }))
     );
@@ -25,11 +31,13 @@ describe('createPortableProfilePackService', () => {
   it('packs a Brainctl profile into a portable archive with manifest and redacted credentials', async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), 'brainctl-pack-'));
     tempDirs.push(root);
+    process.env.BRAINCTL_HOME = root;
 
     const cwd = path.join(root, 'workspace');
     await mkdir(cwd, { recursive: true });
-    await mkdir(path.join(cwd, 'mcp-server'), { recursive: true });
-    await writeFile(path.join(cwd, 'mcp-server', 'package.json'), '{"name":"mcp-server"}', 'utf8');
+    const mcpDir = path.join(root, '.brainctl', 'profiles', 'starter', 'mcp-server');
+    await mkdir(mcpDir, { recursive: true });
+    await writeFile(path.join(mcpDir, 'package.json'), '{"name":"mcp-server"}', 'utf8');
 
     const service = createPortableProfilePackService({
       profileService: {
@@ -104,7 +112,7 @@ describe('createPortableProfilePackService', () => {
     );
   });
 
-  it.each(['claude', 'codex', 'gemini'] as const)(
+  it.each(['claude', 'codex', 'antigravity'] as const)(
     'packs a live %s agent config via classifier output',
     async (agent) => {
     const root = await mkdtemp(path.join(os.tmpdir(), 'brainctl-agent-pack-'));
@@ -147,8 +155,8 @@ describe('createPortableProfilePackService', () => {
               skills: [],
             },
             {
-              agent: 'gemini',
-              configPath: '/tmp/.gemini/settings.json',
+              agent: 'antigravity',
+              configPath: '/tmp/.gemini/antigravity-cli/mcp_config.json',
               exists: true,
               mcpServers: {},
               remoteMcpServers: {
@@ -232,12 +240,14 @@ describe('createPortableProfilePackService', () => {
   it('writes runtime, install, and exclude into profile.yaml for bundled MCPs', async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), 'brainctl-pack-meta-'));
     tempDirs.push(root);
+    process.env.BRAINCTL_HOME = root;
 
     const cwd = path.join(root, 'workspace');
     await mkdir(cwd, { recursive: true });
-    await mkdir(path.join(cwd, 'py-server'), { recursive: true });
-    await writeFile(path.join(cwd, 'py-server', 'server.py'), '# server', 'utf8');
-    await writeFile(path.join(cwd, 'py-server', 'requirements.txt'), 'fastmcp\n', 'utf8');
+    const mcpDir = path.join(root, '.brainctl', 'profiles', 'pyprofile', 'py-server');
+    await mkdir(mcpDir, { recursive: true });
+    await writeFile(path.join(mcpDir, 'server.py'), '# server', 'utf8');
+    await writeFile(path.join(mcpDir, 'requirements.txt'), 'fastmcp\n', 'utf8');
 
     const service = createPortableProfilePackService({
       profileService: {
@@ -285,10 +295,11 @@ describe('createPortableProfilePackService', () => {
   it('excludes runtime-specific directories from bundled archive copy', async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), 'brainctl-pack-excl-'));
     tempDirs.push(root);
+    process.env.BRAINCTL_HOME = root;
 
     const cwd = path.join(root, 'workspace');
     await mkdir(cwd, { recursive: true });
-    const pyServerDir = path.join(cwd, 'py-server');
+    const pyServerDir = path.join(root, '.brainctl', 'profiles', 'pyprofile', 'py-server');
     await mkdir(pyServerDir, { recursive: true });
     await writeFile(path.join(pyServerDir, 'server.py'), '# server', 'utf8');
     await writeFile(path.join(pyServerDir, 'requirements.txt'), 'fastmcp\n', 'utf8');
@@ -469,8 +480,8 @@ describe('createPortableProfilePackService', () => {
                 skills: [],
               },
               {
-                agent: 'gemini',
-                configPath: path.join(fakeHome, '.gemini', 'settings.json'),
+                agent: 'antigravity',
+                configPath: path.join(fakeHome, '.gemini', 'antigravity-cli', 'mcp_config.json'),
                 exists: false,
                 mcpServers: {},
                 remoteMcpServers: {},

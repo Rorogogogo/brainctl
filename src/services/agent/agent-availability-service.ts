@@ -1,12 +1,12 @@
 import type { AgentName } from '../../types.js';
 import { findExecutable } from '../../executables.js';
 
-const SUPPORTED_AGENTS: AgentName[] = ['claude', 'codex', 'gemini'];
+const SUPPORTED_AGENTS: AgentName[] = ['claude', 'codex', 'antigravity'];
 
 const AGENT_COMMANDS: Record<AgentName, string> = {
   claude: 'claude',
   codex: 'codex',
-  gemini: 'gemini',
+  antigravity: 'antigravity',
 };
 
 export interface AgentAvailability {

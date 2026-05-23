@@ -119,7 +119,7 @@ const BASE_CONFIGS: AgentLiveConfig[] = [
     skills: [],
   },
   {
-    agent: 'gemini',
+    agent: 'antigravity',
     configPath: '/tmp/gemini.json',
     exists: true,
     mcpServers: {},
@@ -183,7 +183,7 @@ describe('useProfilesBoard integration', () => {
         }
 
         if (
-          url === '/api/agents/claude/skills/notes' &&
+          url.startsWith('/api/agents/claude/skills/notes') &&
           (init?.method ?? 'GET') === 'DELETE'
         ) {
           return okJson({});

@@ -27,7 +27,7 @@ import { createProfileService, profileDir, type ProfileService } from './profile
 import type { AgentConfigWriter } from '../sync/agent-writer.js';
 import { createClaudeWriter } from '../sync/claude-writer.js';
 import { createCodexWriter } from '../sync/codex-writer.js';
-import { createGeminiWriter } from '../sync/gemini-writer.js';
+import { createAntigravityWriter } from '../sync/antigravity-writer.js';
 import { normalizePortableProfileManifest } from './profile-manifest-normalizer.js';
 
 export type ItemType = 'mcp' | 'plugin' | 'skill';
@@ -74,7 +74,7 @@ export function createProfileApplyService(
   const defaultWriters: Partial<Record<AgentName, AgentConfigWriter>> = {
     claude: createClaudeWriter(),
     codex: createCodexWriter(),
-    gemini: createGeminiWriter(),
+    antigravity: createAntigravityWriter(),
   };
   const writers = { ...defaultWriters, ...deps.writers };
 

@@ -31,7 +31,7 @@ describe('skill preflight service', () => {
 
     const result = await service.execute({
       sourceAgent: 'codex',
-      targetAgent: 'gemini',
+      targetAgent: 'antigravity',
       skillName: 'notes',
       source: 'local',
     });
@@ -50,7 +50,7 @@ describe('skill preflight service', () => {
 
     const result = await service.execute({
       sourceAgent: 'codex',
-      targetAgent: 'gemini',
+      targetAgent: 'antigravity',
       skillName: 'notes',
       source: 'local',
     });

@@ -1,4 +1,4 @@
-type Agent = 'claude' | 'codex' | 'gemini';
+type Agent = 'claude' | 'codex' | 'antigravity';
 
 interface SnapshotProfileOptions {
   agent: Agent;

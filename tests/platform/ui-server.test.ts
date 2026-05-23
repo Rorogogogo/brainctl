@@ -363,7 +363,7 @@ describe('ui server', () => {
     const server = await startUiServer({ cwd: projectDir, port: 0 });
 
     try {
-      const response = await fetch(new URL('/api/agents/gemini/skills', server.url), {
+      const response = await fetch(new URL('/api/agents/antigravity/skills', server.url), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -378,7 +378,7 @@ describe('ui server', () => {
       expect(response.status).toBe(400);
       await expect(response.json()).resolves.toEqual({
         error:
-          'Skill "github" cannot be copied from claude to gemini: ' +
+          'Skill "github" cannot be copied from claude to antigravity: ' +
           'Only local skill folders can be copied today. "github" is a plugin/managed entry from claude-plugins-official.'
       });
     } finally {
@@ -580,6 +580,7 @@ describe('ui server', () => {
         installedMcps: [],
         installedPlugins: [],
         installedUserSkills: [],
+        requiredCredentials: [],
       });
 
       const profileSource = await readFile(
@@ -666,6 +667,7 @@ describe('ui server', () => {
         installedMcps: [],
         installedPlugins: [],
         installedUserSkills: [],
+        requiredCredentials: [],
       });
 
       const profileSource = await readFile(

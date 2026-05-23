@@ -87,11 +87,11 @@ describe('agent config service', () => {
     expect(saved).toContain('url = "https://developers.openai.com/mcp"');
   });
 
-  it('writes Gemini MCP changes to the global settings file', async () => {
+  it('writes Antigravity MCP changes to the global settings file', async () => {
     const cwd = path.join(homeDir, 'workspace');
-    await mkdir(path.join(homeDir, '.gemini'), { recursive: true });
+    await mkdir(path.join(homeDir, '.gemini', 'antigravity-cli'), { recursive: true });
     await writeFile(
-      path.join(homeDir, '.gemini', 'settings.json'),
+      path.join(homeDir, '.gemini', 'antigravity-cli', 'mcp_config.json'),
       JSON.stringify({ mcpServers: {} }, null, 2),
       'utf8'
     );
@@ -99,7 +99,7 @@ describe('agent config service', () => {
     const service = createAgentConfigService();
     await service.addMcp({
       cwd,
-      agent: 'gemini',
+      agent: 'antigravity',
       key: 'docs',
       remoteEntry: {
         transport: 'http',
@@ -111,7 +111,7 @@ describe('agent config service', () => {
     });
 
     const saved = JSON.parse(
-      await readFile(path.join(homeDir, '.gemini', 'settings.json'), 'utf8')
+      await readFile(path.join(homeDir, '.gemini', 'antigravity-cli', 'mcp_config.json'), 'utf8')
     ) as {
       mcpServers: Record<string, unknown>;
     };
@@ -174,7 +174,7 @@ describe('agent config service', () => {
       await expect(readFile(path.join(projSkill, 'SKILL.md'), 'utf8')).rejects.toThrow();
     });
 
-    it('rejects move-scope for codex or gemini', async () => {
+    it('rejects move-scope for codex or antigravity', async () => {
       const service = createAgentConfigService();
       await expect(
         service.moveSkillScope({

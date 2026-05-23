@@ -4,10 +4,10 @@ import { useEffect, useMemo, useState } from 'react';
 
 import { AgentLogo } from '../components/agent-brand';
 
-type Agent = 'claude' | 'codex' | 'gemini';
+type Agent = 'claude' | 'codex' | 'antigravity';
 type ItemType = 'mcp' | 'plugin' | 'skill';
 
-const ALL_AGENTS: Agent[] = ['claude', 'codex', 'gemini'];
+const ALL_AGENTS: Agent[] = ['claude', 'codex', 'antigravity'];
 
 interface ProfileContents {
   profile: {
