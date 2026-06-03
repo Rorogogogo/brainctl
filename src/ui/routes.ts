@@ -38,6 +38,7 @@ import type { StatusService } from '../services/platform/status-service.js';
 import {
   createProfileApplyService,
   type ItemSelector,
+  type ProfileApplyItemAction,
 } from '../services/profile/profile-apply-service.js';
 import {
   createProfileSnapshotService,
@@ -1000,6 +1001,7 @@ export function createUiRouteHandler(
           const data = (body.value ?? {}) as {
             agents?: AgentName[];
             items?: ItemSelector[];
+            itemActions?: ProfileApplyItemAction[];
             backup?: boolean;
             replace?: boolean;
           };
@@ -1008,8 +1010,9 @@ export function createUiRouteHandler(
             const result = await profileApplyService.execute({
               cwd: dependencies.cwd,
               profileName,
-              agents: data.agents ?? (['claude', 'codex', 'gemini'] as AgentName[]),
+              agents: data.agents ?? (['claude', 'codex', 'antigravity'] as AgentName[]),
               items: data.items,
+              itemActions: data.itemActions,
               backup: data.backup,
               replace: data.replace,
             });
@@ -1155,7 +1158,7 @@ export function createUiRouteHandler(
             return sendJson(response, 400, { error: 'Invalid JSON body' });
           }
 
-          const data = body.value as { name?: string; sourceAgent?: string; source?: string };
+          const data = body.value as { name?: string; sourceAgent?: string; source?: string; targetName?: string };
           if (!data.name || !data.sourceAgent) {
             return sendJson(response, 400, { error: 'Missing name or sourceAgent' });
           }
@@ -1179,7 +1182,7 @@ export function createUiRouteHandler(
             if (!body.ok) {
               return sendJson(response, 400, { error: 'Invalid JSON body' });
             }
-            const data = body.value as { name?: string; sourceAgent?: string; source?: string };
+            const data = body.value as { name?: string; sourceAgent?: string; source?: string; targetName?: string };
             if (!data.name || !data.sourceAgent) {
               return sendJson(response, 400, { error: 'Missing name or sourceAgent' });
             }
@@ -1201,6 +1204,7 @@ export function createUiRouteHandler(
                 sourceAgent: data.sourceAgent as AgentName,
                 targetAgent: agentName,
                 skillName: data.name,
+                targetSkillName: typeof data.targetName === 'string' ? data.targetName : undefined,
               });
               return sendJson(response, 200, { ok: true });
             } catch (error) {

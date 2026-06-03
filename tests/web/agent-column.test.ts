@@ -38,6 +38,42 @@ afterEach(() => {
 });
 
 describe('AgentColumn', () => {
+  it('keeps the agent logo frame from shrinking in the header row', async () => {
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root: Root = createRoot(container);
+
+    await act(async () => {
+      root.render(
+        createElement(
+          DndContext,
+          null,
+          createElement(AgentColumn, {
+            config: { ...CONFIG, agent: 'antigravity', configPath: '/Users/roro/.gemini/antigravity-cli/mcp_config.json' },
+            scope: 'global',
+            pendingAdded: new Set(),
+            pendingRemoved: new Set(),
+            pendingProjectAdded: new Set(),
+            pendingProjectRemoved: new Set(),
+            pendingSkillAdded: new Set(),
+            pendingSkillRemoved: new Set(),
+            pendingPluginAdded: new Set(),
+            pendingPluginRemoved: new Set(),
+            onStagedRemove: vi.fn(),
+            editable: true,
+          })
+        )
+      );
+    });
+
+    const logoFrame = document.body.querySelector('.profile-column-antigravity svg')?.parentElement;
+    expect(logoFrame?.className).toContain('shrink-0');
+
+    await act(async () => {
+      root.unmount();
+    });
+  });
+
   it('shows delete-all actions for each section in edit mode', async () => {
     const onStagedRemove = vi.fn();
     const container = document.createElement('div');

@@ -1,14 +1,8 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 160" fill="none">
-  <circle cx="80" cy="80" r="76" fill="#0a0a0a"/>
-  <g stroke="#ffffff" stroke-width="10" stroke-linecap="round" stroke-linejoin="round" fill="none">
-    <line x1="80" y1="80" x2="36" y2="36"/>
-    <line x1="80" y1="80" x2="124" y2="36"/>
-    <line x1="80" y1="80" x2="80" y2="132"/>
-  </g>
-  <g fill="#ffffff">
-    <circle cx="80" cy="80" r="14"/>
-    <circle cx="36" cy="36" r="10"/>
-    <circle cx="124" cy="36" r="10"/>
-    <circle cx="80" cy="132" r="10"/>
-  </g>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <rect x="4" y="4" width="56" height="56" rx="12" fill="#fafafa"/>
+  <mask id="m" maskUnits="userSpaceOnUse" x="10" y="10" width="44" height="44">
+    <rect x="10" y="10" width="44" height="44" rx="7" fill="#fff"/>
+    <path d="M10 54 L54 10" stroke="#000" stroke-width="4" stroke-linecap="square"/>
+  </mask>
+  <rect x="10" y="10" width="44" height="44" rx="7" fill="#0a0a0a" mask="url(#m)"/>
 </svg>

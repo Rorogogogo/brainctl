@@ -13,7 +13,12 @@ import {
   buildChangeSummaryLines,
   buildOverlayData,
   finalizeResolvedPendingAddition,
+  resolvePendingAdditionConflict,
 } from '../../web/src/profiles/board/useProfilesBoard.js';
+import {
+  buildProfileApplyItemActions,
+  findProfileApplyConflicts,
+} from '../../web/src/profiles/profile-apply-conflicts.js';
 
 describe('profiles view helpers', () => {
   it('rejects staging an MCP onto a target agent that already has the same key', () => {
@@ -203,6 +208,202 @@ describe('profiles view helpers', () => {
     });
 
     expect(error).toBe('Plugin "frontend-design" already exists in Codex. Remove it first before copying.');
+  });
+
+  it('resolves a same-name MCP drop by replacing the target item', () => {
+    const configs: AgentLiveConfig[] = [
+      {
+        agent: 'claude',
+        configPath: '/tmp/claude.json',
+        exists: true,
+        mcpServers: {
+          github: { command: 'npx', args: ['-y', '@modelcontextprotocol/server-github'] },
+        },
+        remoteMcpServers: {},
+        projectMcpServers: {},
+        projectRemoteMcpServers: {},
+        skills: [],
+      },
+      {
+        agent: 'codex',
+        configPath: '/tmp/config.toml',
+        exists: true,
+        mcpServers: {
+          github: { command: 'node', args: ['old.js'] },
+        },
+        remoteMcpServers: {},
+        projectMcpServers: {},
+        projectRemoteMcpServers: {},
+        skills: [],
+      },
+    ];
+
+    const result = resolvePendingAdditionConflict({
+      agentConfigs: configs,
+      pendingChanges: [],
+      nextChange: {
+        id: 'change-add',
+        type: 'add',
+        category: 'mcp',
+        agent: 'codex',
+        key: 'github',
+        scope: 'global',
+        entry: { command: 'npx', args: ['-y', '@modelcontextprotocol/server-github'] },
+        sourceAgent: 'claude',
+      },
+      resolution: 'replace',
+      suggestedKey: 'github-copy',
+      createChangeId: () => 'change-remove',
+    });
+
+    expect(result.error).toBeNull();
+    expect(result.changes).toEqual([
+      {
+        id: 'change-remove',
+        type: 'remove',
+        category: 'mcp',
+        agent: 'codex',
+        key: 'github',
+        scope: 'global',
+      },
+      {
+        id: 'change-add',
+        type: 'add',
+        category: 'mcp',
+        agent: 'codex',
+        key: 'github',
+        scope: 'global',
+        entry: { command: 'npx', args: ['-y', '@modelcontextprotocol/server-github'] },
+        sourceAgent: 'claude',
+      },
+    ]);
+  });
+
+  it('resolves a same-name skill drop by keeping both with a new target name', () => {
+    const configs: AgentLiveConfig[] = [
+      {
+        agent: 'claude',
+        configPath: '/tmp/claude.json',
+        exists: true,
+        mcpServers: {},
+        remoteMcpServers: {},
+        projectMcpServers: {},
+        projectRemoteMcpServers: {},
+        skills: [{ name: 'notes', source: 'local', kind: 'skill' }],
+      },
+      {
+        agent: 'codex',
+        configPath: '/tmp/config.toml',
+        exists: true,
+        mcpServers: {},
+        remoteMcpServers: {},
+        projectMcpServers: {},
+        projectRemoteMcpServers: {},
+        skills: [
+          { name: 'notes', source: 'local', kind: 'skill' },
+          { name: 'notes-copy', source: 'local', kind: 'skill' },
+        ],
+      },
+    ];
+
+    const result = resolvePendingAdditionConflict({
+      agentConfigs: configs,
+      pendingChanges: [],
+      nextChange: {
+        id: 'change-add',
+        type: 'add',
+        category: 'skill',
+        agent: 'codex',
+        key: 'notes',
+        scope: 'global',
+        skillEntry: { name: 'notes', source: 'local', kind: 'skill' },
+        sourceAgent: 'claude',
+      },
+      resolution: 'keep-both',
+      suggestedKey: 'notes-copy-2',
+      createChangeId: () => 'unused',
+    });
+
+    expect(result.error).toBeNull();
+    expect(result.changes).toEqual([
+      {
+        id: 'change-add',
+        type: 'add',
+        category: 'skill',
+        agent: 'codex',
+        key: 'notes-copy-2',
+        sourceKey: 'notes',
+        scope: 'global',
+        skillEntry: { name: 'notes-copy-2', source: 'local', kind: 'skill' },
+        sourceAgent: 'claude',
+      },
+    ]);
+  });
+
+  it('builds per-agent profile apply conflict actions', () => {
+    const configs: AgentLiveConfig[] = [
+      {
+        agent: 'claude',
+        configPath: '/tmp/claude.json',
+        exists: true,
+        mcpServers: {},
+        remoteMcpServers: {},
+        projectMcpServers: {
+          docs: { command: 'node', args: ['old.js'] },
+          'docs-copy': { command: 'node', args: ['other.js'] },
+        },
+        projectRemoteMcpServers: {},
+        skills: [{ name: 'notes', source: 'local', kind: 'skill', scope: 'user' }],
+      },
+      {
+        agent: 'codex',
+        configPath: '/tmp/config.toml',
+        exists: true,
+        mcpServers: {},
+        remoteMcpServers: {},
+        projectMcpServers: {},
+        projectRemoteMcpServers: {},
+        skills: [{ name: 'demo', source: 'market', kind: 'plugin', scope: 'user' }],
+      },
+    ];
+
+    const conflicts = findProfileApplyConflicts({
+      configs,
+      agents: ['claude', 'codex'],
+      items: [
+        { type: 'mcp', name: 'docs' },
+        { type: 'skill', name: 'notes' },
+        { type: 'plugin', name: 'demo' },
+      ],
+      excludedKeys: new Set(),
+    });
+
+    expect(conflicts.map((conflict) => ({
+      id: conflict.id,
+      suggestedName: conflict.suggestedName,
+      canKeepBoth: conflict.canKeepBoth,
+    }))).toEqual([
+      { id: 'claude:mcp:docs', suggestedName: 'docs-copy-2', canKeepBoth: true },
+      { id: 'claude:skill:notes', suggestedName: 'notes-copy', canKeepBoth: true },
+      { id: 'codex:plugin:demo', suggestedName: 'demo-copy', canKeepBoth: false },
+    ]);
+
+    expect(
+      buildProfileApplyItemActions(conflicts, {
+        'claude:mcp:docs': 'keep-both',
+        'claude:skill:notes': 'drop',
+        'codex:plugin:demo': 'replace',
+      })
+    ).toEqual([
+      {
+        agent: 'claude',
+        type: 'mcp',
+        name: 'docs',
+        action: 'keep-both',
+        targetName: 'docs-copy-2',
+      },
+      { agent: 'claude', type: 'skill', name: 'notes', action: 'drop' },
+    ]);
   });
 
   it('allows staging a remote MCP without local command metadata', () => {

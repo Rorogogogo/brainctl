@@ -37,11 +37,20 @@ export interface ItemSelector {
   name: string;
 }
 
+export type ProfileApplyItemActionKind = 'replace' | 'keep-both' | 'drop';
+
+export interface ProfileApplyItemAction extends ItemSelector {
+  agent: AgentName;
+  action: ProfileApplyItemActionKind;
+  targetName?: string;
+}
+
 export interface ApplyOptions {
   cwd?: string;
   profileName: string;
   agents: AgentName[];
   items?: ItemSelector[]; // undefined = everything matching
+  itemActions?: ProfileApplyItemAction[];
   backup?: boolean; // default true for full apply, false for partial
   replace?: boolean; // when true, uninstall live plugins/skills not present in the profile (DESTRUCTIVE; default false)
 }
@@ -114,16 +123,27 @@ export function createProfileApplyService(
       const manifest = await readProfileManifest(folder);
       const applied: ApplyResult = [];
 
-      const wantMcp = (name: string) => matches(options.items, 'mcp', name);
-      const wantPlugin = (name: string) => matches(options.items, 'plugin', name);
-      const wantSkill = (name: string) => matches(options.items, 'skill', name);
+      const wantMcp = (agent: AgentName, name: string) =>
+        matches(options.items, 'mcp', name) &&
+        actionFor(options.itemActions, agent, 'mcp', name)?.action !== 'drop';
+      const wantPlugin = (agent: AgentName, name: string) =>
+        matches(options.items, 'plugin', name) &&
+        actionFor(options.itemActions, agent, 'plugin', name)?.action !== 'drop';
+      const wantSkill = (agent: AgentName, name: string) =>
+        matches(options.items, 'skill', name) &&
+        actionFor(options.itemActions, agent, 'skill', name)?.action !== 'drop';
 
       for (const agent of options.agents) {
         const writer = writers[agent];
         if (!writer) continue;
 
         const filteredMcps = Object.fromEntries(
-          Object.entries(profile.mcps).filter(([name]) => wantMcp(name))
+          Object.entries(profile.mcps)
+            .filter(([name]) => wantMcp(agent, name))
+            .map(([name, config]) => [
+              targetNameFor(options.itemActions, agent, 'mcp', name),
+              config,
+            ])
         );
 
         let mcpResult: { configPath: string; backedUpTo: string | null };
@@ -140,7 +160,13 @@ export function createProfileApplyService(
         const pluginsInstalled: string[] = [];
         const pluginsByName = new Map<string, NonNullable<typeof manifest>['plugins'] extends Array<infer T> | undefined ? T : never>();
         for (const p of manifest?.plugins ?? []) {
-          if (!wantPlugin(p.name)) continue;
+          if (!wantPlugin(agent, p.name)) continue;
+          const action = actionFor(options.itemActions, agent, 'plugin', p.name);
+          if (action?.action === 'keep-both') {
+            throw new ProfileError(
+              `Plugin "${p.name}" cannot use keep-both when applying a profile. Drop it or replace the existing plugin.`
+            );
+          }
           const existing = pluginsByName.get(p.name);
           if (!existing || p.agent === agent) pluginsByName.set(p.name, p);
         }
@@ -153,9 +179,11 @@ export function createProfileApplyService(
         const userSkillsInstalled: string[] = [];
         const skillsByName = new Map<string, PortableUserSkillSnapshot>();
         for (const s of manifest?.userSkills ?? []) {
-          if (!wantSkill(s.name)) continue;
-          if (!skillsByName.has(s.name)) skillsByName.set(s.name, s);
-          else if (s.agent === agent) skillsByName.set(s.name, s); // prefer matching source if available
+          if (!wantSkill(agent, s.name)) continue;
+          const targetName = targetNameFor(options.itemActions, agent, 'skill', s.name);
+          const selectedSkill = targetName === s.name ? s : { ...s, name: targetName };
+          if (!skillsByName.has(targetName)) skillsByName.set(targetName, selectedSkill);
+          else if (s.agent === agent) skillsByName.set(targetName, selectedSkill); // prefer matching source if available
         }
         for (const skill of skillsByName.values()) {
           const sourceDir = path.join(folder, skill.archivePath);
@@ -248,6 +276,39 @@ function matches(
 ): boolean {
   if (items === undefined) return true;
   return items.some((s) => s.type === type && s.name === name);
+}
+
+function actionFor(
+  actions: ProfileApplyItemAction[] | undefined,
+  agent: AgentName,
+  type: ItemType,
+  name: string
+): ProfileApplyItemAction | undefined {
+  return actions?.find(
+    (action) => action.agent === agent && action.type === type && action.name === name
+  );
+}
+
+function targetNameFor(
+  actions: ProfileApplyItemAction[] | undefined,
+  agent: AgentName,
+  type: ItemType,
+  name: string
+): string {
+  const action = actionFor(actions, agent, type, name);
+  if (action?.action !== 'keep-both') return name;
+
+  const targetName = action.targetName?.trim();
+  if (!targetName) {
+    throw new ProfileError(
+      `${typeLabel(type)} "${name}" cannot use keep-both without a target name.`
+    );
+  }
+  return targetName;
+}
+
+function typeLabel(type: ItemType): string {
+  return type === 'mcp' ? 'MCP' : type === 'plugin' ? 'Plugin' : 'Skill';
 }
 
 async function readProfileManifest(

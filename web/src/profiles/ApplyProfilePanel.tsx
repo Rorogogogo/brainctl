@@ -1,8 +1,17 @@
 import { ArrowLeft, Loader2, Wand2 } from 'lucide-react';
+import * as AlertDialog from '@radix-ui/react-alert-dialog';
 import { useEffect, useMemo, useState } from 'react';
 
 import { AgentLogo } from '../components/agent-brand';
 import { toast } from '../components/ui/toast.js';
+import {
+  buildProfileApplyItemActions,
+  findProfileApplyConflicts,
+  profileApplyItemKey,
+  type ProfileApplyConflictResolution,
+  type ProfileApplySelectableItem,
+} from './profile-apply-conflicts.js';
+import type { AgentLiveConfig } from './profiles-view.js';
 
 type Agent = 'claude' | 'codex' | 'antigravity';
 type ItemType = 'mcp' | 'plugin' | 'skill';
@@ -26,7 +35,7 @@ interface ProfileContents {
   } | null;
 }
 
-interface SelectableItem {
+interface SelectableItem extends ProfileApplySelectableItem {
   type: ItemType;
   name: string;
   agentBadges: Agent[];
@@ -46,10 +55,13 @@ export default function ApplyProfilePanel({
   const [profiles, setProfiles] = useState<ProfileSummary[]>([]);
   const [selectedProfile, setSelectedProfile] = useState<string | null>(initialProfile);
   const [contents, setContents] = useState<ProfileContents | null>(null);
+  const [liveConfigs, setLiveConfigs] = useState<AgentLiveConfig[]>([]);
   const [loadingProfiles, setLoadingProfiles] = useState(false);
   const [loadingContents, setLoadingContents] = useState(false);
   const [agents, setAgents] = useState<Set<Agent>>(new Set(ALL_AGENTS));
   const [excluded, setExcluded] = useState<Set<string>>(new Set());
+  const [conflictResolutions, setConflictResolutions] = useState<Record<string, ProfileApplyConflictResolution>>({});
+  const [promptConflictId, setPromptConflictId] = useState<string | null>(null);
   const [replace, setReplace] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -58,6 +70,8 @@ export default function ApplyProfilePanel({
     setSelectedProfile(initialProfile);
     setAgents(new Set(ALL_AGENTS));
     setExcluded(new Set());
+    setConflictResolutions({});
+    setPromptConflictId(null);
     setReplace(false);
     setError(null);
   }, [initialProfile]);
@@ -89,6 +103,23 @@ export default function ApplyProfilePanel({
         }
       } finally {
         if (!aborted) setLoadingProfiles(false);
+      }
+    })();
+    return () => {
+      aborted = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let aborted = false;
+    void (async () => {
+      try {
+        const r = await fetch('/api/agents/live');
+        if (!r.ok) return;
+        const data = (await r.json()) as AgentLiveConfig[];
+        if (!aborted) setLiveConfigs(data);
+      } catch {
+        if (!aborted) setLiveConfigs([]);
       }
     })();
     return () => {
@@ -164,9 +195,50 @@ export default function ApplyProfilePanel({
     return { mcps, plugins, skills };
   }, [contents]);
 
-  const allItems = [...items.mcps, ...items.plugins, ...items.skills];
+  const allItems = useMemo(
+    () => [...items.mcps, ...items.plugins, ...items.skills],
+    [items]
+  );
   const includedCount = allItems.filter((i) => !excluded.has(itemKey(i))).length;
   const isEmpty = contents !== null && allItems.length === 0;
+  const conflicts = useMemo(
+    () =>
+      findProfileApplyConflicts({
+        configs: liveConfigs,
+        agents: Array.from(agents),
+        items: allItems,
+        excludedKeys: excluded,
+      }),
+    [agents, allItems, excluded, liveConfigs]
+  );
+
+  useEffect(() => {
+    setConflictResolutions((previous) => {
+      const validIds = new Set(conflicts.map((conflict) => conflict.id));
+      const next: Record<string, ProfileApplyConflictResolution> = {};
+      for (const conflict of conflicts) {
+        if (previous[conflict.id]) next[conflict.id] = previous[conflict.id];
+      }
+      const unchanged =
+        Object.keys(previous).length === Object.keys(next).length &&
+        Object.keys(previous).every((key) => validIds.has(key) && previous[key] === next[key]);
+      return unchanged ? previous : next;
+    });
+  }, [conflicts]);
+
+  useEffect(() => {
+    if (promptConflictId && !conflicts.some((conflict) => conflict.id === promptConflictId)) {
+      setPromptConflictId(null);
+    }
+  }, [conflicts, promptConflictId]);
+
+  const unresolvedConflicts = conflicts.filter((conflict) => !conflictResolutions[conflict.id]);
+  const promptConflict = promptConflictId
+    ? conflicts.find((conflict) => conflict.id === promptConflictId) ?? null
+    : null;
+  const promptConflictNumber = promptConflict
+    ? conflicts.findIndex((conflict) => conflict.id === promptConflict.id) + 1
+    : 0;
 
   function toggleAgent(agent: Agent) {
     const next = new Set(agents);
@@ -208,6 +280,16 @@ export default function ApplyProfilePanel({
       setError('Select at least one item to apply.');
       return;
     }
+    setError(null);
+    if (unresolvedConflicts.length > 0) {
+      setPromptConflictId(unresolvedConflicts[0].id);
+      return;
+    }
+    await submitApply(conflictResolutions);
+  }
+
+  async function submitApply(resolutions: Record<string, ProfileApplyConflictResolution>) {
+    if (!selectedProfile) return;
     setBusy(true);
     setError(null);
     try {
@@ -216,6 +298,7 @@ export default function ApplyProfilePanel({
         filtered.length === allItems.length
           ? undefined
           : filtered.map((i) => ({ type: i.type, name: i.name }));
+      const itemActions = buildProfileApplyItemActions(conflicts, resolutions);
       const r = await fetch(
         `/api/profiles/${encodeURIComponent(selectedProfile)}/apply`,
         {
@@ -224,6 +307,7 @@ export default function ApplyProfilePanel({
           body: JSON.stringify({
             agents: Array.from(agents),
             ...(itemsPayload ? { items: itemsPayload } : {}),
+            ...(itemActions.length > 0 ? { itemActions } : {}),
             ...(replace ? { replace: true } : {}),
           }),
         }
@@ -242,9 +326,26 @@ export default function ApplyProfilePanel({
     }
   }
 
+  function resolvePromptConflict(resolution: ProfileApplyConflictResolution) {
+    if (!promptConflict) return;
+
+    const nextResolutions = { ...conflictResolutions, [promptConflict.id]: resolution };
+    setConflictResolutions(nextResolutions);
+
+    const nextConflict = conflicts.find((conflict) => !nextResolutions[conflict.id]);
+    if (nextConflict) {
+      setPromptConflictId(nextConflict.id);
+      return;
+    }
+
+    setPromptConflictId(null);
+    void submitApply(nextResolutions);
+  }
+
   return (
-    <section className="flex h-full min-h-0 flex-col rounded-2xl border border-zinc-200 bg-white shadow-sm">
-      <div className="flex shrink-0 items-start justify-between gap-4 border-b border-zinc-200 p-5">
+    <>
+      <section className="flex h-full min-h-0 flex-col rounded-2xl border border-zinc-200 bg-white shadow-sm">
+        <div className="flex shrink-0 items-start justify-between gap-4 border-b border-zinc-200 p-5">
         <div className="min-w-0">
           <button
             type="button"
@@ -267,8 +368,8 @@ export default function ApplyProfilePanel({
         </div>
       </div>
 
-      <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 p-5 xl:grid-cols-[20rem_minmax(0,1fr)]">
-        <aside className="flex min-h-0 flex-col gap-4">
+        <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 overflow-hidden p-5 xl:grid-cols-[20rem_minmax(0,1fr)]">
+          <aside className="scrollbar-none flex min-h-0 flex-col gap-4 overflow-y-auto pr-1">
           <div className="flex flex-col gap-1 text-sm">
             <span className="font-medium text-zinc-700">Profile</span>
             <select
@@ -355,14 +456,22 @@ export default function ApplyProfilePanel({
             </div>
           </div>
 
+            {conflicts.length > 0 && (
+              <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-900">
+                {unresolvedConflicts.length > 0
+                  ? `${unresolvedConflicts.length} conflict${unresolvedConflicts.length === 1 ? '' : 's'} will be reviewed when you apply.`
+                  : `${conflicts.length} conflict${conflicts.length === 1 ? '' : 's'} resolved.`}
+              </div>
+            )}
+
           {error && (
             <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-800">
               {error}
             </div>
           )}
-        </aside>
+          </aside>
 
-        <div className="flex min-h-0 flex-col rounded-xl border border-zinc-200 bg-zinc-50/40">
+          <div className="flex min-h-0 flex-col rounded-xl border border-zinc-200 bg-zinc-50/40">
           <div className="flex shrink-0 items-center justify-between border-b border-zinc-200 px-4 py-3">
             <div>
               <div className="text-sm font-semibold text-zinc-900">Profile contents</div>
@@ -409,13 +518,15 @@ export default function ApplyProfilePanel({
               </div>
             )}
           </div>
+          </div>
         </div>
-      </div>
 
-      <div className="flex shrink-0 items-center justify-between gap-3 border-t border-zinc-200 p-5">
+        <div className="flex shrink-0 items-center justify-between gap-3 border-t border-zinc-200 p-5">
         <div className="text-xs text-zinc-500">
           {selectedProfile && allItems.length > 0
-            ? `${includedCount} of ${allItems.length} item${allItems.length === 1 ? '' : 's'} -> ${agents.size} agent${agents.size === 1 ? '' : 's'}`
+            ? unresolvedConflicts.length > 0
+              ? `${unresolvedConflicts.length} conflict${unresolvedConflicts.length === 1 ? '' : 's'} to review`
+              : `${includedCount} of ${allItems.length} item${allItems.length === 1 ? '' : 's'} -> ${agents.size} agent${agents.size === 1 ? '' : 's'}`
             : null}
         </div>
         <div className="flex items-center gap-3">
@@ -434,16 +545,117 @@ export default function ApplyProfilePanel({
             className="inline-flex min-h-[36px] items-center justify-center gap-2 rounded-lg bg-zinc-900 px-4 text-sm font-medium text-white shadow-sm transition-all hover:bg-zinc-800 disabled:opacity-60"
           >
             {busy ? <Loader2 size={14} className="animate-spin" /> : <Wand2 size={14} />}
-            {busy ? 'Applying...' : 'Apply'}
+            {busy
+              ? 'Applying...'
+              : unresolvedConflicts.length > 0
+                ? `Resolve ${unresolvedConflicts.length}`
+                : 'Apply'}
           </button>
         </div>
       </div>
-    </section>
+      </section>
+
+      <AlertDialog.Root
+        open={Boolean(promptConflict)}
+        onOpenChange={(open) => {
+          if (!open) setPromptConflictId(null);
+        }}
+      >
+        <AlertDialog.Portal>
+          <AlertDialog.Overlay className="fixed inset-0 z-50 bg-black/40 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0" />
+          <AlertDialog.Content className="fixed left-1/2 top-1/2 z-50 w-full max-w-md -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-zinc-200/80 bg-white p-6 shadow-xl">
+            <AlertDialog.Title className="text-lg font-semibold tracking-tight text-zinc-900">
+              {promptConflict?.categoryLabel ?? 'Item'} already exists
+            </AlertDialog.Title>
+            <AlertDialog.Description className="mt-2 text-sm leading-relaxed text-zinc-500">
+              {promptConflict
+                ? `${promptConflict.agentLabel} already has "${promptConflict.name}". Choose how to handle this profile item.`
+                : ''}
+            </AlertDialog.Description>
+            {promptConflict && (
+              <div className="mt-4 rounded-xl border border-zinc-200 bg-zinc-50 p-3 text-xs font-medium text-zinc-600">
+                <div className="mb-1 text-[11px] uppercase tracking-wide text-zinc-400">
+                  Conflict {promptConflictNumber} of {conflicts.length}
+                </div>
+                {promptConflict.canKeepBoth ? (
+                  <>
+                    Keep both will apply it as{' '}
+                    <span className="font-mono text-zinc-900">{promptConflict.suggestedName}</span>.
+                  </>
+                ) : (
+                  'Plugin bundles cannot be duplicated safely because their bundled skills and MCPs keep their original names.'
+                )}
+              </div>
+            )}
+            <div className="mt-6 flex flex-wrap items-center justify-end gap-3">
+              <AlertDialog.Cancel asChild>
+                <button
+                  type="button"
+                  className="inline-flex min-h-[36px] items-center justify-center rounded-lg border border-zinc-200 bg-white px-4 text-sm font-medium text-zinc-700 shadow-sm transition-all hover:bg-zinc-50 hover:text-zinc-900"
+                >
+                  Cancel
+                </button>
+              </AlertDialog.Cancel>
+              <button
+                type="button"
+                className="inline-flex min-h-[36px] items-center justify-center rounded-lg border border-zinc-200 bg-white px-4 text-sm font-medium text-zinc-700 shadow-sm transition-all hover:bg-zinc-50 hover:text-zinc-900"
+                onClick={() => resolvePromptConflict('drop')}
+              >
+                Drop
+              </button>
+              {promptConflict?.canKeepBoth && (
+                <button
+                  type="button"
+                  className="inline-flex min-h-[36px] items-center justify-center rounded-lg border border-zinc-200 bg-white px-4 text-sm font-medium text-zinc-700 shadow-sm transition-all hover:bg-zinc-50 hover:text-zinc-900"
+                  onClick={() => resolvePromptConflict('keep-both')}
+                >
+                  Keep both
+                </button>
+              )}
+              <button
+                type="button"
+                className="inline-flex min-h-[36px] items-center justify-center rounded-lg bg-zinc-900 px-4 text-sm font-medium text-white shadow-sm transition-all hover:bg-zinc-800"
+                onClick={() => resolvePromptConflict('replace')}
+              >
+                Replace
+              </button>
+            </div>
+          </AlertDialog.Content>
+        </AlertDialog.Portal>
+      </AlertDialog.Root>
+    </>
   );
 }
 
-function itemKey(item: SelectableItem): string {
-  return `${item.type}::${item.name}`;
+function itemKey(item: ProfileApplySelectableItem): string {
+  return profileApplyItemKey(item);
+}
+
+function ConflictButton({
+  active,
+  disabled,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  disabled?: boolean;
+  onClick: () => void;
+  children: string;
+}) {
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      onClick={onClick}
+      className={`min-h-7 rounded-md border px-1.5 text-[11px] font-medium transition ${
+        active
+          ? 'border-zinc-900 bg-zinc-900 text-white'
+          : 'border-zinc-200 bg-white text-zinc-600 hover:bg-zinc-50 disabled:cursor-not-allowed disabled:bg-zinc-50 disabled:text-zinc-300'
+      }`}
+    >
+      {children}
+    </button>
+  );
 }
 
 function ItemGroup({

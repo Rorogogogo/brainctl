@@ -51,6 +51,7 @@ export interface AgentConfigService {
     sourceAgent: AgentName;
     targetAgent: AgentName;
     skillName: string;
+    targetSkillName?: string;
     sourceScope?: 'user' | 'project';
     targetScope?: 'user' | 'project';
     sourceCwd?: string;
@@ -204,6 +205,7 @@ export function createAgentConfigService(
 
     async copySkill(options) {
       const { sourceAgent, targetAgent, skillName } = options;
+      const targetSkillName = options.targetSkillName ?? skillName;
       const sourceScope = options.sourceScope ?? 'user';
       const targetScope = options.targetScope ?? 'user';
       const preflight = await skillPreflightService.execute({
@@ -222,7 +224,7 @@ export function createAgentConfigService(
       }
 
       const sourceDir = getSkillDir(sourceAgent, skillName, sourceScope, options.sourceCwd);
-      const targetDir = getSkillDir(targetAgent, skillName, targetScope, options.targetCwd);
+      const targetDir = getSkillDir(targetAgent, targetSkillName, targetScope, options.targetCwd);
       await mkdir(path.dirname(targetDir), { recursive: true });
       await cp(sourceDir, targetDir, { recursive: true });
     },

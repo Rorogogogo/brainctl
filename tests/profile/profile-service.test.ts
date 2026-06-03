@@ -126,4 +126,27 @@ describe('createProfileService', () => {
       await rm(root, { recursive: true, force: true });
     }
   });
+
+  it('ignores incomplete global profile folders when listing from the brainctl home cwd', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'brainctl-profile-list-home-'));
+    const originalBrainctlHome = process.env.BRAINCTL_HOME;
+    process.env.BRAINCTL_HOME = root;
+
+    try {
+      const profilesRoot = path.join(root, '.brainctl', 'profiles');
+      const profileFile = path.join(profilesRoot, 'valid', 'profile.yaml');
+      await mkdir(path.dirname(profileFile), { recursive: true });
+      await writeFile(profileFile, 'name: valid\nmcps: {}\n', 'utf8');
+
+      await mkdir(path.join(profilesRoot, 'orphan', 'mcps', 'brainctl'), { recursive: true });
+
+      await expect(createProfileService().list({ cwd: root })).resolves.toEqual({
+        profiles: ['valid'],
+      });
+    } finally {
+      if (originalBrainctlHome === undefined) delete process.env.BRAINCTL_HOME;
+      else process.env.BRAINCTL_HOME = originalBrainctlHome;
+      await rm(root, { recursive: true, force: true });
+    }
+  });
 });

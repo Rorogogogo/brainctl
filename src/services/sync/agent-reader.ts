@@ -164,18 +164,24 @@ export function createCodexReader(): AgentConfigReader {
 export function createAntigravityReader(): AgentConfigReader {
   return {
     async read(options) {
-      const configPath = path.join(homedir(), '.gemini', 'antigravity-cli', 'mcp_config.json');
+      let configPath = defaultAntigravityConfigPath();
       const { projectMcpServers, projectRemoteMcpServers } = await readBrainctlProjectMcps(options.cwd, 'antigravity');
 
       let rawServers: Record<string, Record<string, unknown>> = {};
       let exists = false;
-      try {
-        const source = await readFile(configPath, 'utf8');
-        const data = JSON.parse(source) as Record<string, unknown>;
-        rawServers = (data.mcpServers ?? {}) as Record<string, Record<string, unknown>>;
-        exists = true;
-      } catch {
-        // no global config
+      for (const candidatePath of antigravityConfigPathCandidates()) {
+        try {
+          const source = await readFile(candidatePath, 'utf8');
+          configPath = candidatePath;
+          exists = true;
+          if (source.trim().length > 0) {
+            const data = JSON.parse(source) as Record<string, unknown>;
+            rawServers = (data.mcpServers ?? {}) as Record<string, Record<string, unknown>>;
+          }
+          break;
+        } catch {
+          // try the next known Antigravity config location
+        }
       }
 
       const mcpServers: Record<string, AgentMcpEntry> = {};
@@ -203,6 +209,19 @@ export function createAntigravityReader(): AgentConfigReader {
       };
     },
   };
+}
+
+function defaultAntigravityConfigPath(): string {
+  return path.join(homedir(), '.gemini', 'antigravity-cli', 'mcp_config.json');
+}
+
+function antigravityConfigPathCandidates(): string[] {
+  return [
+    defaultAntigravityConfigPath(),
+    path.join(homedir(), '.gemini', 'config', 'mcp_config.json'),
+    path.join(homedir(), '.gemini', 'antigravity', 'mcp_config.json'),
+    path.join(homedir(), '.gemini', 'antigravity-ide', 'mcp_config.json'),
+  ];
 }
 
 async function readBrainctlProjectMcps(

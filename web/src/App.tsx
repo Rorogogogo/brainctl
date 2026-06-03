@@ -164,9 +164,7 @@ export default function App() {
       <div className="mx-auto grid h-full w-full grid-rows-[auto_minmax(0,1fr)] gap-4">
         <header className="flex min-h-0 shrink-0 flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex items-center gap-3">
-            <div className="grid size-7 place-items-center rounded-lg bg-zinc-900 text-white shadow-sm">
-              <img src="/favicon-light.svg" alt="Brainctl Logo" className="size-4" />
-            </div>
+            <img src="/favicon.svg" alt="Brainctl Logo" className="size-8" />
             <div className="flex items-center gap-2">
               <h1 className="text-sm font-semibold leading-none tracking-tight">
                 Brainctl <span className="font-normal text-zinc-400">v{__APP_VERSION__}</span>

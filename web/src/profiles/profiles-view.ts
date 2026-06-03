@@ -46,6 +46,7 @@ export interface PendingChange {
   skillEntry?: AgentSkillEntry;
   pluginEntry?: AgentSkillEntry;
   sourceAgent?: string;
+  sourceKey?: string;
   // Move-only fields. For type='move', `scope` mirrors `toScope` (so existing
   // dedupe/preview helpers that key on scope keep working for the destination).
   fromScope?: 'global' | 'project';

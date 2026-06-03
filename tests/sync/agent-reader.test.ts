@@ -231,4 +231,18 @@ describe('agent readers', () => {
       },
     });
   });
+
+  it('treats Antigravity fallback config placeholders as live empty configs', async () => {
+    const cwd = path.join(homeDir, 'workspace');
+    const configPath = path.join(homeDir, '.gemini', 'config', 'mcp_config.json');
+    await mkdir(path.dirname(configPath), { recursive: true });
+    await writeFile(configPath, '', 'utf8');
+
+    const result = await createAntigravityReader().read({ cwd });
+
+    expect(result.configPath).toBe(configPath);
+    expect(result.exists).toBe(true);
+    expect(result.mcpServers).toEqual({});
+    expect(result.remoteMcpServers).toEqual({});
+  });
 });

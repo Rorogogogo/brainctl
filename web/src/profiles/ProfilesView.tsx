@@ -5,6 +5,7 @@ import {
   useSensor,
   useSensors,
 } from '@dnd-kit/core';
+import * as AlertDialog from '@radix-ui/react-alert-dialog';
 import {
   ArrowRightLeft,
   Boxes,
@@ -58,6 +59,9 @@ export default function ProfilesView() {
     moveScopeRequest,
     cancelMoveScope,
     confirmMoveScope,
+    dropConflict,
+    resolveDropConflict,
+    dismissDropConflict,
     handleUndoChange,
     handleDiscardAll,
     handleSave,
@@ -271,6 +275,69 @@ export default function ProfilesView() {
           </ul>
         </div>
       </ConfirmDialog>
+
+      <AlertDialog.Root
+        open={Boolean(dropConflict)}
+        onOpenChange={(open) => {
+          if (!open) dismissDropConflict();
+        }}
+      >
+        <AlertDialog.Portal>
+          <AlertDialog.Overlay className="fixed inset-0 z-50 bg-black/40 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0" />
+          <AlertDialog.Content className="fixed left-1/2 top-1/2 z-50 w-full max-w-md -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-zinc-200/80 bg-white p-6 shadow-xl">
+            <AlertDialog.Title className="text-lg font-semibold tracking-tight text-zinc-900">
+              {dropConflict?.categoryLabel ?? 'Item'} already exists
+            </AlertDialog.Title>
+            <AlertDialog.Description className="mt-2 text-sm leading-relaxed text-zinc-500">
+              {dropConflict
+                ? `${dropConflict.targetLabel} already has "${dropConflict.change.key}". Choose how to handle this copy.`
+                : ''}
+            </AlertDialog.Description>
+            {dropConflict && (
+              <div className="mt-4 rounded-xl border border-zinc-200 bg-zinc-50 p-3 text-xs font-medium text-zinc-600">
+                {dropConflict.canKeepBoth ? (
+                  <>
+                    Keep both will stage the copied item as <span className="font-mono text-zinc-900">{dropConflict.suggestedKey}</span>.
+                  </>
+                ) : (
+                  'Plugin bundles cannot be duplicated safely because their bundled skills and MCPs keep their original names.'
+                )}
+              </div>
+            )}
+            <div className="mt-6 flex flex-wrap items-center justify-end gap-3">
+              <AlertDialog.Cancel asChild>
+                <button
+                  type="button"
+                  className="inline-flex min-h-[36px] items-center justify-center rounded-lg border border-zinc-200 bg-white px-4 text-sm font-medium text-zinc-700 shadow-sm transition-all hover:bg-zinc-50 hover:text-zinc-900"
+                  onClick={() => resolveDropConflict('keep-current')}
+                >
+                  Keep current
+                </button>
+              </AlertDialog.Cancel>
+              {dropConflict?.canKeepBoth && (
+                <AlertDialog.Action asChild>
+                  <button
+                    type="button"
+                    className="inline-flex min-h-[36px] items-center justify-center rounded-lg border border-zinc-200 bg-white px-4 text-sm font-medium text-zinc-700 shadow-sm transition-all hover:bg-zinc-50 hover:text-zinc-900"
+                    onClick={() => resolveDropConflict('keep-both')}
+                  >
+                    Keep both
+                  </button>
+                </AlertDialog.Action>
+              )}
+              <AlertDialog.Action asChild>
+                <button
+                  type="button"
+                  className="inline-flex min-h-[36px] items-center justify-center rounded-lg bg-zinc-900 px-4 text-sm font-medium text-white shadow-sm transition-all hover:bg-zinc-800"
+                  onClick={() => resolveDropConflict('replace')}
+                >
+                  Replace
+                </button>
+              </AlertDialog.Action>
+            </div>
+          </AlertDialog.Content>
+        </AlertDialog.Portal>
+      </AlertDialog.Root>
 
       {pendingSwitchTarget && (
         <ConfirmSwitchProjectModal

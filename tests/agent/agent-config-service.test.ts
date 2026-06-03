@@ -124,6 +124,24 @@ describe('agent config service', () => {
     });
   });
 
+  it('copies a skill to a different target name', async () => {
+    const sourceDir = path.join(homeDir, '.claude', 'skills', 'notes');
+    await mkdir(sourceDir, { recursive: true });
+    await writeFile(path.join(sourceDir, 'SKILL.md'), '---\nname: notes\n---\n', 'utf8');
+
+    const service = createAgentConfigService();
+    await service.copySkill({
+      sourceAgent: 'claude',
+      targetAgent: 'codex',
+      skillName: 'notes',
+      targetSkillName: 'notes-copy',
+    });
+
+    await expect(
+      readFile(path.join(homeDir, '.codex', 'skills', 'notes-copy', 'SKILL.md'), 'utf8')
+    ).resolves.toContain('name: notes');
+  });
+
   describe('moveSkillScope (claude)', () => {
     it('moves a user-scope skill directory into project scope', async () => {
       const cwd = await mkdtemp(path.join(os.tmpdir(), 'brainctl-move-cwd-'));

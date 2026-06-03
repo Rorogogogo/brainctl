@@ -240,7 +240,7 @@ export function AgentColumn({
     >
       <div className="flex items-start justify-between gap-4 border-b border-zinc-100 pb-4">
         <div className="flex min-w-0 items-center gap-3">
-          <span className="grid size-12 place-items-center rounded-xl border border-zinc-200 bg-white text-zinc-900 shadow-sm">
+          <span className="grid size-12 shrink-0 place-items-center rounded-xl border border-zinc-200 bg-white text-zinc-900 shadow-sm">
             <AgentLogo agent={config.agent} className="size-6 overflow-hidden" />
           </span>
           <div className="space-y-0.5 overflow-hidden">

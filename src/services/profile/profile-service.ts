@@ -37,6 +37,10 @@ function legacyProfileDir(cwd: string, name: string): string {
   return path.join(cwd, PROFILES_DIR, name);
 }
 
+function isSamePath(left: string, right: string): boolean {
+  return path.resolve(left) === path.resolve(right);
+}
+
 async function migrateLegacyProfile(cwd: string, name: string): Promise<void> {
   const legacyFlat = legacyProfileFile(cwd, name);
   const legacyFolder = legacyProfileDir(cwd, name);
@@ -46,6 +50,7 @@ async function migrateLegacyProfile(cwd: string, name: string): Promise<void> {
   if (await pathExists(newFile)) return;
 
   if (await pathExists(legacyFolder)) {
+    if (isSamePath(legacyFolder, newFolder)) return;
     await mkdir(globalProfilesRoot(), { recursive: true });
     await cp(legacyFolder, newFolder, { recursive: true });
     return;

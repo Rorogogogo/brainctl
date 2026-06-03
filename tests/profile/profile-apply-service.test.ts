@@ -176,6 +176,167 @@ describe('createProfileApplyService', () => {
     }
   });
 
+  it('drops a selected profile item for one targeted agent', async () => {
+    const tempProject = await mkdtemp(path.join(os.tmpdir(), 'brainctl-apply-drop-'));
+    tempDirs.push(tempProject);
+
+    const folder = path.join(tempProject, '.brainctl', 'profiles', 'shared');
+    await mkdir(folder, { recursive: true });
+    await writeFile(
+      path.join(folder, 'manifest.yaml'),
+      ['schemaVersion: 1', 'profileName: shared'].join('\n'),
+      'utf8'
+    );
+
+    const profileService: ProfileService = {
+      async list() {
+        return { profiles: ['shared'] };
+      },
+      async get() {
+        return {
+          name: 'shared',
+          skills: {},
+          mcps: {
+            docs: { kind: 'local', source: 'npm', package: '@modelcontextprotocol/server-filesystem' },
+          },
+          memory: { paths: [] },
+        };
+      },
+      async create() {
+        return { profilePath: '' };
+      },
+      async update() {},
+      async delete() {},
+      async getMetaConfig() {
+        return { agents: ['claude', 'codex'] };
+      },
+    };
+
+    const writes: Array<{ agent: string; mcpServers: Record<string, unknown> }> = [];
+    const writerFor = (agent: string): AgentConfigWriter => ({
+      async write(args) {
+        writes.push({ agent, mcpServers: args.mcpServers });
+        return { configPath: `/tmp/${agent}`, backedUpTo: null };
+      },
+      async restore() {
+        return { restoredFrom: '' };
+      },
+    });
+
+    const service = createProfileApplyService({
+      profileService,
+      writers: { claude: writerFor('claude'), codex: writerFor('codex') },
+    });
+
+    const result = await service.execute({
+      cwd: tempProject,
+      profileName: 'shared',
+      agents: ['claude', 'codex'],
+      backup: false,
+      itemActions: [{ agent: 'codex', type: 'mcp', name: 'docs', action: 'drop' }],
+    });
+
+    expect(writes).toEqual([
+      {
+        agent: 'claude',
+        mcpServers: {
+          docs: { kind: 'local', source: 'npm', package: '@modelcontextprotocol/server-filesystem' },
+        },
+      },
+      { agent: 'codex', mcpServers: {} },
+    ]);
+    expect(result.applied.map((entry) => [entry.agent, entry.mcpCount])).toEqual([
+      ['claude', 1],
+      ['codex', 0],
+    ]);
+  });
+
+  it('keeps both by applying a profile skill under a target name', async () => {
+    const tempHome = await mkdtemp(path.join(os.tmpdir(), 'brainctl-apply-keep-home-'));
+    const tempProject = await mkdtemp(path.join(os.tmpdir(), 'brainctl-apply-keep-proj-'));
+    tempDirs.push(tempHome, tempProject);
+    const originalHome = process.env.HOME;
+    const originalBrainctlHome = process.env.BRAINCTL_HOME;
+    process.env.HOME = tempHome;
+    process.env.BRAINCTL_HOME = tempProject;
+
+    try {
+      const folder = path.join(tempProject, '.brainctl', 'profiles', 'shared');
+      await mkdir(path.join(folder, 'skills', 'notes'), { recursive: true });
+      await writeFile(
+        path.join(folder, 'skills', 'notes', 'SKILL.md'),
+        '# profile notes',
+        'utf8'
+      );
+      await writeFile(
+        path.join(folder, 'manifest.yaml'),
+        [
+          'schemaVersion: 3',
+          'profileName: shared',
+          'userSkills:',
+          '  - agent: claude',
+          '    name: notes',
+          '    archivePath: skills/notes',
+        ].join('\n'),
+        'utf8'
+      );
+
+      const profileService: ProfileService = {
+        async list() {
+          return { profiles: ['shared'] };
+        },
+        async get() {
+          return { name: 'shared', skills: {}, mcps: {}, memory: { paths: [] } };
+        },
+        async create() {
+          return { profilePath: '' };
+        },
+        async update() {},
+        async delete() {},
+        async getMetaConfig() {
+          return { agents: ['claude'] };
+        },
+      };
+
+      const writer: AgentConfigWriter = {
+        async write() {
+          return { configPath: '/tmp/c', backedUpTo: null };
+        },
+        async restore() {
+          return { restoredFrom: '' };
+        },
+      };
+
+      const service = createProfileApplyService({
+        profileService,
+        writers: { claude: writer },
+      });
+
+      const result = await service.execute({
+        cwd: tempProject,
+        profileName: 'shared',
+        agents: ['claude'],
+        backup: false,
+        itemActions: [
+          { agent: 'claude', type: 'skill', name: 'notes', action: 'keep-both', targetName: 'notes-copy' },
+        ],
+      });
+
+      expect(result.applied[0].userSkillsInstalled).toEqual(['notes-copy']);
+      await expect(
+        readFile(path.join(tempHome, '.claude', 'skills', 'notes-copy', 'SKILL.md'), 'utf8')
+      ).resolves.toBe('# profile notes');
+      await expect(
+        readFile(path.join(tempHome, '.claude', 'skills', 'notes', 'SKILL.md'), 'utf8')
+      ).rejects.toThrow();
+    } finally {
+      if (originalHome === undefined) delete process.env.HOME;
+      else process.env.HOME = originalHome;
+      if (originalBrainctlHome === undefined) delete process.env.BRAINCTL_HOME;
+      else process.env.BRAINCTL_HOME = originalBrainctlHome;
+    }
+  });
+
   it('runs auto-backup on full apply', async () => {
     const tempProject = await mkdtemp(path.join(os.tmpdir(), 'brainctl-apply-full-'));
     tempDirs.push(tempProject);

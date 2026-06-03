@@ -64,6 +64,30 @@ interface FinalizeResolvedPendingAdditionResult {
   reason: 'staged' | 'stale' | 'duplicate' | 'conflict';
 }
 
+export type DropConflictResolution = 'replace' | 'keep-current' | 'keep-both';
+
+export interface PendingAdditionConflict {
+  change: PendingChange;
+  suggestedKey: string;
+  targetLabel: string;
+  categoryLabel: string;
+  canKeepBoth: boolean;
+}
+
+interface ResolvePendingAdditionConflictOptions {
+  agentConfigs: AgentLiveConfig[];
+  pendingChanges: PendingChange[];
+  nextChange: PendingChange;
+  resolution: DropConflictResolution;
+  suggestedKey: string;
+  createChangeId: () => string;
+}
+
+interface ResolvePendingAdditionConflictResult {
+  changes: PendingChange[];
+  error: string | null;
+}
+
 let changeIdCounter = 0;
 
 function nextChangeId(): string {
@@ -145,7 +169,7 @@ export function applyPendingChanges(
     if (change.category === 'skill') {
       if (change.type === 'add' && change.skillEntry) {
         if (!config.skills.some((skill) => skill.name === change.key)) {
-          config.skills = [...config.skills, change.skillEntry];
+          config.skills = [...config.skills, { ...change.skillEntry, name: change.key }];
         }
       } else if (change.type === 'remove') {
         config.skills = config.skills.filter((skill) => skill.name !== change.key);
@@ -165,6 +189,123 @@ export function applyPendingChanges(
   }
 
   return result;
+}
+
+export function findPendingAdditionConflict(
+  configs: AgentLiveConfig[],
+  change: PendingChange
+): PendingAdditionConflict | null {
+  if (change.type !== 'add') return null;
+
+  const targetConfig = configs.find((config) => config.agent === change.agent);
+  if (!targetConfig) return null;
+
+  let exists = false;
+  if (change.category === 'mcp') {
+    const mcpMap = change.scope === 'project' ? targetConfig.projectMcpServers : targetConfig.mcpServers;
+    const remoteMcpMap = change.scope === 'project' ? targetConfig.projectRemoteMcpServers : targetConfig.remoteMcpServers;
+    exists = Boolean(mcpMap?.[change.key] || remoteMcpMap?.[change.key]);
+  } else if (change.category === 'plugin') {
+    exists = targetConfig.skills.some((skill) => skill.name === change.key && skill.kind === 'plugin');
+  } else {
+    exists = targetConfig.skills.some((skill) => skill.name === change.key);
+  }
+
+  if (!exists) return null;
+
+  return {
+    change,
+    suggestedKey: generateCopyKey(configs, [], change),
+    targetLabel: AGENT_LABELS[change.agent] ?? change.agent,
+    categoryLabel: change.category === 'mcp' ? 'MCP' : change.category === 'plugin' ? 'Plugin' : 'Skill',
+    canKeepBoth: change.category !== 'plugin',
+  };
+}
+
+export function generateCopyKey(
+  configs: AgentLiveConfig[],
+  pendingChanges: PendingChange[],
+  change: PendingChange
+): string {
+  const previewConfigs = applyPendingChanges(configs, pendingChanges);
+  const targetConfig = previewConfigs.find((config) => config.agent === change.agent);
+  const used = new Set<string>();
+
+  if (targetConfig) {
+    if (change.category === 'mcp') {
+      const mcpMap = change.scope === 'project' ? targetConfig.projectMcpServers : targetConfig.mcpServers;
+      const remoteMcpMap = change.scope === 'project' ? targetConfig.projectRemoteMcpServers : targetConfig.remoteMcpServers;
+      for (const key of Object.keys(mcpMap ?? {})) used.add(key);
+      for (const key of Object.keys(remoteMcpMap ?? {})) used.add(key);
+    } else if (change.category === 'plugin') {
+      for (const skill of targetConfig.skills) {
+        if (skill.kind === 'plugin') used.add(skill.name);
+      }
+    } else {
+      for (const skill of targetConfig.skills) used.add(skill.name);
+    }
+  }
+
+  const base = `${change.key}-copy`;
+  if (!used.has(base)) return base;
+
+  for (let i = 2; ; i += 1) {
+    const candidate = `${base}-${i}`;
+    if (!used.has(candidate)) return candidate;
+  }
+}
+
+function retargetPendingAddition(change: PendingChange, key: string): PendingChange {
+  const sourceKey = change.sourceKey ?? change.key;
+  return {
+    ...change,
+    key,
+    sourceKey,
+    skillEntry: change.skillEntry ? { ...change.skillEntry, name: key } : undefined,
+    pluginEntry: change.pluginEntry ? { ...change.pluginEntry, name: key } : undefined,
+  };
+}
+
+export function resolvePendingAdditionConflict({
+  agentConfigs,
+  pendingChanges,
+  nextChange,
+  resolution,
+  suggestedKey,
+  createChangeId,
+}: ResolvePendingAdditionConflictOptions): ResolvePendingAdditionConflictResult {
+  if (resolution === 'keep-current') {
+    return { changes: pendingChanges, error: null };
+  }
+
+  if (resolution === 'keep-both') {
+    if (nextChange.category === 'plugin') {
+      return { changes: pendingChanges, error: 'Plugins cannot be duplicated because their bundled files keep their original names.' };
+    }
+    const renamedChange = retargetPendingAddition(nextChange, suggestedKey);
+    const latestPreviewConfigs = applyPendingChanges(agentConfigs, pendingChanges);
+    const stagingError = canStagePendingAddition(latestPreviewConfigs, renamedChange);
+    if (stagingError) {
+      return { changes: pendingChanges, error: stagingError };
+    }
+    return { changes: [...pendingChanges, renamedChange], error: null };
+  }
+
+  const removeChange: PendingChange = {
+    id: createChangeId(),
+    type: 'remove',
+    category: nextChange.category,
+    agent: nextChange.agent,
+    key: nextChange.key,
+    scope: nextChange.scope,
+  };
+  const previewAfterRemove = applyPendingChanges(agentConfigs, [...pendingChanges, removeChange]);
+  const stagingError = canStagePendingAddition(previewAfterRemove, nextChange);
+  if (stagingError) {
+    return { changes: pendingChanges, error: stagingError };
+  }
+
+  return { changes: [...pendingChanges, removeChange, nextChange], error: null };
 }
 
 function getPendingKeys(changes: PendingChange[]): PendingKeyMaps {
@@ -364,6 +505,7 @@ export function useProfilesBoard() {
     fromScope: 'global' | 'project';
     fromProjectPath?: string;
   } | null>(null);
+  const [dropConflict, setDropConflict] = useState<PendingAdditionConflict | null>(null);
   const agentConfigsRef = useRef(agentConfigs);
   const pendingChangesRef = useRef(pendingChanges);
   const boardScopeRef = useRef(boardScope);
@@ -589,7 +731,8 @@ export function useProfilesBoard() {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
-                name: change.key,
+                name: change.sourceKey ?? change.key,
+                targetName: change.key,
                 sourceAgent: change.sourceAgent,
                 source: change.skillEntry?.source,
               }),
@@ -784,6 +927,159 @@ export function useProfilesBoard() {
     [showFeedback]
   );
 
+  const validatePendingAddition = useCallback(
+    async (change: PendingChange): Promise<string | null> => {
+      if (change.category === 'mcp') {
+        const preflight = await fetchJson<McpPreflightResult>(
+          withCwd(`/api/agents/${change.agent}/mcps/check`, activeProjectRef.current),
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              key: change.key,
+              entry: change.entry,
+              remoteEntry: change.remoteEntry,
+            }),
+          }
+        );
+
+        return preflight.checks.find((check) => check.status === 'error')?.message ?? null;
+      }
+
+      if (change.category === 'skill') {
+        const preflight = await fetchJson<SkillPreflightResult>(
+          withCwd(`/api/agents/${change.agent}/skills/check`, activeProjectRef.current),
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              name: change.sourceKey ?? change.key,
+              targetName: change.key,
+              sourceAgent: change.sourceAgent,
+              source: change.skillEntry?.source,
+            }),
+          }
+        );
+
+        return preflight.checks.find((check) => check.status === 'error')?.message ?? null;
+      }
+
+      const preflight = await fetchJson<{
+        ok: boolean;
+        checks: Array<{ label: string; status: 'ok' | 'warn' | 'error'; message: string }>;
+      }>(withCwd(`/api/agents/${change.agent}/plugins/check`, activeProjectRef.current), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: change.sourceKey ?? change.key,
+          sourceAgent: change.sourceAgent,
+        }),
+      });
+
+      return preflight.checks.find((check) => check.status === 'error')?.message ?? null;
+    },
+    []
+  );
+
+  const validateAndStageAddition = useCallback(
+    (startedPreflightGeneration: number, nextChange: PendingChange) => {
+      void (async () => {
+        try {
+          const validationError = await validatePendingAddition(nextChange);
+          if (validationError) {
+            showFeedback('error', validationError);
+            return;
+          }
+
+          stageValidatedChange(startedPreflightGeneration, nextChange);
+        } catch (error) {
+          const label =
+            nextChange.category === 'mcp'
+              ? 'MCP'
+              : nextChange.category === 'plugin'
+                ? 'plugin'
+                : 'skill';
+          showFeedback(
+            'error',
+            `Failed to validate ${label} "${nextChange.key}" before staging: ${(error as Error).message}`
+          );
+        }
+      })();
+    },
+    [showFeedback, stageValidatedChange, validatePendingAddition]
+  );
+
+  const resolveDropConflict = useCallback(
+    (resolution: DropConflictResolution) => {
+      const conflict = dropConflict;
+      if (!conflict) return;
+      setDropConflict(null);
+
+      if (resolution === 'keep-current') return;
+
+      const startedPreflightGeneration = preflightGenerationRef.current;
+      void (async () => {
+        const initialResult = resolvePendingAdditionConflict({
+          agentConfigs: agentConfigsRef.current,
+          pendingChanges: pendingChangesRef.current,
+          nextChange: conflict.change,
+          resolution,
+          suggestedKey: conflict.suggestedKey,
+          createChangeId: nextChangeId,
+        });
+        if (initialResult.error) {
+          showFeedback('error', initialResult.error);
+          return;
+        }
+
+        const additions = initialResult.changes
+          .slice(pendingChangesRef.current.length)
+          .filter((change) => change.type === 'add');
+        const addition = additions[additions.length - 1];
+        if (addition && !(resolution === 'replace' && addition.category === 'plugin')) {
+          try {
+            const validationError = await validatePendingAddition(addition);
+            if (validationError) {
+              showFeedback('error', validationError);
+              return;
+            }
+          } catch (error) {
+            showFeedback(
+              'error',
+              `Failed to validate ${conflict.categoryLabel} "${addition.key}" before staging: ${(error as Error).message}`
+            );
+            return;
+          }
+        }
+
+        if (startedPreflightGeneration !== preflightGenerationRef.current || !isEditModeRef.current) {
+          return;
+        }
+
+        setPendingChanges((previous) => {
+          const result = resolvePendingAdditionConflict({
+            agentConfigs: agentConfigsRef.current,
+            pendingChanges: previous,
+            nextChange: conflict.change,
+            resolution,
+            suggestedKey: generateCopyKey(agentConfigsRef.current, previous, conflict.change),
+            createChangeId: nextChangeId,
+          });
+          if (result.error) {
+            showFeedback('error', result.error);
+            return previous;
+          }
+          return result.changes;
+        });
+      })();
+    },
+    [dropConflict, showFeedback, validatePendingAddition]
+  );
+
+  const dismissDropConflict = useCallback(() => {
+    setDropConflict(null);
+  }, []);
+
   const handleDragStart = useCallback(
     (event: DragStartEvent) => {
       if (!isEditModeRef.current) {
@@ -843,6 +1139,14 @@ export function useProfilesBoard() {
           remoteEntry,
           sourceAgent: source.agent,
         };
+        const conflict = findPendingAdditionConflict(previewConfigs, nextChange);
+        if (conflict) {
+          setDropConflict({
+            ...conflict,
+            suggestedKey: generateCopyKey(agentConfigsRef.current, pendingChangesRef.current, nextChange),
+          });
+          return;
+        }
         const stagingError = canStagePendingAddition(previewConfigs, nextChange);
         if (stagingError) {
           showFeedback('error', stagingError);
@@ -850,31 +1154,7 @@ export function useProfilesBoard() {
         }
 
         const startedPreflightGeneration = preflightGenerationRef.current;
-        void (async () => {
-          try {
-            const preflight = await fetchJson<McpPreflightResult>(
-              withCwd(`/api/agents/${target.agent}/mcps/check`, activeProjectRef.current),
-              {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ key: source.key, entry, remoteEntry }),
-              }
-            );
-
-            const firstError = preflight.checks.find((check) => check.status === 'error');
-            if (firstError) {
-              showFeedback('error', firstError.message);
-              return;
-            }
-
-            stageValidatedChange(startedPreflightGeneration, nextChange);
-          } catch (error) {
-            showFeedback(
-              'error',
-              `Failed to validate MCP "${source.key}" before staging: ${(error as Error).message}`
-            );
-          }
-        })();
+        validateAndStageAddition(startedPreflightGeneration, nextChange);
         return;
       }
 
@@ -901,6 +1181,14 @@ export function useProfilesBoard() {
           skillEntry: skill,
           sourceAgent: source.agent,
         };
+        const conflict = findPendingAdditionConflict(previewConfigs, nextChange);
+        if (conflict) {
+          setDropConflict({
+            ...conflict,
+            suggestedKey: generateCopyKey(agentConfigsRef.current, pendingChangesRef.current, nextChange),
+          });
+          return;
+        }
         const stagingError = canStagePendingAddition(previewConfigs, nextChange);
         if (stagingError) {
           showFeedback('error', stagingError);
@@ -908,35 +1196,7 @@ export function useProfilesBoard() {
         }
 
         const startedPreflightGeneration = preflightGenerationRef.current;
-        void (async () => {
-          try {
-            const preflight = await fetchJson<SkillPreflightResult>(
-              withCwd(`/api/agents/${target.agent}/skills/check`, activeProjectRef.current),
-              {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  name: source.key,
-                  sourceAgent: source.agent,
-                  source: skill.source,
-                }),
-              }
-            );
-
-            const firstError = preflight.checks.find((check) => check.status === 'error');
-            if (firstError) {
-              showFeedback('error', firstError.message);
-              return;
-            }
-
-            stageValidatedChange(startedPreflightGeneration, nextChange);
-          } catch (error) {
-            showFeedback(
-              'error',
-              `Failed to validate skill "${source.key}" before staging: ${(error as Error).message}`
-            );
-          }
-        })();
+        validateAndStageAddition(startedPreflightGeneration, nextChange);
         return;
       }
 
@@ -964,6 +1224,14 @@ export function useProfilesBoard() {
         pluginEntry: plugin,
         sourceAgent: source.agent,
       };
+      const conflict = findPendingAdditionConflict(previewConfigs, nextChange);
+      if (conflict) {
+        setDropConflict({
+          ...conflict,
+          suggestedKey: generateCopyKey(agentConfigsRef.current, pendingChangesRef.current, nextChange),
+        });
+        return;
+      }
       const stagingError = canStagePendingAddition(previewConfigs, nextChange);
       if (stagingError) {
         showFeedback('error', stagingError);
@@ -971,36 +1239,9 @@ export function useProfilesBoard() {
       }
 
       const startedPreflightGeneration = preflightGenerationRef.current;
-      void (async () => {
-        try {
-          const preflight = await fetchJson<{
-            ok: boolean;
-            checks: Array<{ label: string; status: 'ok' | 'warn' | 'error'; message: string }>;
-          }>(withCwd(`/api/agents/${target.agent}/plugins/check`, activeProjectRef.current), {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              name: source.key,
-              sourceAgent: source.agent,
-            }),
-          });
-
-          const firstError = preflight.checks.find((check) => check.status === 'error');
-          if (firstError) {
-            showFeedback('error', firstError.message);
-            return;
-          }
-
-          stageValidatedChange(startedPreflightGeneration, nextChange);
-        } catch (error) {
-          showFeedback(
-            'error',
-            `Failed to validate plugin "${source.key}" before staging: ${(error as Error).message}`
-          );
-        }
-      })();
+      validateAndStageAddition(startedPreflightGeneration, nextChange);
     },
-    [pendingChanges, previewConfigs, showFeedback, stageValidatedChange]
+    [pendingChanges, previewConfigs, showFeedback, validateAndStageAddition]
   );
 
   useEffect(() => {
@@ -1039,6 +1280,9 @@ export function useProfilesBoard() {
     moveScopeRequest,
     cancelMoveScope,
     confirmMoveScope,
+    dropConflict,
+    resolveDropConflict,
+    dismissDropConflict,
     handleUndoChange,
     handleDiscardAll,
     handleSave,
