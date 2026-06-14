@@ -8,6 +8,8 @@ interface ImportProfileDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onImported: (profileName: string) => void;
+  /** When provided, the dialog opens in "Install by slug" mode pre-filled with this slug. */
+  initialSlug?: string;
 }
 
 interface ImportResult {
@@ -20,6 +22,7 @@ export default function ImportProfileDialog({
   open,
   onOpenChange,
   onImported,
+  initialSlug,
 }: ImportProfileDialogProps) {
   const [mode, setMode] = useState<'file' | 'slug'>('file');
   const [file, setFile] = useState<File | null>(null);
@@ -45,8 +48,11 @@ export default function ImportProfileDialog({
       setDragOver(false);
       setMissingCreds([]);
       setCreds({});
+    } else if (initialSlug) {
+      setMode('slug');
+      setSlug(initialSlug);
     }
-  }, [open]);
+  }, [open, initialSlug]);
 
   function parseMissingCreds(message: string): string[] {
     const m = message.match(/Missing required credentials:\s*([^.]+)\./i);

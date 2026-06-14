@@ -1,10 +1,11 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { BookOpen, Check, Loader2, Store } from 'lucide-react';
 
 import { AgentLogo } from './components/agent-brand';
 import ApiModeBadge from './components/ApiModeBadge';
 import CreateProfileButton from './components/CreateProfileButton';
 import ImportProfileButton from './components/ImportProfileButton';
+import ImportProfileDialog from './components/ImportProfileDialog';
 import SignInButton from './components/SignInButton';
 import { toast } from './components/ui/toast.js';
 import { useAuthStatus } from './lib/auth-status.js';
@@ -158,6 +159,24 @@ export default function App() {
   const [publishProfileName, setPublishProfileName] = useState<string | null>(null);
   const [viewProfileName, setViewProfileName] = useState<string | null>(null);
   const [editProfileName, setEditProfileName] = useState<string | null>(null);
+  // Deep link: marketplace "Open in brainctl" sends users here with ?install=<slug>.
+  const [installSlug, setInstallSlug] = useState<string | null>(null);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const slug = params.get('install')?.trim();
+    if (slug) {
+      setInstallSlug(slug);
+      // Strip the param so a refresh doesn't re-trigger the install prompt.
+      params.delete('install');
+      const query = params.toString();
+      window.history.replaceState(
+        {},
+        '',
+        `${window.location.pathname}${query ? `?${query}` : ''}`,
+      );
+    }
+  }, []);
 
   return (
     <main className="h-screen overflow-hidden bg-[#fcfcfc] p-4 text-zinc-900">
@@ -262,6 +281,17 @@ export default function App() {
           </div>
         </section>
       </div>
+
+      <ImportProfileDialog
+        open={installSlug !== null}
+        initialSlug={installSlug ?? undefined}
+        onOpenChange={(next) => {
+          if (!next) setInstallSlug(null);
+        }}
+        onImported={() => {
+          window.dispatchEvent(new CustomEvent('brainctl:profiles-changed'));
+        }}
+      />
     </main>
   );
 }
