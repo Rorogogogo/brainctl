@@ -1586,12 +1586,25 @@ function sendJson(
 }
 
 function authResultHtml(kind: 'ok' | 'error', message: string): string {
-  const color = kind === 'ok' ? '#16a34a' : '#dc2626';
-  const title = kind === 'ok' ? 'Signed in to brainctl' : 'Sign-in failed';
+  const isOk = kind === 'ok';
+  const title = isOk ? 'You’re signed in' : 'Sign-in failed';
   const safe = message.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-  const autoCloseScript =
-    kind === 'ok'
-      ? `<script>(function(){
+
+  const logo = `<svg class="logo" viewBox="0 0 64 64" fill="none" aria-hidden="true">
+    <rect x="4" y="4" width="56" height="56" rx="12" fill="currentColor" fill-opacity=".06"/>
+    <mask id="m" maskUnits="userSpaceOnUse" x="10" y="10" width="44" height="44">
+      <rect x="10" y="10" width="44" height="44" rx="7" fill="#fff"/>
+      <path d="M10 54 L54 10" stroke="#000" stroke-width="4" stroke-linecap="square"/>
+    </mask>
+    <rect x="10" y="10" width="44" height="44" rx="7" fill="currentColor" mask="url(#m)"/>
+  </svg>`;
+
+  const icon = isOk
+    ? `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>`
+    : `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>`;
+
+  const autoCloseScript = isOk
+    ? `<script>(function(){
     var seconds=3;
     var label=document.getElementById('countdown');
     var btn=document.getElementById('close-btn');
@@ -1603,25 +1616,47 @@ function authResultHtml(kind: 'ok' | 'error', message: string): string {
       if(seconds<=0){clearInterval(timer);tryClose();}
     },1000);
   })();</script>`
-      : '';
-  const body =
-    kind === 'ok'
-      ? `<div class="card"><h1><span class="dot"></span>${title}</h1>
+    : '';
+
+  const body = isOk
+    ? `<div class="status status-ok">${icon}</div>
+    <h1>${title}</h1>
     <p>${safe}</p>
-    <p class="hint">Return to the brainctl dashboard to continue. This tab will close in <span id="countdown">3</span>s.</p>
-    <button id="close-btn" type="button" class="btn">Close this tab</button>
-  </div>`
-      : `<div class="card"><h1><span class="dot"></span>${title}</h1><p>${safe}</p></div>`;
-  return `<!doctype html><html><head><meta charset="utf-8"><title>${title}</title><style>
-    body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;display:grid;place-items:center;min-height:100vh;margin:0;color:#18181b;background:#fafafa}
-    .card{max-width:420px;text-align:center;padding:32px;border:1px solid #e4e4e7;border-radius:16px;background:white;box-shadow:0 1px 2px rgba(0,0,0,.04)}
-    h1{margin:0 0 8px;font-size:18px}
-    p{margin:0;color:#52525b;font-size:14px}
-    .hint{margin-top:12px}
-    .btn{margin-top:20px;padding:8px 16px;font-size:14px;border:1px solid #d4d4d8;border-radius:8px;background:white;color:#18181b;cursor:pointer}
-    .btn:hover{background:#f4f4f5}
-    .dot{display:inline-block;width:10px;height:10px;border-radius:50%;background:${color};margin-right:8px;vertical-align:middle}
-  </style></head><body>${body}${autoCloseScript}</body></html>`;
+    <p class="hint">Return to the brainctl dashboard to continue. This tab closes in <span id="countdown">3</span>s.</p>
+    <button id="close-btn" type="button" class="btn">Close this tab</button>`
+    : `<div class="status status-err">${icon}</div>
+    <h1>${title}</h1>
+    <p>${safe}</p>
+    <p class="hint">Close this tab and try signing in again from the brainctl dashboard.</p>`;
+
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>${title} · brainctl</title><style>
+    :root{
+      --bg:#fafafa; --fg:#18181b; --muted:#71717a; --card:#ffffff;
+      --border:#e4e4e7; --brand:#0a0a0a;
+      --ok:#16a34a; --ok-bg:#f0fdf4; --err:#dc2626; --err-bg:#fef2f2;
+    }
+    @media (prefers-color-scheme: dark){
+      :root{
+        --bg:#09090b; --fg:#fafafa; --muted:#a1a1aa; --card:#18181b;
+        --border:#27272a; --brand:#fafafa;
+        --ok:#4ade80; --ok-bg:rgba(74,222,128,.1); --err:#f87171; --err-bg:rgba(248,113,113,.1);
+      }
+    }
+    *{box-sizing:border-box}
+    body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;display:grid;place-items:center;min-height:100vh;margin:0;padding:24px;color:var(--fg);background:var(--bg);-webkit-font-smoothing:antialiased}
+    .card{width:100%;max-width:400px;text-align:center;padding:40px 32px;border:1px solid var(--border);border-radius:20px;background:var(--card);box-shadow:0 1px 3px rgba(0,0,0,.04),0 8px 24px rgba(0,0,0,.04)}
+    .logo{width:44px;height:44px;color:var(--brand);margin-bottom:24px}
+    .status{width:56px;height:56px;margin:0 auto 20px;border-radius:50%;display:grid;place-items:center}
+    .status svg{width:28px;height:28px}
+    .status-ok{background:var(--ok-bg);color:var(--ok)}
+    .status-err{background:var(--err-bg);color:var(--err)}
+    h1{margin:0 0 8px;font-size:20px;font-weight:600;letter-spacing:-.01em}
+    p{margin:0;color:var(--muted);font-size:14px;line-height:1.5}
+    .hint{margin-top:16px;font-size:13px}
+    #countdown{font-variant-numeric:tabular-nums;color:var(--fg);font-weight:500}
+    .btn{margin-top:24px;padding:9px 18px;font-size:14px;font-weight:500;border:1px solid var(--border);border-radius:10px;background:transparent;color:var(--fg);cursor:pointer;transition:background .15s,border-color .15s}
+    .btn:hover{background:var(--bg);border-color:var(--muted)}
+  </style></head><body><div class="card">${logo}${body}</div>${autoCloseScript}</body></html>`;
 }
 
 function acceptsNdjson(request: IncomingMessage): boolean {
