@@ -94,6 +94,14 @@ export interface LocalBundledMcpServerConfig {
   env?: Record<string, string>;
 }
 
+export interface LocalCommandMcpServerConfig {
+  kind: 'local';
+  source: 'command';
+  command: string;
+  args?: string[];
+  env?: Record<string, string>;
+}
+
 export interface RemoteMcpServerConfig {
   kind: 'remote';
   transport: 'http' | 'sse';
@@ -102,7 +110,10 @@ export interface RemoteMcpServerConfig {
   env?: Record<string, string>;
 }
 
-export type LocalMcpServerConfig = LocalNpmMcpServerConfig | LocalBundledMcpServerConfig;
+export type LocalMcpServerConfig =
+  | LocalNpmMcpServerConfig
+  | LocalBundledMcpServerConfig
+  | LocalCommandMcpServerConfig;
 export type McpServerConfig = LocalMcpServerConfig | RemoteMcpServerConfig;
 
 export interface ProfileConfig {

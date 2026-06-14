@@ -287,19 +287,46 @@ describe('classifyPortableMcp', () => {
     ).toThrowError('Remote MCP "docs" must use transport "http" or "sse".');
   });
 
-  it('rejects ambiguous live entries that cannot be safely packed', () => {
-    expect(() =>
-      classifyPortableMcp({
-        cwd: '/workspace/project',
-        key: 'unknown-tool',
-        entry: {
-          command: 'docker',
-          args: ['run', 'my-image'],
+  it('classifies bare PATH executables as command MCPs', () => {
+    const result = classifyPortableMcp({
+      cwd: '/workspace/project',
+      key: 'pg-mcp-brainctl-local',
+      entry: {
+        command: 'postgres-mcp',
+        args: ['--access-mode=restricted'],
+        env: {
+          DATABASE_URI: 'postgres://postgres:postgres@127.0.0.1:5432/brainctl_api',
         },
-      })
-    ).toThrowError(
-      'MCP "unknown-tool" cannot be packed: unrecognized command "docker".'
-    );
+      },
+    });
+
+    expect(result).toEqual({
+      kind: 'local',
+      source: 'command',
+      command: 'postgres-mcp',
+      args: ['--access-mode=restricted'],
+      env: {
+        DATABASE_URI: 'postgres://postgres:postgres@127.0.0.1:5432/brainctl_api',
+      },
+    });
+  });
+
+  it('classifies bare PATH commands without args as command MCPs', () => {
+    const result = classifyPortableMcp({
+      cwd: '/workspace/project',
+      key: 'docker-tool',
+      entry: {
+        command: 'docker',
+        args: ['run', 'my-image'],
+      },
+    });
+
+    expect(result).toEqual({
+      kind: 'local',
+      source: 'command',
+      command: 'docker',
+      args: ['run', 'my-image'],
+    });
   });
 
   it('classifies absolute command-path launchers outside cwd as bundled with the absolute directory', () => {

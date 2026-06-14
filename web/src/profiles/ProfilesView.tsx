@@ -101,8 +101,8 @@ export default function ProfilesView() {
   }
 
   return (
-    <div className="grid gap-4 w-full">
-      <div className="flex flex-col items-stretch gap-4 pb-4 border-b border-zinc-200/60 lg:flex-row lg:items-start lg:justify-between">
+    <div className="grid gap-3 w-full">
+      <div className="flex flex-col items-stretch gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div className="grid min-w-0 flex-1 gap-1">
           <div className="flex min-w-0 flex-nowrap items-center gap-3">
             <h3 className="m-0 shrink-0 text-xl font-semibold tracking-tight text-zinc-900">Local agents</h3>

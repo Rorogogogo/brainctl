@@ -2,6 +2,19 @@
 
 This guide covers how to point `brainctl` (CLI + MCP server + web dashboard) at a **local** instance of `brainctl-platform` (the backend + frontend) versus the **production** registry at `brainctl.net`.
 
+## TL;DR — flip with one command
+
+From the `brainctl` repo, one command flips **all** surfaces at once (CLI, dashboard, and the MCP server), because they all read the same `~/.brainctl/config.json`:
+
+```bash
+npm run target local     # → http://127.0.0.1:3877 (sign-in derives to :5173)
+npm run target prod      # → back to https://api.brainctl.net
+npm run target           # → show the active target
+npm run target <url>     # → a custom backend
+```
+
+After flipping, restart the dashboard (or reconnect the agent's MCP) so the running process re-reads the file. Confirm with `npm run target` or the dashboard's mode badge. This switcher is dev-only — it lives in `scripts/` and is never shipped to installed users (the published package contains only `dist/`, and the default for everyone else stays prod). For the env-var and per-agent approaches, see the options below.
+
 ## How the API target is resolved
 
 `brainctl` resolves where to call the platform in this order. The first non-empty value wins:
@@ -17,8 +30,8 @@ The platform frontend URL (used by the in-app **Sign in** button) follows the sa
 2. `apiFrontendUrl` in `~/.brainctl/config.json`
 3. Auto-derived from `apiBaseUrl`:
    - `localhost:<n>` → `localhost:5173`
-   - `api.<domain>` → `app.<domain>`
-4. Default: `https://app.brainctl.net`
+   - `api.<domain>` → `<domain>` (e.g. `api.brainctl.net` → `brainctl.net`)
+4. Default: `https://brainctl.net`
 
 The dashboard shows the active mode as a coloured badge next to the version in the top-left header:
 
@@ -124,6 +137,19 @@ brainctl config status
 ```
 
 Config lives in `~/.brainctl/config.json` (override path with `BRAINCTL_CONFIG_PATH`).
+
+## Option C — one command (`npm run target`)
+
+A thin wrapper over Option B for when you flip often and want a single, memorable switch. It writes/clears `apiBaseUrl` in `~/.brainctl/config.json`, so the same one place drives the CLI, dashboard, and MCP server.
+
+```bash
+npm run target local     # set apiBaseUrl=http://127.0.0.1:3877
+npm run target prod      # unset apiBaseUrl (revert to the prod default)
+npm run target <url>     # set a custom backend
+npm run target           # print the active target (mode / api / web / source)
+```
+
+It does **not** set `apiFrontendUrl` — the sign-in URL auto-derives from `apiBaseUrl` (`127.0.0.1:3877` → `127.0.0.1:5173`), matching the derivation rules above. If you have `BRAINCTL_API_BASE_URL` exported in your shell (Option A), it overrides the config file and the switch won't take effect — the command warns you when that's the case.
 
 ## Sign-in flow per environment
 
