@@ -68,12 +68,14 @@ export interface ProfilesDrawerProps {
   onApplyProfile?: (profileName: string) => void;
   onPublishProfile?: (profileName: string) => void;
   onViewProfile?: (profileName: string) => void;
+  onEditProfile?: (profileName: string) => void;
 }
 
 export default function ProfilesDrawer({
   onApplyProfile,
   onPublishProfile,
   onViewProfile,
+  onEditProfile,
 }: ProfilesDrawerProps) {
   const [profiles, setProfiles] = useState<ProfileSummary[]>([]);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());

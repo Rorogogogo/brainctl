@@ -18,7 +18,7 @@ const bars = [
   { animationDelay: '-0.1s', transform: 'rotate(330deg) translate(146%)' },
 ];
 
-export function Spinner({ size = 20, color = '#8f8f8f' }: SpinnerProps) {
+export function Spinner({ size = 20, color = 'currentColor' }: SpinnerProps) {
   return (
     <div style={{ width: size, height: size }}>
       <div className="relative left-1/2 top-1/2" style={{ width: size, height: size }}>

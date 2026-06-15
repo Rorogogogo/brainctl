@@ -7,6 +7,7 @@ import CreateProfileButton from './components/CreateProfileButton';
 import ImportProfileButton from './components/ImportProfileButton';
 import SignInButton from './components/SignInButton';
 import { toast } from './components/ui/toast.js';
+import { Button } from './components/ui/button.js';
 import { useAuthStatus } from './lib/auth-status.js';
 import ApplyProfilePanel from './profiles/ApplyProfilePanel';
 import EditProfilePanel from './profiles/EditProfilePanel';
@@ -21,16 +22,12 @@ function MarketplaceLink() {
   const { status } = useAuthStatus();
   const href = status?.apiFrontendUrl ?? DEFAULT_MARKETPLACE_URL;
   return (
-    <a
-      href={href}
-      target="_blank"
-      rel="noopener noreferrer"
-      title={href}
-      className="inline-flex h-9 items-center gap-2 rounded-xl border border-zinc-200 bg-white px-4 text-sm font-medium text-zinc-700 shadow-sm transition-colors hover:bg-zinc-50 hover:text-zinc-900"
-    >
-      <Store size={16} />
-      <span>Marketplace</span>
-    </a>
+    <Button variant="outline" size="sm" asChild>
+      <a href={href} target="_blank" rel="noopener noreferrer" title={href}>
+        <Store size={16} />
+        <span>Marketplace</span>
+      </a>
+    </Button>
   );
 }
 
@@ -39,16 +36,12 @@ function DocsLink() {
   const baseUrl = status?.apiFrontendUrl ?? DEFAULT_MARKETPLACE_URL;
   const href = `${baseUrl.replace(/\/$/, '')}/docs`;
   return (
-    <a
-      href={href}
-      target="_blank"
-      rel="noopener noreferrer"
-      title={href}
-      className="inline-flex h-9 items-center gap-2 rounded-xl border border-zinc-200 bg-white px-4 text-sm font-medium text-zinc-700 shadow-sm transition-colors hover:bg-zinc-50 hover:text-zinc-900"
-    >
-      <BookOpen size={16} />
-      <span>Docs</span>
-    </a>
+    <Button variant="outline" size="sm" asChild>
+      <a href={href} target="_blank" rel="noopener noreferrer" title={href}>
+        <BookOpen size={16} />
+        <span>Docs</span>
+      </a>
+    </Button>
   );
 }
 
@@ -108,8 +101,8 @@ function SnapshotButtons() {
   }
 
   return (
-    <div className="flex items-center gap-1 rounded-xl border border-zinc-200 bg-white px-2 py-1 shadow-sm">
-      <span className="px-1 text-[10px] font-semibold uppercase tracking-wide text-zinc-500">
+    <div className="flex items-center gap-1 rounded-md border border-border bg-background px-2 py-1 shadow-sm">
+      <span className="px-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
         Snapshot
       </span>
       {AGENTS.map((agent) => {
@@ -133,12 +126,12 @@ function SnapshotButtons() {
                 : s.status === 'error'
                   ? 'bg-rose-100'
                   : s.status === 'pending'
-                    ? 'bg-zinc-100'
-                    : 'hover:bg-zinc-100'
+                    ? 'bg-muted'
+                    : 'hover:bg-muted'
             }`}
           >
             {s.status === 'pending' ? (
-              <Loader2 size={11} className="animate-spin text-zinc-500" />
+              <Loader2 size={11} className="animate-spin text-muted-foreground" />
             ) : s.status === 'success' ? (
               <Check size={11} className="text-emerald-700" />
             ) : (
@@ -160,14 +153,14 @@ export default function App() {
   const [editProfileName, setEditProfileName] = useState<string | null>(null);
 
   return (
-    <main className="h-screen overflow-hidden bg-[#fcfcfc] p-4 text-zinc-900">
+    <main className="h-screen overflow-hidden bg-background p-4 text-foreground">
       <div className="mx-auto grid h-full w-full grid-rows-[auto_minmax(0,1fr)] gap-4">
         <header className="flex min-h-0 shrink-0 flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex items-center gap-3">
             <img src="/favicon.svg" alt="Brainctl Logo" className="size-8" />
             <div className="flex items-center gap-2">
               <h1 className="text-sm font-semibold leading-none tracking-tight">
-                Brainctl <span className="font-normal text-zinc-400">v{__APP_VERSION__}</span>
+                Brainctl <span className="font-normal text-muted-foreground">v{__APP_VERSION__}</span>
               </h1>
               <ApiModeBadge />
             </div>
