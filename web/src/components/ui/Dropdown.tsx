@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Check, ChevronDown } from 'lucide-react';
+import { cn } from '../../lib/utils.js';
 
 export interface DropdownItem {
   value: string;
@@ -74,31 +75,35 @@ export function Dropdown({
         onClick={() => setOpen((o) => !o)}
         className={
           triggerClassName ??
-          'inline-flex h-8 items-center gap-1.5 rounded-lg border border-zinc-300 bg-white px-3 text-sm font-medium text-zinc-800 shadow-sm transition-colors hover:bg-zinc-50 disabled:opacity-50'
+          'inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-background px-3 text-sm font-medium text-foreground shadow-sm transition-colors hover:bg-accent disabled:opacity-50'
         }
       >
-        {leftIcon && <span className="text-zinc-500">{leftIcon}</span>}
+        {leftIcon && <span className="text-muted-foreground">{leftIcon}</span>}
         <span className={labelClassName ?? 'max-w-[260px] truncate'}>{triggerLabel ?? placeholder}</span>
         <ChevronDown
           size={13}
-          className={`text-zinc-400 transition-transform duration-200 ${open ? 'rotate-180' : ''}`}
+          className={cn('text-muted-foreground transition-transform duration-200', open && 'rotate-180')}
         />
       </button>
 
       {open && (
         <div
-          className={`absolute z-20 mt-1.5 ${width} ${align === 'end' ? 'right-0' : 'left-0'} overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-xl`}
+          className={cn(
+            'absolute z-20 mt-1.5 overflow-hidden rounded-lg border border-border bg-popover shadow-lg',
+            width,
+            align === 'end' ? 'right-0' : 'left-0'
+          )}
         >
           <div className="scrollbar-none max-h-80 overflow-y-auto">
             {totalItems === 0 ? (
-              <div className="px-4 py-6 text-center text-sm text-zinc-400">
+              <div className="px-4 py-6 text-center text-sm text-muted-foreground">
                 {emptyLabel ?? 'No options'}
               </div>
             ) : (
               sections.map((section, sIdx) => (
-                <div key={sIdx} className={sIdx > 0 ? 'border-t border-zinc-100' : ''}>
+                <div key={sIdx} className={sIdx > 0 ? 'border-t border-border' : ''}>
                   {section.title && (
-                    <div className="bg-zinc-50/60 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
+                    <div className="bg-muted/40 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
                       {section.title}
                     </div>
                   )}
@@ -115,21 +120,23 @@ export function Dropdown({
                               onSelect(item.value);
                               setOpen(false);
                             }}
-                            className={`group flex w-full items-center justify-between gap-3 px-3 py-2 text-left transition-colors ${
-                              selected ? 'bg-zinc-50' : 'hover:bg-zinc-50'
-                            } ${isLast ? '' : 'border-b border-zinc-100'}`}
+                            className={cn(
+                              'group flex w-full items-center justify-between gap-3 px-3 py-2 text-left transition-colors',
+                              selected ? 'bg-accent' : 'hover:bg-accent',
+                              !isLast && 'border-b border-border'
+                            )}
                           >
                             <div className="min-w-0 flex-1">
-                              <div className="truncate text-sm font-medium text-zinc-900">
+                              <div className="truncate text-sm font-medium text-foreground">
                                 {item.label}
                               </div>
                               {item.description && (
-                                <div className="truncate font-mono text-[11px] text-zinc-500">
+                                <div className="truncate font-mono text-[11px] text-muted-foreground">
                                   {item.description}
                                 </div>
                               )}
                             </div>
-                            {selected && <Check size={14} className="shrink-0 text-zinc-700" />}
+                            {selected && <Check size={14} className="shrink-0 text-foreground" />}
                           </button>
                         </li>
                       );
@@ -139,7 +146,7 @@ export function Dropdown({
               ))
             )}
           </div>
-          {footer && <div className="border-t border-zinc-100 bg-zinc-50/60 p-2">{footer}</div>}
+          {footer && <div className="border-t border-border bg-muted/40 p-2">{footer}</div>}
         </div>
       )}
     </div>

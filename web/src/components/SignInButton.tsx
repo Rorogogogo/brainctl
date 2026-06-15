@@ -2,6 +2,7 @@ import { LogIn, LogOut, UserRound } from 'lucide-react';
 import { useRef, useState } from 'react';
 
 import { refreshAuthStatus, useAuthStatus } from '../lib/auth-status.js';
+import { Button } from './ui/button.js';
 import { toast } from './ui/toast.js';
 
 export default function SignInButton() {
@@ -24,9 +25,7 @@ export default function SignInButton() {
       };
       pollRef.current = setInterval(async () => {
         try {
-          const outcomeRes = await fetch(
-            `/api/auth/outcome?state=${encodeURIComponent(state)}`
-          );
+          const outcomeRes = await fetch(`/api/auth/outcome?state=${encodeURIComponent(state)}`);
           if (outcomeRes.ok) {
             const outcome = (await outcomeRes.json()) as
               | { status: 'pending' }
@@ -76,13 +75,9 @@ export default function SignInButton() {
 
   if (!status) {
     return (
-      <button
-        type="button"
-        disabled
-        className="inline-flex h-9 items-center gap-2 rounded-xl border border-zinc-200 bg-white px-3 text-sm font-medium text-zinc-400 shadow-sm"
-      >
+      <Button variant="outline" size="sm" disabled>
         …
-      </button>
+      </Button>
     );
   }
 
@@ -96,49 +91,38 @@ export default function SignInButton() {
       'Signed in';
     const tooltip = email ?? displayName ?? 'Signed in';
     return (
-      <div className="inline-flex h-9 items-center gap-2 rounded-xl border border-zinc-200 bg-white px-2 text-sm font-medium text-zinc-700 shadow-sm">
+      <div className="inline-flex h-9 items-center gap-2 rounded-md border border-border bg-background px-2 text-sm font-medium text-foreground shadow-sm">
         {avatarUrl ? (
-          <img
-            src={avatarUrl}
-            alt=""
-            referrerPolicy="no-referrer"
-            className="size-6 shrink-0 rounded-full object-cover"
-          />
+          <img src={avatarUrl} alt="" referrerPolicy="no-referrer" className="size-6 shrink-0 rounded-full object-cover" />
         ) : (
-          <span className="grid size-6 shrink-0 place-items-center rounded-full bg-zinc-100 text-zinc-500">
+          <span className="grid size-6 shrink-0 place-items-center rounded-full bg-muted text-muted-foreground">
             <UserRound size={14} />
           </span>
         )}
-        <span className="max-w-[120px] truncate" title={tooltip}>
-          {firstName}
-        </span>
+        <span className="max-w-[120px] truncate" title={tooltip}>{firstName}</span>
         {status.source === 'env' && (
-          <span className="rounded bg-zinc-100 px-1 py-px text-[10px] font-medium text-zinc-500" title="Token comes from BRAINCTL_API_TOKEN env var">
+          <span className="rounded bg-muted px-1 py-px text-[10px] font-medium text-muted-foreground" title="Token comes from BRAINCTL_API_TOKEN env var">
             env
           </span>
         )}
-        <button
-          type="button"
+        <Button
+          variant="ghost"
+          size="icon"
           onClick={() => void signOut()}
           disabled={busy || status.source === 'env'}
           title={status.source === 'env' ? 'Unset BRAINCTL_API_TOKEN to sign out' : 'Sign out'}
-          className="ml-1 grid size-6 place-items-center rounded-md text-zinc-500 hover:bg-zinc-100 disabled:opacity-40"
+          className="ml-1 size-6"
         >
           <LogOut size={13} />
-        </button>
+        </Button>
       </div>
     );
   }
 
   return (
-    <button
-      type="button"
-      onClick={() => void startSignIn()}
-      disabled={busy}
-      className="inline-flex h-9 items-center gap-2 rounded-xl border border-zinc-200 bg-white px-3 text-sm font-medium text-zinc-700 shadow-sm transition-colors hover:bg-zinc-50 hover:text-zinc-900 disabled:opacity-60"
-    >
-      <LogIn size={14} className="text-zinc-500" />
+    <Button variant="outline" size="sm" onClick={() => void startSignIn()} disabled={busy}>
+      <LogIn size={14} />
       {busy ? 'Opening…' : 'Sign in'}
-    </button>
+    </Button>
   );
 }

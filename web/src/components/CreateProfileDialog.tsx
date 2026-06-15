@@ -1,9 +1,19 @@
-import * as Dialog from '@radix-ui/react-dialog';
-import * as Select from '@radix-ui/react-select';
-import { Check as CheckIcon, ChevronDown, FileText, LoaderCircle } from 'lucide-react';
+import { FileText, LoaderCircle } from 'lucide-react';
 import { useEffect, useState, type ReactNode } from 'react';
 
 import { AgentLogo } from './agent-brand';
+import { Button } from './ui/button.js';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from './ui/dialog.js';
+import { Input } from './ui/input.js';
+import { Label } from './ui/label.js';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select.js';
 import { toast } from './ui/toast.js';
 import { snapshotProfile } from '../lib/profile-snapshot';
 
@@ -47,18 +57,9 @@ const SOURCE_OPTIONS: Array<{ value: Source; label: string; icon: ReactNode }> =
   {
     value: 'blank',
     label: 'Blank',
-    icon: <FileText size={12} className="text-zinc-500" />,
+    icon: <FileText size={12} className="text-muted-foreground" />,
   },
 ];
-
-function SourceItemContent({ icon, label }: { icon: ReactNode; label: string }) {
-  return (
-    <span className="inline-flex items-center gap-2">
-      <span className="grid size-3.5 place-items-center overflow-hidden">{icon}</span>
-      <span>{label}</span>
-    </span>
-  );
-}
 
 export default function CreateProfileDialog({
   open,
@@ -91,9 +92,7 @@ export default function CreateProfileDialog({
       setError('Use letters, numbers, ".", "_", or "-". Must start with a letter or number.');
       return;
     }
-    if (trimmed && trimmed !== name.trim()) {
-      setName(trimmed);
-    }
+    if (trimmed && trimmed !== name.trim()) setName(trimmed);
     setBusy(true);
     setError(null);
     setProgressMessage(source === 'blank' ? 'Creating empty profile…' : `Reading ${source} config…`);
@@ -134,131 +133,90 @@ export default function CreateProfileDialog({
   }
 
   return (
-    <Dialog.Root open={open} onOpenChange={onOpenChange}>
-      <Dialog.Portal>
-        <Dialog.Overlay className="fixed inset-0 z-50 bg-black/40 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0" />
-        <Dialog.Content className="fixed left-1/2 top-1/2 z-50 w-full max-w-md -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-zinc-200/80 bg-white p-6 shadow-xl">
-          <Dialog.Title className="text-lg font-semibold tracking-tight text-zinc-900">
-            Create profile
-          </Dialog.Title>
-          <Dialog.Description className="mt-1 text-sm text-zinc-500">
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent hideClose>
+        <DialogHeader>
+          <DialogTitle>Create profile</DialogTitle>
+          <DialogDescription>
             Start blank, or capture a live agent's current MCPs, plugins, and skills.
-          </Dialog.Description>
+          </DialogDescription>
+        </DialogHeader>
 
-          <div className="mt-4 flex flex-col gap-3">
-            <div className="flex flex-col gap-1 text-sm">
-              <span className="font-medium text-zinc-700">Source</span>
-              <Select.Root
-                value={source}
-                onValueChange={(v) => setSource(v as Source)}
-                disabled={busy}
-              >
-                <Select.Trigger
-                  className="inline-flex items-center justify-between rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 focus:border-zinc-400 focus:outline-none disabled:opacity-60"
-                  aria-label="Source"
-                >
-                  <Select.Value>
-                    <SourceItemContent
-                      icon={SOURCE_OPTIONS.find((o) => o.value === source)?.icon}
-                      label={SOURCE_OPTIONS.find((o) => o.value === source)?.label ?? ''}
-                    />
-                  </Select.Value>
-                  <Select.Icon>
-                    <ChevronDown size={14} className="text-zinc-500" />
-                  </Select.Icon>
-                </Select.Trigger>
-                <Select.Portal>
-                  <Select.Content
-                    position="popper"
-                    sideOffset={4}
-                    className="z-[60] overflow-hidden rounded-lg border border-zinc-200 bg-white shadow-lg"
-                  >
-                    <Select.Viewport className="p-1">
-                      {SOURCE_OPTIONS.map((opt) => (
-                        <Select.Item
-                          key={opt.value}
-                          value={opt.value}
-                          className="relative flex cursor-pointer select-none items-center gap-2 rounded-md px-2 py-1.5 pr-8 text-sm text-zinc-800 outline-none data-[highlighted]:bg-zinc-100"
-                        >
-                          <Select.ItemText>
-                            <SourceItemContent icon={opt.icon} label={opt.label} />
-                          </Select.ItemText>
-                          <Select.ItemIndicator className="absolute right-2 inline-flex items-center">
-                            <CheckIcon size={12} className="text-zinc-700" />
-                          </Select.ItemIndicator>
-                        </Select.Item>
-                      ))}
-                    </Select.Viewport>
-                  </Select.Content>
-                </Select.Portal>
-              </Select.Root>
-            </div>
-
-            <label className="flex flex-col gap-1 text-sm">
-              <span className="font-medium text-zinc-700">
-                Name
-                {source !== 'blank' && (
-                  <span className="ml-1 font-normal text-zinc-400">(optional — auto-generated if empty)</span>
-                )}
-              </span>
-              <input
-                type="text"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                onBlur={() => {
-                  const s = slugifyProfileName(name);
-                  if (s && s !== name) setName(s);
-                }}
-                disabled={busy}
-                placeholder={source === 'blank' ? 'my-profile' : `backup-${source}-…`}
-                pattern="^[A-Za-z0-9][A-Za-z0-9._-]*$"
-                title='Letters, numbers, ".", "_", or "-". Must start with a letter or number.'
-                className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 focus:border-zinc-400 focus:outline-none"
-                autoFocus
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') void submit();
-                }}
-              />
-              <span className="text-xs text-zinc-500">
-                Letters, numbers, ".", "_", or "-". Spaces are auto-converted to dashes.
-              </span>
-            </label>
-
-            {error && (
-              <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-800">
-                {error}
-              </div>
-            )}
-
-            {busy && progressMessage && (
-              <div className="flex min-h-8 items-center gap-2 rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-xs text-zinc-600">
-                <LoaderCircle size={14} className="shrink-0 animate-spin text-zinc-500" />
-                <span className="min-w-0 truncate">{progressMessage}</span>
-              </div>
-            )}
+        <div className="flex flex-col gap-4">
+          <div className="flex flex-col gap-1.5">
+            <Label>Source</Label>
+            <Select value={source} onValueChange={(v) => setSource(v as Source)} disabled={busy}>
+              <SelectTrigger>
+                <SelectValue>
+                  <span className="inline-flex items-center gap-2">
+                    <span className="grid size-3.5 place-items-center overflow-hidden">
+                      {SOURCE_OPTIONS.find((o) => o.value === source)?.icon}
+                    </span>
+                    <span>{SOURCE_OPTIONS.find((o) => o.value === source)?.label ?? ''}</span>
+                  </span>
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                {SOURCE_OPTIONS.map((opt) => (
+                  <SelectItem key={opt.value} value={opt.value}>
+                    <span className="inline-flex items-center gap-2">
+                      <span className="grid size-3.5 place-items-center overflow-hidden">{opt.icon}</span>
+                      <span>{opt.label}</span>
+                    </span>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
 
-          <div className="mt-6 flex items-center justify-end gap-3">
-            <Dialog.Close asChild>
-              <button
-                type="button"
-                disabled={busy}
-                className="inline-flex min-h-[36px] items-center justify-center rounded-lg border border-zinc-200 bg-white px-4 text-sm font-medium text-zinc-700 shadow-sm transition-all hover:bg-zinc-50 hover:text-zinc-900"
-              >
-                Cancel
-              </button>
-            </Dialog.Close>
-            <button
-              type="button"
-              onClick={() => void submit()}
+          <div className="flex flex-col gap-1.5">
+            <Label>
+              Name{' '}
+              {source !== 'blank' && (
+                <span className="font-normal text-muted-foreground">(optional — auto-generated if empty)</span>
+              )}
+            </Label>
+            <Input
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              onBlur={() => {
+                const s = slugifyProfileName(name);
+                if (s && s !== name) setName(s);
+              }}
               disabled={busy}
-              className="inline-flex min-h-[36px] items-center justify-center rounded-lg bg-zinc-900 px-4 text-sm font-medium text-white shadow-sm transition-all hover:bg-zinc-800 disabled:opacity-60"
-            >
-              {busy ? 'Creating…' : 'Create'}
-            </button>
+              placeholder={source === 'blank' ? 'my-profile' : `backup-${source}-…`}
+              autoFocus
+              onKeyDown={(e) => { if (e.key === 'Enter') void submit(); }}
+            />
+            <p className="text-xs text-muted-foreground">
+              Letters, numbers, ".", "_", or "-". Spaces are auto-converted to dashes.
+            </p>
           </div>
-        </Dialog.Content>
-      </Dialog.Portal>
-    </Dialog.Root>
+
+          {error && (
+            <div className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+              {error}
+            </div>
+          )}
+
+          {busy && progressMessage && (
+            <div className="flex items-center gap-2 rounded-md border border-border bg-muted/50 px-3 py-2 text-xs text-muted-foreground">
+              <LoaderCircle size={14} className="shrink-0 animate-spin" />
+              <span className="min-w-0 truncate">{progressMessage}</span>
+            </div>
+          )}
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" disabled={busy} onClick={() => onOpenChange(false)}>
+            Cancel
+          </Button>
+          <Button onClick={() => void submit()} disabled={busy}>
+            {busy ? 'Creating…' : 'Create'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

@@ -1,28 +1,9 @@
 import { type ReactNode, useCallback, useEffect, useState } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
-import clsx from 'clsx';
+import { X, RotateCcw } from 'lucide-react';
 
-import { Button } from './button-1.js';
-
-const CloseIcon = ({ className }: { className: string }) => (
-  <svg height="16" strokeLinejoin="round" viewBox="0 0 16 16" width="16" className={className}>
-    <path
-      fillRule="evenodd"
-      clipRule="evenodd"
-      d="M12.4697 13.5303L13 14.0607L14.0607 13L13.5303 12.4697L9.06065 7.99999L13.5303 3.53032L14.0607 2.99999L13 1.93933L12.4697 2.46966L7.99999 6.93933L3.53032 2.46966L2.99999 1.93933L1.93933 2.99999L2.46966 3.53032L6.93933 7.99999L2.46966 12.4697L1.93933 13L2.99999 14.0607L3.53032 13.5303L7.99999 9.06065L12.4697 13.5303Z"
-    />
-  </svg>
-);
-
-const UndoIcon = () => (
-  <svg height="16" strokeLinejoin="round" viewBox="0 0 16 16" width="16" className="fill-gray-1000">
-    <path
-      fillRule="evenodd"
-      clipRule="evenodd"
-      d="M13.5 8C13.5 4.96643 11.0257 2.5 7.96452 2.5C5.42843 2.5 3.29365 4.19393 2.63724 6.5H5.25H6V8H5.25H0.75C0.335787 8 0 7.66421 0 7.25V2.75V2H1.5V2.75V5.23347C2.57851 2.74164 5.06835 1 7.96452 1C11.8461 1 15 4.13001 15 8C15 11.87 11.8461 15 7.96452 15C5.62368 15 3.54872 13.8617 2.27046 12.1122L1.828 11.5066L3.03915 10.6217L3.48161 11.2273C4.48831 12.6051 6.12055 13.5 7.96452 13.5C11.0257 13.5 13.5 11.0336 13.5 8Z"
-    />
-  </svg>
-);
+import { Button } from './button.js';
+import { cn } from '../../lib/utils.js';
 
 type ToastType = 'message' | 'success' | 'warning' | 'error';
 
@@ -73,11 +54,7 @@ const toastStore = {
   toasts: [] as Toast[],
   listeners: new Set<() => void>(),
 
-  add(
-    text: string | ReactNode,
-    type: ToastType,
-    options: ToastOptions = {}
-  ) {
+  add(text: string | ReactNode, type: ToastType, options: ToastOptions = {}) {
     const id = toastId++;
     const toast: Toast = {
       id,
@@ -119,7 +96,7 @@ const toastStore = {
   },
 
   remove(id: number) {
-    const removed = this.toasts.find((toast) => toast.id === id);
+    const removed = this.toasts.find((t) => t.id === id);
     if (removed?.timeout) clearTimeout(removed.timeout);
     this.toasts = this.toasts.filter((t) => t.id !== id);
     this.notify();
@@ -127,9 +104,7 @@ const toastStore = {
 
   subscribe(listener: () => void) {
     this.listeners.add(listener);
-    return () => {
-      this.listeners.delete(listener);
-    };
+    return () => { this.listeners.delete(listener); };
   },
 
   notify() {
@@ -137,12 +112,19 @@ const toastStore = {
   },
 
   reset() {
-    for (const toast of this.toasts) {
-      if (toast.timeout) clearTimeout(toast.timeout);
+    for (const t of this.toasts) {
+      if (t.timeout) clearTimeout(t.timeout);
     }
     this.toasts = [];
     this.listeners.clear();
   },
+};
+
+const toastColors: Record<ToastType, string> = {
+  message: 'bg-popover text-popover-foreground border border-border',
+  success: 'bg-emerald-600 text-white border border-emerald-700',
+  warning: 'bg-amber-500 text-white border border-amber-600',
+  error: 'bg-destructive text-white border border-destructive/80',
 };
 
 function ToastContainer() {
@@ -159,17 +141,13 @@ function ToastContainer() {
 
   useEffect(() => {
     setToasts([...toastStore.toasts]);
-    return toastStore.subscribe(() => {
-      setToasts([...toastStore.toasts]);
-    });
+    return toastStore.subscribe(() => { setToasts([...toastStore.toasts]); });
   }, []);
 
   useEffect(() => {
     const unseen = toasts.filter((t) => !shownIds.includes(t.id)).map((t) => t.id);
     if (unseen.length > 0) {
-      requestAnimationFrame(() => {
-        setShownIds((prev) => [...prev, ...unseen]);
-      });
+      requestAnimationFrame(() => { setShownIds((prev) => [...prev, ...unseen]); });
     }
   }, [shownIds, toasts]);
 
@@ -181,11 +159,7 @@ function ToastContainer() {
     const offset = length - 1 - index;
     let translateY = 0;
     for (let i = length - 1; i > index; i--) {
-      if (isHovered) {
-        translateY += (toasts[i]?.measuredHeight || 63) + 10;
-      } else {
-        translateY += 20;
-      }
+      translateY += isHovered ? (toasts[i]?.measuredHeight || 63) + 10 : 20;
     }
     const z = -offset;
     const scale = isHovered ? 1 : 1 - 0.05 * offset;
@@ -204,7 +178,7 @@ function ToastContainer() {
 
   const visibleToasts = toasts.slice(lastVisibleStart);
   const containerHeight =
-    visibleToasts.reduce((acc, toast) => acc + (toast.measuredHeight ?? 63), 0) +
+    visibleToasts.reduce((acc, t) => acc + (t.measuredHeight ?? 63), 0) +
     (isHovered && visibleToasts.length > 1 ? (visibleToasts.length - 1) * 10 : 0);
 
   return (
@@ -218,84 +192,69 @@ function ToastContainer() {
         onMouseEnter={handleMouseEnter}
         onMouseLeave={handleMouseLeave}
       >
-        {toasts.map((toast, index) => {
+        {toasts.map((t, index) => {
           const isVisible = index >= lastVisibleStart;
           return (
             <div
-              key={toast.id}
-              ref={measureRef(toast)}
-              className={clsx(
-                'shadow-menu absolute right-0 top-0 h-fit rounded-xl p-4 leading-[21px]',
-                {
-                  message: 'bg-geist-background text-gray-1000',
-                  success: 'bg-emerald-600 text-contrast-fg',
-                  warning: 'bg-amber-800 text-gray-1000 dark:text-gray-100',
-                  error: 'bg-red-800 text-contrast-fg',
-                }[toast.type],
+              key={t.id}
+              ref={measureRef(t)}
+              className={cn(
+                'absolute right-0 top-0 h-fit rounded-xl p-4 leading-[21px] shadow-lg',
+                toastColors[t.type],
                 isVisible ? 'opacity-100' : 'opacity-0',
                 index < lastVisibleStart && 'pointer-events-none'
               )}
               style={{
                 width: 'min(420px, calc(100vw - 2rem))',
                 transition: 'all .35s cubic-bezier(.25,.75,.6,.98)',
-                transform: shownIds.includes(toast.id)
+                transform: shownIds.includes(t.id)
                   ? getFinalTransform(index, toasts.length)
                   : 'translate3d(0, -100%, 150px) scale(1)',
               }}
             >
-              <div className="flex flex-col items-center justify-between text-[.875rem] font-semibold">
+              <div className="flex flex-col text-[.875rem] font-semibold">
                 <div className="flex h-full w-full items-center justify-between gap-4">
-                  <span className="min-w-0">{toast.text}</span>
-                  {!toast.action && (
+                  <span className="min-w-0">{t.text}</span>
+                  {!t.action && (
                     <div className="flex shrink-0 gap-1">
-                      {toast.onUndoAction && (
+                      {t.onUndoAction && (
                         <Button
-                          type="tertiary"
-                          svgOnly
-                          size="small"
-                          onClick={() => {
-                            toast.onUndoAction?.();
-                            toastStore.remove(toast.id);
-                          }}
+                          variant="ghost"
+                          size="icon"
+                          className="size-7 opacity-80 hover:opacity-100"
+                          onClick={() => { t.onUndoAction?.(); toastStore.remove(t.id); }}
                         >
-                          <UndoIcon />
+                          <RotateCcw className="size-3.5" />
                         </Button>
                       )}
                       <Button
-                        type="tertiary"
-                        svgOnly
-                        size="small"
-                        onClick={() => toastStore.remove(toast.id)}
+                        variant="ghost"
+                        size="icon"
+                        className="size-7 opacity-80 hover:opacity-100"
+                        onClick={() => toastStore.remove(t.id)}
                         aria-label="Dismiss notification"
                       >
-                        <CloseIcon
-                          className={
-                            {
-                              message: 'fill-gray-1000',
-                              success: 'fill-contrast-fg',
-                              warning: 'fill-gray-1000 dark:fill-gray-100',
-                              error: 'fill-contrast-fg',
-                            }[toast.type]
-                          }
-                        />
+                        <X className="size-3.5" />
                       </Button>
                     </div>
                   )}
                 </div>
-                {toast.action && (
-                  <div className="flex w-full items-center justify-end gap-2">
-                    <Button type="tertiary" size="small" onClick={() => toastStore.remove(toast.id)}>
+                {t.action && (
+                  <div className="flex w-full items-center justify-end gap-2 mt-2">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="opacity-80 hover:opacity-100"
+                      onClick={() => toastStore.remove(t.id)}
+                    >
                       Dismiss
                     </Button>
                     <Button
-                      type="primary"
-                      size="small"
-                      onClick={() => {
-                        toast.onAction?.();
-                        toastStore.remove(toast.id);
-                      }}
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => { t.onAction?.(); toastStore.remove(t.id); }}
                     >
-                      {toast.action}
+                      {t.action}
                     </Button>
                   </div>
                 )}
