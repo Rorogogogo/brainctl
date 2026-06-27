@@ -7,6 +7,18 @@ import { toast, resetToastsForTest } from '../../web/src/components/ui/toast.js'
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
+async function waitForElement(selector: string): Promise<Element> {
+  const deadline = Date.now() + 1000;
+  while (Date.now() < deadline) {
+    const element = document.querySelector(selector);
+    if (element) return element;
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+  }
+  throw new Error(`Timed out waiting for ${selector}`);
+}
+
 afterEach(() => {
   resetToastsForTest();
   document.body.innerHTML = '';
@@ -27,11 +39,9 @@ describe('toast', () => {
       toast.message({ text: 'Profile saved' });
     });
 
-    const toastEl = document.body.textContent?.includes('Profile saved')
-      ? document.querySelector('.bg-geist-background')
-      : null;
-    expect(toastEl).not.toBeNull();
-    expect(toastEl?.className).not.toContain('bg-blue-700');
+    const toastEl = await waitForElement('.bg-popover');
+    expect(toastEl.textContent).toContain('Profile saved');
+    expect(toastEl.className).not.toContain('bg-blue-700');
   });
 
   it('renders success messages with the green success variant', async () => {
