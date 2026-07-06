@@ -64,6 +64,17 @@ export function createProgram(overrides: Partial<CliServices> = {}): Command {
 }
 
 export async function main(argv: string[] = process.argv): Promise<void> {
+  // Deprecation notice on stderr only — never stdout, which MCP stdio owns.
+  if (!process.env.BRAINCTL_NO_DEPRECATION_NOTICE) {
+    process.stderr.write(
+      '\n⚠ brainctl is now part of NoMoreIDE and no longer receives updates.\n' +
+        '  Everything here (agent configs, profiles, the registry) lives on in:\n' +
+        '    npm i -g nomoreide\n' +
+        '  Migration guide: https://github.com/Rorogogogo/nomoreide/blob/main/docs/brainctl-migration.md\n' +
+        '  Your registry account and published profiles keep working unchanged.\n\n'
+    );
+  }
+
   const program = createProgram();
 
   try {

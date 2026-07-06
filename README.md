@@ -1,3 +1,10 @@
+> [!IMPORTANT]
+> **brainctl is now part of [NoMoreIDE](https://github.com/Rorogogogo/nomoreide)** and no longer receives updates. Everything brainctl did — agent config management, profiles, and the hosted registry — lives on as NoMoreIDE's **Agent Environments** feature: `npm i -g nomoreide`.
+>
+> 📖 **[Migration guide](https://github.com/Rorogogogo/nomoreide/blob/main/docs/brainctl-migration.md)** — command mapping, MCP tool mapping (`brainctl_*` → `nomoreide_*`), and what changed.
+>
+> The hosted registry (app.brainctl.net) **keeps running**: your account, published profiles, and installs all keep working through NoMoreIDE, which reads your existing `~/.brainctl/config.json` sign-in.
+
 <div align="center">
 
 # 🧠 brainctl

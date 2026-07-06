@@ -28,7 +28,7 @@ describe('toast', () => {
     });
 
     const toastEl = document.body.textContent?.includes('Profile saved')
-      ? document.querySelector('.bg-geist-background')
+      ? document.querySelector('.bg-popover')
       : null;
     expect(toastEl).not.toBeNull();
     expect(toastEl?.className).not.toContain('bg-blue-700');
