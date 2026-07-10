@@ -3,6 +3,7 @@ import path from 'node:path';
 import { ValidationError } from '../../errors.js';
 import type {
   LocalBundledMcpServerConfig,
+  LocalCommandMcpServerConfig,
   LocalNpmMcpServerConfig,
   McpRuntime,
   RemoteMcpServerConfig,
@@ -15,6 +16,7 @@ const NPX_LIKE_COMMANDS = new Set(['npx', 'uvx']);
 export type PortableMcpClassification =
   | LocalNpmMcpServerConfig
   | LocalBundledMcpServerConfig
+  | LocalCommandMcpServerConfig
   | RemoteMcpServerConfig;
 
 export class PortableMcpClassificationError extends ValidationError {}
@@ -44,9 +46,27 @@ export function classifyPortableMcp(options: {
     return classifyBundledMcp(options.cwd, options.key, options.entry, runtime);
   }
 
+  // A bare executable resolved from PATH (e.g. `postgres-mcp` installed via
+  // pipx/uv/homebrew). There is nothing to bundle; record the command verbatim
+  // and rely on the importer having it installed.
+  if (isPathCommand(options.entry.command)) {
+    return {
+      kind: 'local',
+      source: 'command',
+      command: options.entry.command,
+      ...(options.entry.args ? { args: options.entry.args } : {}),
+      ...(options.entry.env ? { env: options.entry.env } : {}),
+    };
+  }
+
   throw new PortableMcpClassificationError(
     `MCP "${options.key}" cannot be packed: unrecognized command "${options.entry.command}".`
   );
+}
+
+function isPathCommand(command: string): boolean {
+  const trimmed = command.trim();
+  return trimmed.length > 0 && !trimmed.includes('/') && !trimmed.includes('\\');
 }
 
 function classifyBundledMcp(

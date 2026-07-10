@@ -3,7 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 export const DEFAULT_BRAINCTL_API_BASE_URL = 'https://api.brainctl.net';
-export const DEFAULT_BRAINCTL_FRONTEND_URL = 'https://app.brainctl.net';
+export const DEFAULT_BRAINCTL_FRONTEND_URL = 'https://brainctl.net';
 
 export type BrainctlConfigKey =
   | 'apiBaseUrl'
@@ -201,7 +201,7 @@ export async function resolveBrainctlFrontendUrl(
         return `${url.protocol}//${url.hostname}:5173`;
       }
       if (url.hostname.startsWith('api.')) {
-        return `${url.protocol}//app.${url.hostname.slice('api.'.length)}`;
+        return `${url.protocol}//${url.hostname.slice('api.'.length)}`;
       }
     } catch {
       // fall through to default

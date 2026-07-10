@@ -25,6 +25,7 @@
     "build:server": "tsc -p tsconfig.json",
     "build:web": "vite build",
     "dev": "tsx src/cli.ts",
+    "target": "tsx scripts/target.mts",
     "prepublishOnly": "npm test && npm run build",
     "test": "vitest run"
   },

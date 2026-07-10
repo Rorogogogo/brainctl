@@ -378,8 +378,10 @@ function normalizeMcps(value: unknown, profileName: string): Record<string, McpS
       continue;
     }
 
-    if (mcp.source !== 'npm' && mcp.source !== 'bundled') {
-      throw new ProfileError(`Local MCP "${key}" must declare source "npm" or "bundled".`);
+    if (mcp.source !== 'npm' && mcp.source !== 'bundled' && mcp.source !== 'command') {
+      throw new ProfileError(
+        `Local MCP "${key}" must declare source "npm", "bundled", or "command".`
+      );
     }
 
     if (mcp.source === 'npm') {
@@ -391,6 +393,21 @@ function normalizeMcps(value: unknown, profileName: string): Record<string, McpS
         kind: 'local',
         source: 'npm',
         package: mcp.package,
+        env: parseStringMap(mcp.env),
+      };
+      continue;
+    }
+
+    if (mcp.source === 'command') {
+      if (typeof mcp.command !== 'string' || mcp.command.trim().length === 0) {
+        throw new ProfileError(`Command local MCP "${key}" must include a non-empty command.`);
+      }
+
+      mcps[key] = {
+        kind: 'local',
+        source: 'command',
+        command: mcp.command,
+        args: parseStringArray(mcp.args),
         env: parseStringMap(mcp.env),
       };
       continue;
